@@ -4,6 +4,8 @@ import { NextResponse } from 'next/server';
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export const maxDuration = 60; // Vercel : 60s max pour l'analyse
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function POST(request) {
   try {
