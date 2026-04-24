@@ -11,6 +11,9 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import VoiceNoteModal from './VoiceNoteModal';
+import SmartImportModal from './SmartImportModal';
+import GlobalVoiceModal from './GlobalVoiceModal';
+import AgendaTab from './AgendaTab';
 
 // === CONSTANTES ===
 const STATUTS_MANDAT = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisation', 'Offre', 'Promesse', 'Acte', 'Perdu'];
@@ -49,6 +52,9 @@ const toSnake = (obj) => {
 export default function CRM() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(true);
+  const [showSmartImport, setShowSmartImport] = useState(false);
+  const [showGlobalVoice, setShowGlobalVoice] = useState(false);
+  const [importToast, setImportToast] = useState(null);
   
   const [mandats, setMandats] = useState([]);
   const [clients, setClients] = useState([]);
@@ -98,6 +104,7 @@ export default function CRM() {
     { id: 'deals', label: 'Deals', icon: Handshake },
     { id: 'matching', label: 'Matching auto', icon: Sparkles },
     { id: 'todos', label: 'To-do perso', icon: CheckSquare },
+    { id: 'agenda', label: 'Agenda', icon: Calendar },
     { id: 'annonces', label: 'Annonces', icon: Megaphone },
     { id: 'questionnaires', label: 'Questionnaires', icon: FileQuestion },
     { id: 'emailings', label: 'Emailings & Sourcing', icon: Mail }
@@ -132,6 +139,22 @@ export default function CRM() {
             </div>
           </div>
           <nav className="flex-1 p-3 overflow-y-auto scrollbar-thin">
+            {/* Bouton Import intelligent - accessible partout */}
+            <button 
+              onClick={() => setShowSmartImport(true)}
+              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm mb-2 gradient-sage-dark text-white hover:opacity-90 shadow-luxe font-medium"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Import intelligent</span>
+            </button>
+            {/* Bouton Note vocale globale */}
+            <button 
+              onClick={() => setShowGlobalVoice(true)}
+              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm mb-3 bg-white border border-sage text-sage-dark hover:bg-sage-50 font-medium"
+            >
+              <Mic className="w-4 h-4" />
+              <span>Note vocale</span>
+            </button>
             {tabs.map(tab => {
               const Icon = tab.icon;
               const active = activeTab === tab.id;
@@ -178,12 +201,70 @@ export default function CRM() {
             {activeTab === 'deals' && <DealsTab deals={deals} reload={loadAll} mandats={mandats} clients={clients} />}
             {activeTab === 'matching' && <MatchingTab mandats={mandats} clients={clients} deals={deals} reload={loadAll} />}
             {activeTab === 'todos' && <TodosTab todos={todos} reload={loadAll} mandats={mandats} clients={clients} deals={deals} />}
+            {activeTab === 'agenda' && <AgendaTab />}
             {activeTab === 'annonces' && <AnnoncesTab annonces={annonces} reload={loadAll} mandats={mandats} />}
             {activeTab === 'questionnaires' && <QuestionnairesTab questionnaires={questionnaires} reload={loadAll} />}
             {activeTab === 'emailings' && <EmailingsTab campagnes={campagnes} reload={loadAll} clients={clients} />}
           </div>
         </main>
       </div>
+
+      {/* Toast de succès après import intelligent */}
+      {importToast && (
+        <div className="fixed top-4 right-4 z-50 bg-white border border-sage-light rounded-xl shadow-luxe-hover p-4 max-w-sm animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full bg-sage-50 flex items-center justify-center flex-shrink-0">
+              <Check className="w-4 h-4 text-sage-dark" />
+            </div>
+            <div className="flex-1">
+              <div className="text-sm font-medium text-ink">Import réussi</div>
+              <div className="text-xs text-sage-dark mt-0.5">{importToast}</div>
+            </div>
+            <button onClick={() => setImportToast(null)} className="text-stone-400 hover:text-ink">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Import intelligent */}
+      {showSmartImport && (
+        <SmartImportModal
+          mandats={mandats}
+          clients={clients}
+          onClose={() => setShowSmartImport(false)}
+          onSuccess={({ mandatId, clientId, tasksCreated }) => {
+            setShowSmartImport(false);
+            const parts = [];
+            if (mandatId) parts.push('1 mandat');
+            if (clientId) parts.push('1 client');
+            if (tasksCreated > 0) parts.push(`${tasksCreated} tâche${tasksCreated > 1 ? 's' : ''}`);
+            setImportToast(parts.length > 0 ? parts.join(' · ') + ' enregistré' + (parts.length > 1 || tasksCreated > 1 ? 's' : '') : 'Import terminé');
+            loadAll();
+            setTimeout(() => setImportToast(null), 5000);
+          }}
+        />
+      )}
+
+      {/* Modal Note vocale globale */}
+      {showGlobalVoice && (
+        <GlobalVoiceModal
+          mandats={mandats}
+          clients={clients}
+          onClose={() => setShowGlobalVoice(false)}
+          onSuccess={(mode, counts) => {
+            setShowGlobalVoice(false);
+            let msg = '';
+            if (mode === 'taches') msg = `${counts.tachesCount} tâche${counts.tachesCount > 1 ? 's' : ''} créée${counts.tachesCount > 1 ? 's' : ''}`;
+            else if (mode === 'reunion_recurrente') msg = 'Réunion récurrente ajoutée à l\'agenda';
+            else if (mode === 'compte_rendu') msg = `Compte-rendu enregistré${counts.actionsCount ? ` avec ${counts.actionsCount} action${counts.actionsCount > 1 ? 's' : ''}` : ''}`;
+            else msg = 'Note enregistrée';
+            setImportToast(msg);
+            loadAll();
+            setTimeout(() => setImportToast(null), 5000);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -573,22 +654,97 @@ function MandatForm({ mandat, onSave, onClose }) {
     reader.readAsDataURL(file);
   });
 
+  // Compresse les images au-dessus d'une certaine taille pour rester sous la limite API
+  const compressImage = (file, maxWidth = 2000, quality = 0.85) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxWidth) {
+          height = (maxWidth / width) * height;
+          width = maxWidth;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (!blob) return reject(new Error('Compression échouée'));
+          const compressedFile = new File([blob], file.name, { type: 'image/jpeg' });
+          resolve(compressedFile);
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  // Prépare un fichier pour envoi : compresse si image trop lourde
+  const prepareFile = async (file) => {
+    const MAX_SIZE_BYTES = 3 * 1024 * 1024; // 3 Mo max (sécurité par rapport à la limite 4,5 Mo de Vercel)
+    
+    let finalFile = file;
+    if (file.type.startsWith('image/') && file.size > MAX_SIZE_BYTES) {
+      finalFile = await compressImage(file);
+      // Si toujours trop gros, compression plus agressive
+      if (finalFile.size > MAX_SIZE_BYTES) {
+        finalFile = await compressImage(file, 1500, 0.7);
+      }
+    }
+    
+    return {
+      name: file.name,
+      type: finalFile.type,
+      data: await fileToBase64(finalFile),
+      originalSize: file.size,
+      finalSize: finalFile.size
+    };
+  };
+
   const analyzeDocuments = async (files) => {
     setImportState({ loading: true, error: null, result: null });
     try {
-      const filesData = await Promise.all(files.map(async (file) => ({
-        name: file.name,
-        type: file.type,
-        data: await fileToBase64(file)
-      })));
+      // Préparer et compresser les fichiers
+      const filesData = await Promise.all(files.map(prepareFile));
+      
+      // Vérifier la taille totale après compression
+      const totalBase64Size = filesData.reduce((sum, f) => sum + f.data.length, 0);
+      const MAX_PAYLOAD = 4 * 1024 * 1024; // 4 Mo (marge sécurité sous la limite 4,5 Mo de Vercel)
+      
+      if (totalBase64Size > MAX_PAYLOAD) {
+        const totalMB = (totalBase64Size / 1024 / 1024).toFixed(1);
+        // Identifier les fichiers PDF qui sont probablement à l'origine du souci
+        const bigPdfs = filesData.filter(f => f.type === 'application/pdf' && f.data.length > 1024 * 1024);
+        let msg = `Le poids total des fichiers (${totalMB} Mo) dépasse la limite de 4 Mo pour l'analyse. `;
+        if (bigPdfs.length > 0) {
+          msg += `Le(s) PDF volumineux : ${bigPdfs.map(f => f.name).join(', ')}. `;
+          msg += `Astuce : réduisez votre PDF avec un outil comme ilovepdf.com (fonction « compresser PDF ») puis réessayez.`;
+        } else {
+          msg += `Essayez de sélectionner moins de fichiers, ou des fichiers plus légers.`;
+        }
+        throw new Error(msg);
+      }
+      
+      // Envoi seulement des champs nécessaires (pas originalSize/finalSize)
+      const payload = filesData.map(({ name, type, data }) => ({ name, type, data }));
 
       const response = await fetch('/api/analyze-mandat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files: filesData })
+        body: JSON.stringify({ files: payload })
       });
 
-      if (!response.ok) throw new Error(`Erreur API: ${response.status}`);
+      if (!response.ok) {
+        if (response.status === 413) {
+          throw new Error("Les fichiers sont trop volumineux après compression. Essayez avec un PDF compressé (ilovepdf.com) ou des images plus petites.");
+        }
+        const errText = await response.text().catch(() => '');
+        throw new Error(`Erreur API ${response.status}: ${errText.slice(0, 100)}`);
+      }
       const parsed = await response.json();
 
       const newFilled = new Set();
