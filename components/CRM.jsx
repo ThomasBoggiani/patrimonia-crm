@@ -194,14 +194,6 @@ export default function CRM() {
                 Se déconnecter
               </button>
             </div>
-            <div className="px-4 pb-4 pt-2 border-t border-cream bg-cream-50/60">
-              <div className="text-[10px] uppercase tracking-[0.15em] text-sage-dark mb-1.5">Agence</div>
-              <div className="text-xs text-ink/70 leading-relaxed">
-                7, rue de Penthièvre<br/>
-                75008 Paris<br/>
-                <span className="text-sage-dark font-medium">06 84 40 81 09</span>
-              </div>
-            </div>
           </div>
         </aside>
 
