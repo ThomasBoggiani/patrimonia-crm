@@ -2,11 +2,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, Square, Loader2, X, Check, AlertCircle, CheckSquare, Calendar, FileText, Users, Sparkles, Repeat, MapPin, Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth, getCurrentUserName } from '@/lib/auth';
 
 const JOURS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
 export default function GlobalVoiceModal({ mandats, clients, onClose, onSuccess }) {
-  const [step, setStep] = useState('ready'); // ready | recording | processing | review | saving
+  const { user, profile } = useAuth();
+  const [allProfiles, setAllProfiles] = useState([]);
+  const [step, setStep] = useState('ready');
   const [transcript, setTranscript] = useState('');
   const [interim, setInterim] = useState('');
   const [error, setError] = useState(null);
@@ -20,6 +23,28 @@ export default function GlobalVoiceModal({ mandats, clients, onClose, onSuccess 
   const recognitionRef = useRef(null);
   const timerRef = useRef(null);
   const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    supabase.from('profiles').select('id, prenom, nom').eq('actif', true).then(({ data }) => {
+      setAllProfiles(data || []);
+    });
+  }, []);
+
+  const CURRENT_USER_NAME = getCurrentUserName(profile);
+
+  // Résout un prénom vers { name, userId } en cherchant dans profils réels
+  const resolveAssignee = (name) => {
+    if (!name || name === null) return { name: CURRENT_USER_NAME, userId: user?.id || null };
+    const key = name.toLowerCase().trim();
+    // Chercher dans profils par prénom ou nom complet
+    const match = allProfiles.find(p => 
+      p.prenom?.toLowerCase() === key || 
+      `${p.prenom} ${p.nom}`.toLowerCase() === key ||
+      p.nom?.toLowerCase() === key
+    );
+    if (match) return { name: `${match.prenom} ${match.nom}`, userId: match.id };
+    return { name, userId: null }; // Garde le nom tel quel si non trouvé
+  };
 
   useEffect(() => {
     const SpeechRecognition = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -111,9 +136,23 @@ export default function GlobalVoiceModal({ mandats, clients, onClose, onSuccess 
       const parsed = await response.json();
       setResult(parsed);
       
-      if (parsed.taches) setEditedTaches(parsed.taches);
+      // Normaliser les assignees : résoudre les prénoms vers noms complets
+      if (parsed.taches) {
+        setEditedTaches(parsed.taches.map(t => {
+          const resolved = resolveAssignee(t.assignee);
+          return { ...t, assignee: resolved.name, assigneeUserId: resolved.userId };
+        }));
+      }
       if (parsed.reunionRecurrente) setEditedReunion(parsed.reunionRecurrente);
-      if (parsed.compteRendu) setEditedCR(parsed.compteRendu);
+      if (parsed.compteRendu) {
+        setEditedCR({
+          ...parsed.compteRendu,
+          actions: (parsed.compteRendu.actions || []).map(a => {
+            const resolved = resolveAssignee(a.assignee);
+            return { ...a, assignee: resolved.name, assigneeUserId: resolved.userId };
+          })
+        });
+      }
       if (parsed.noteLibre) setEditedNote(parsed.noteLibre);
       
       setStep('review');
@@ -133,7 +172,9 @@ export default function GlobalVoiceModal({ mandats, clients, onClose, onSuccess 
           priorite: t.priorite || 'Moyenne',
           statut: 'À faire',
           echeance: t.dateEcheance || null,
-          assignee: t.assignee || null,
+          assignee: t.assignee || CURRENT_USER_NAME,
+          assigned_to_user_id: t.assigneeUserId || user?.id,
+          created_by: user?.id,
           lien_type: t.lien_type || null,
           lien_id: t.lien_id || null
         }));
@@ -152,7 +193,8 @@ export default function GlobalVoiceModal({ mandats, clients, onClose, onSuccess 
           duree_minutes: editedReunion.dureeMinutes || 60,
           lieu: editedReunion.lieu,
           participants: editedReunion.participants || [],
-          actif: true
+          actif: true,
+          created_by: user?.id
         });
       }
       
@@ -164,7 +206,8 @@ export default function GlobalVoiceModal({ mandats, clients, onClose, onSuccess 
           contenu: editedCR.contenu,
           transcription_originale: transcript.trim(),
           participants: editedCR.participants || [],
-          decisions: editedCR.decisions || []
+          decisions: editedCR.decisions || [],
+          created_by: user?.id
         }).select().single();
         
         // Actions → tâches liées à la note
@@ -174,7 +217,9 @@ export default function GlobalVoiceModal({ mandats, clients, onClose, onSuccess 
             priorite: a.priorite || 'Moyenne',
             statut: 'À faire',
             echeance: a.dateEcheance || null,
-            assignee: a.assignee || null,
+            assignee: a.assignee || CURRENT_USER_NAME,
+            assigned_to_user_id: a.assigneeUserId || user?.id,
+            created_by: user?.id,
             note_globale_id: note.id
           }));
           await supabase.from('todos').insert(todos);
@@ -187,7 +232,8 @@ export default function GlobalVoiceModal({ mandats, clients, onClose, onSuccess 
           type: 'Note libre',
           titre: editedNote.titre,
           contenu: editedNote.contenu,
-          transcription_originale: transcript.trim()
+          transcription_originale: transcript.trim(),
+          created_by: user?.id
         });
       }
       
@@ -205,14 +251,33 @@ export default function GlobalVoiceModal({ mandats, clients, onClose, onSuccess 
 
   const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
-  const updateTache = (i, k, v) => setEditedTaches(prev => prev.map((t, idx) => idx === i ? { ...t, [k]: v } : t));
+  const updateTache = (i, k, v) => {
+    setEditedTaches(prev => prev.map((t, idx) => {
+      if (idx !== i) return t;
+      const updated = { ...t, [k]: v };
+      // Si on change l'assignee, re-résoudre le userId
+      if (k === 'assignee') {
+        const resolved = resolveAssignee(v);
+        updated.assigneeUserId = resolved.userId;
+      }
+      return updated;
+    }));
+  };
   const deleteTache = (i) => setEditedTaches(prev => prev.filter((_, idx) => idx !== i));
-  const addTache = () => setEditedTaches(prev => [...prev, { titre: '', priorite: 'Moyenne', dateEcheance: new Date().toISOString().split('T')[0], assignee: null }]);
+  const addTache = () => setEditedTaches(prev => [...prev, { titre: '', priorite: 'Moyenne', dateEcheance: new Date().toISOString().split('T')[0], assignee: CURRENT_USER_NAME, assigneeUserId: user?.id }]);
 
   const updateReunion = (k, v) => setEditedReunion(prev => ({ ...prev, [k]: v }));
 
   const updateCRAction = (i, k, v) => setEditedCR(prev => ({
-    ...prev, actions: prev.actions.map((a, idx) => idx === i ? { ...a, [k]: v } : a)
+    ...prev, actions: prev.actions.map((a, idx) => {
+      if (idx !== i) return a;
+      const updated = { ...a, [k]: v };
+      if (k === 'assignee') {
+        const resolved = resolveAssignee(v);
+        updated.assigneeUserId = resolved.userId;
+      }
+      return updated;
+    })
   }));
   const deleteCRAction = (i) => setEditedCR(prev => ({
     ...prev, actions: prev.actions.filter((_, idx) => idx !== i)
@@ -383,11 +448,19 @@ export default function GlobalVoiceModal({ mandats, clients, onClose, onSuccess 
                           type="date" value={t.dateEcheance || ''} onChange={e => updateTache(i, 'dateEcheance', e.target.value)}
                           className="px-2 py-1 border border-cream-dark rounded text-xs"
                         />
-                        <input 
-                          type="text" value={t.assignee || ''} onChange={e => updateTache(i, 'assignee', e.target.value)}
-                          placeholder="Pour (facultatif)"
+                        <select 
+                          value={t.assignee || CURRENT_USER_NAME} onChange={e => updateTache(i, 'assignee', e.target.value)}
                           className="px-2 py-1 border border-cream-dark rounded text-xs"
-                        />
+                        >
+                          {allProfiles.map(p => (
+                            <option key={p.id} value={`${p.prenom} ${p.nom}`}>
+                              {p.prenom} {p.nom}{p.id === user?.id ? ' (moi)' : ''}
+                            </option>
+                          ))}
+                          {!allProfiles.find(p => `${p.prenom} ${p.nom}` === t.assignee) && t.assignee && (
+                            <option value={t.assignee}>{t.assignee}</option>
+                          )}
+                        </select>
                       </div>
                       {t.contexte && <div className="text-[10px] text-stone-500 italic">{t.contexte}</div>}
                     </div>
@@ -518,9 +591,17 @@ export default function GlobalVoiceModal({ mandats, clients, onClose, onSuccess 
                               </select>
                               <input type="date" value={a.dateEcheance || ''} onChange={e => updateCRAction(i, 'dateEcheance', e.target.value)}
                                 className="px-1.5 py-0.5 border border-cream-dark rounded text-[11px]" />
-                              <input type="text" value={a.assignee || ''} onChange={e => updateCRAction(i, 'assignee', e.target.value)}
-                                placeholder="Pour"
-                                className="px-1.5 py-0.5 border border-cream-dark rounded text-[11px]" />
+                              <select value={a.assignee || CURRENT_USER_NAME} onChange={e => updateCRAction(i, 'assignee', e.target.value)}
+                                className="px-1.5 py-0.5 border border-cream-dark rounded text-[11px]">
+                                {allProfiles.map(p => (
+                                  <option key={p.id} value={`${p.prenom} ${p.nom}`}>
+                                    {p.prenom} {p.nom}{p.id === user?.id ? ' (moi)' : ''}
+                                  </option>
+                                ))}
+                                {!allProfiles.find(p => `${p.prenom} ${p.nom}` === a.assignee) && a.assignee && (
+                                  <option value={a.assignee}>{a.assignee}</option>
+                                )}
+                              </select>
                             </div>
                           </div>
                           <button onClick={() => deleteCRAction(i)} className="text-stone-400 hover:text-red-600"><X className="w-3.5 h-3.5" /></button>
