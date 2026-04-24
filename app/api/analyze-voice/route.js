@@ -51,8 +51,8 @@ Tu dois analyser cette note et retourner UNIQUEMENT un objet JSON valide (pas de
     "budgetMin": number ou null,
     "budgetMax": number ou null,
     "rendementMin": number ou null,
-    "zones": ["Paris" | "IDF" | "France" | "Europe"],
-    "typologiesRecherchees": ["Immeubles" | "Hotels" | "Résidentiel" | "Terrains" | "Parking" | "Locaux commerciaux"],
+    "zones": ["Paris 3e" | "Paris 4e" | "Paris 8e" | "Paris 9e" | "Paris 10e" | "Paris 11e" | "Paris 13e" | "Paris 15e" | "Paris 16e" | "Paris 17e" | "Paris 18e" | "Paris 19e" | "Paris 20e" | "Hauts-de-Seine (92)" | "Seine-Saint-Denis (93)" | "Val-de-Marne (94)" | "Val-d'Oise (95)" | "Yvelines (78)" | "Seine-et-Marne (77)" | "Essonne (91)" | "Province"],
+    "typologiesRecherchees": ["Immeuble d'habitation" | "Immeuble mixte" | "Immeuble tertiaire" | "Local commercial" | "Local d'activité" | "Hôtel" | "Hébergement hôtelier" | "Appartement" | "Maison" | "Studio" | "Terrain" | "Bureau" | "Promotion immobilière"],
     "maturite": "Haute | Moyen | Basse | null",
     "origine": "Apporteur | Salon | Pub | Mandant | Site web | Autre | null"
   },
@@ -72,7 +72,7 @@ RÈGLES IMPORTANTES :
    - "low" = juste similaire
 2. EXTRACTION : mets "null" pour tout champ non mentionné. Ne devine JAMAIS.
 3. BUDGETS : convertis toujours en euros. "5 à 15 millions" → budgetMin: 5000000, budgetMax: 15000000.
-4. ZONES : mappe intelligemment. "Paris 8e, 16e, 17e" → ["Paris"]. "Ile-de-France" → ["IDF"]. "toute la France" → ["France"].
+4. ZONES : mappe intelligemment vers les vraies zones d'activité. "Paris 8e arrondissement" → ["Paris 8e"]. "proche Paris" / "92" → ["Hauts-de-Seine (92)"]. "IDF" / sans précision → lister les zones pertinentes. "La Ciotat" / hors IDF → ["Province"].
 5. INTERACTION : TOUJOURS remplir cette section. Par défaut type="Appel", date du jour.
 6. PROCHAINE ÉTAPE : si la note mentionne "rappeler la semaine prochaine", "prévoir une visite", etc., remplis nextStep + dateNextStep (calcule la date par rapport à aujourd'hui ${new Date().toISOString().split('T')[0]}).
 7. MATURITÉ : "décision rapide", "urgent", "prêt à signer" → Haute. "en réflexion", "veut y réfléchir" → Moyen. "juste curieux" → Basse.

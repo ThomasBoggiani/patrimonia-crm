@@ -15,9 +15,9 @@ import VoiceNoteModal from './VoiceNoteModal';
 // === CONSTANTES ===
 const STATUTS_MANDAT = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisation', 'Offre', 'Promesse', 'Acte', 'Perdu'];
 const STATUTS_DEAL = ['À proposer', 'Envoyé', 'En étude', 'Visite', 'Offre', 'Refusé', 'Gagné', 'Perdu'];
-const TYPES_ACTIF = ['Immeubles', 'Hotels', 'Résidentiel', 'Terrains', 'Parking', 'Locaux commerciaux'];
+const TYPES_ACTIF = ['Immeuble d\'habitation', 'Immeuble mixte', 'Immeuble tertiaire', 'Local commercial', 'Local d\'activité', 'Hôtel', 'Hébergement hôtelier', 'Appartement', 'Maison', 'Studio', 'Terrain', 'Bureau', 'Promotion immobilière'];
 const TYPOLOGIES_CLIENT = ['Foncières', 'Marchands de biens', 'Particuliers', 'Fonds', 'Promoteurs', 'Family Office'];
-const ZONES = ['Paris', 'IDF', 'France', 'Europe'];
+const ZONES = ['Paris 3e', 'Paris 4e', 'Paris 8e', 'Paris 9e', 'Paris 10e', 'Paris 11e', 'Paris 13e', 'Paris 15e', 'Paris 16e', 'Paris 17e', 'Paris 18e', 'Paris 19e', 'Paris 20e', 'Hauts-de-Seine (92)', 'Seine-Saint-Denis (93)', 'Val-de-Marne (94)', 'Val-d\'Oise (95)', 'Yvelines (78)', 'Seine-et-Marne (77)', 'Essonne (91)', 'Province'];
 const PORTAILS = ['seloger', 'leboncoin', 'bienici', 'figaro'];
 const STATUTS_PORTAIL = ['En ligne', 'En attente', 'À corriger', 'Non diffusé'];
 
@@ -105,9 +105,9 @@ export default function CRM() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-stone-50">
+      <div className="min-h-screen flex items-center justify-center bg-cream-50">
         <div className="text-center">
-          <Loader2 className="w-10 h-10 animate-spin text-amber-600 mx-auto mb-3" />
+          <Loader2 className="w-10 h-10 animate-spin text-sage-dark mx-auto mb-3" />
           <div className="text-stone-600 text-sm">Chargement…</div>
         </div>
       </div>
@@ -115,17 +115,19 @@ export default function CRM() {
   }
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="min-h-screen bg-cream-50">
       <div className="flex h-screen overflow-hidden">
-        <aside className="w-64 bg-stone-900 text-stone-100 flex flex-col flex-shrink-0">
-          <div className="p-6 border-b border-stone-800">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 gradient-gold rounded-lg flex items-center justify-center">
-                <Building2 className="w-5 h-5 text-stone-900" />
-              </div>
-              <div>
-                <h1 className="font-display text-xl font-semibold">Patrimonia</h1>
-                <p className="text-xs text-stone-400">CRM immobilier</p>
+        <aside className="w-64 bg-white border-r border-cream-dark text-ink flex flex-col flex-shrink-0">
+          <div className="p-6 border-b border-cream-dark bg-gradient-to-b from-cream-50 to-white">
+            <div className="flex flex-col items-center text-center">
+              <img 
+                src="/logo-light.png" 
+                alt="Immeubles & Patrimoine" 
+                className="w-32 h-32 mb-2"
+              />
+              <div className="mt-1">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-sage-dark">Transactions immobilières</p>
+                <p className="text-[10px] text-cream-400 mt-0.5">Paris · Île-de-France</p>
               </div>
             </div>
           </div>
@@ -136,21 +138,33 @@ export default function CRM() {
               return (
                 <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all mb-1 ${
-                    active ? 'bg-stone-800 text-amber-200' : 'text-stone-400 hover:bg-stone-800/50 hover:text-stone-200'
+                    active 
+                      ? 'bg-sage-50 text-sage-darker font-medium border border-sage-light' 
+                      : 'text-ink/70 hover:bg-cream-100 hover:text-ink'
                   }`}>
-                  <Icon className="w-4 h-4" />
+                  <Icon className={`w-4 h-4 ${active ? 'text-sage-dark' : ''}`} />
                   <span className="flex-1 text-left">{tab.label}</span>
-                  {active && <ChevronRight className="w-3.5 h-3.5" />}
+                  {active && <ChevronRight className="w-3.5 h-3.5 text-sage" />}
                 </button>
               );
             })}
           </nav>
-          <div className="p-4 border-t border-stone-800 text-xs text-stone-500">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-stone-700 rounded-full flex items-center justify-center text-stone-200 font-medium">JD</div>
-              <div>
-                <div className="text-stone-300 font-medium">Julien Dubois</div>
-                <div>Conseiller senior</div>
+          <div className="border-t border-cream-dark">
+            <div className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full gradient-sage-dark flex items-center justify-center text-white font-medium text-xs flex-shrink-0">TB</div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-ink truncate">Thomas Boggiani</div>
+                  <div className="text-[10px] text-sage-dark truncate">Directeur du développement</div>
+                </div>
+              </div>
+            </div>
+            <div className="px-4 pb-4 pt-2 border-t border-cream bg-cream-50/60">
+              <div className="text-[10px] uppercase tracking-[0.15em] text-sage-dark mb-1.5">Agence</div>
+              <div className="text-xs text-ink/70 leading-relaxed">
+                7, rue de Penthièvre<br/>
+                75008 Paris<br/>
+                <span className="text-sage-dark font-medium">06 84 40 81 09</span>
               </div>
             </div>
           </div>
@@ -202,7 +216,7 @@ function Dashboard({ mandats, clients, deals, todos }) {
       </div>
 
       <div className="grid grid-cols-3 gap-6 mb-6">
-        <div className="col-span-2 bg-white rounded-xl p-6 shadow-luxe border border-stone-200">
+        <div className="col-span-2 bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
           <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Portefeuille sous mandat</h2>
           <div className="text-4xl font-display font-semibold text-stone-900 mb-1">
             {(stats.caTotal / 1000000).toFixed(1)}M€
@@ -215,7 +229,7 @@ function Dashboard({ mandats, clients, deals, todos }) {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl p-6 shadow-luxe border border-stone-200">
+        <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
           <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Pipeline deals</h2>
           <div className="space-y-2.5">
             {STATUTS_DEAL.slice(0, 6).map(s => {
@@ -237,11 +251,11 @@ function Dashboard({ mandats, clients, deals, todos }) {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl p-6 shadow-luxe border border-stone-200">
+      <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
         <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Tâches prioritaires</h2>
         <div className="space-y-2">
           {todos.filter(t => t.statut !== 'Terminé').slice(0, 5).map(t => (
-            <div key={t.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-stone-50">
+            <div key={t.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-cream-50">
               <div className={`w-2 h-2 rounded-full ${
                 t.priorite === 'Haute' ? 'bg-red-500' : t.priorite === 'Moyenne' ? 'bg-amber-500' : 'bg-stone-300'
               }`} />
@@ -260,13 +274,13 @@ function Dashboard({ mandats, clients, deals, todos }) {
 
 function StatCard({ label, value, icon: Icon, color }) {
   const colors = {
-    amber: 'bg-amber-50 text-amber-700 border-amber-100',
+    amber: 'bg-sage-50 text-sage-dark border-sage-light',
     stone: 'bg-stone-50 text-stone-700 border-stone-200',
     emerald: 'bg-emerald-50 text-emerald-700 border-emerald-100',
     red: 'bg-red-50 text-red-700 border-red-100'
   };
   return (
-    <div className="bg-white rounded-xl p-5 shadow-luxe border border-stone-200">
+    <div className="bg-white rounded-xl p-5 shadow-luxe border border-cream-dark">
       <div className="flex items-start justify-between mb-3">
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${colors[color]}`}>
           <Icon className="w-5 h-5" />
@@ -308,8 +322,8 @@ function CommerceBadge({ comm, dateSignature }) {
 
 function StatutBadge({ statut }) {
   const colors = {
-    'Sourcing': 'bg-stone-100 text-stone-700',
-    'Analyse': 'bg-amber-50 text-amber-700',
+    'Sourcing': 'bg-cream-100 text-ink',
+    'Analyse': 'bg-sage-50 text-sage-dark',
     'Mandat signé': 'bg-blue-50 text-blue-700',
     'Commercialisation': 'bg-emerald-50 text-emerald-700',
     'Offre': 'bg-purple-50 text-purple-700',
@@ -317,7 +331,7 @@ function StatutBadge({ statut }) {
     'Acte': 'bg-green-100 text-green-800',
     'Perdu': 'bg-red-50 text-red-700'
   };
-  return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors[statut] || 'bg-stone-100 text-stone-700'}`}>{statut}</span>;
+  return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors[statut] || 'bg-cream-100 text-ink'}`}>{statut}</span>;
 }
 
 function Field({ label, children }) {
@@ -340,9 +354,9 @@ function DetailItem({ label, value, highlight }) {
 
 function DealStatutBadge({ statut }) {
   const colors = {
-    'À proposer': 'bg-stone-100 text-stone-700',
+    'À proposer': 'bg-cream-100 text-ink',
     'Envoyé': 'bg-blue-50 text-blue-700',
-    'En étude': 'bg-amber-50 text-amber-700',
+    'En étude': 'bg-sage-50 text-sage-dark',
     'Visite': 'bg-indigo-50 text-indigo-700',
     'Offre': 'bg-purple-50 text-purple-700',
     'Refusé': 'bg-red-50 text-red-700',
@@ -355,8 +369,8 @@ function DealStatutBadge({ statut }) {
 function MaturiteBadge({ maturite }) {
   const colors = {
     'Haute': 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    'Moyen': 'bg-amber-50 text-amber-700 border-amber-200',
-    'Basse': 'bg-stone-100 text-stone-600 border-stone-200'
+    'Moyen': 'bg-sage-50 text-sage-dark border-sage-light',
+    'Basse': 'bg-cream-100 text-ink/80 border-stone-200'
   };
   return <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${colors[maturite]}`}>{maturite}</span>;
 }
@@ -365,9 +379,9 @@ function TypeInteractionBadge({ type }) {
   const config = {
     'Appel': { icon: Phone, color: 'bg-blue-50 text-blue-700' },
     'Email': { icon: Mail, color: 'bg-purple-50 text-purple-700' },
-    'Rendez-vous': { icon: Calendar, color: 'bg-amber-50 text-amber-700' },
+    'Rendez-vous': { icon: Calendar, color: 'bg-sage-50 text-sage-dark' },
     'Visite': { icon: Eye, color: 'bg-emerald-50 text-emerald-700' },
-    'Message': { icon: MessageSquare, color: 'bg-stone-100 text-stone-700' }
+    'Message': { icon: MessageSquare, color: 'bg-cream-100 text-ink' }
   };
   const c = config[type] || config['Message'];
   const Icon = c.icon;
@@ -390,16 +404,36 @@ function MandatsTab({ mandats, reload, clients, deals }) {
     return true;
   });
 
-  const handleSave = async (mandat) => {
+  const handleSave = async (mandat, actions = []) => {
     const snakeData = toSnake(mandat);
     delete snakeData.created_at;
     delete snakeData.updated_at;
+    let mandatId = mandat.id;
     if (mandat.id) {
       await supabase.from('mandats').update(snakeData).eq('id', mandat.id);
     } else {
       delete snakeData.id;
-      await supabase.from('mandats').insert(snakeData);
+      const { data: created } = await supabase.from('mandats').insert(snakeData).select().single();
+      if (created) mandatId = created.id;
     }
+    
+    // Créer les tâches liées au mandat pour les actions sélectionnées
+    if (actions.length > 0 && mandatId) {
+      const todosToInsert = actions.map(a => {
+        const echeance = new Date();
+        echeance.setDate(echeance.getDate() + (a.echeanceJours || 7));
+        return {
+          titre: a.titre,
+          priorite: a.priorite || 'Moyenne',
+          statut: 'À faire',
+          echeance: echeance.toISOString().split('T')[0],
+          lien_type: 'mandat',
+          lien_id: mandatId
+        };
+      });
+      await supabase.from('todos').insert(todosToInsert);
+    }
+    
     setEditingMandat(null);
     setShowNew(false);
     reload();
@@ -424,7 +458,7 @@ function MandatsTab({ mandats, reload, clients, deals }) {
           <h1 className="font-display text-4xl font-semibold text-stone-900 mb-1">Mandats</h1>
           <p className="text-stone-500">{filtered.length} bien{filtered.length > 1 ? 's' : ''} • Portefeuille {(mandats.reduce((s,m)=>s+(parseFloat(m.prix)||0),0)/1000000).toFixed(1)}M€</p>
         </div>
-        <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-4 py-2.5 bg-stone-900 text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
+        <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-4 py-2.5 bg-ink-deep text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
           <Plus className="w-4 h-4" /> Nouveau mandat
         </button>
       </div>
@@ -449,7 +483,7 @@ function MandatsTab({ mandats, reload, clients, deals }) {
 
       <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden">
         <table className="w-full">
-          <thead className="bg-stone-50 border-b border-stone-200">
+          <thead className="bg-stone-50 border-b border-cream-dark">
             <tr>
               <th className="text-left px-5 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Commercialisation</th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Bien</th>
@@ -485,7 +519,7 @@ function MandatsTab({ mandats, reload, clients, deals }) {
                   </td>
                   <td className="px-5 py-4"><StatutBadge statut={m.statut} /></td>
                   <td className="px-5 py-4">
-                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-50 text-amber-700 text-xs font-medium">{nbDeals}</span>
+                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-sage-50 text-sage-dark text-xs font-medium">{nbDeals}</span>
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex gap-1" onClick={e => e.stopPropagation()}>
@@ -511,7 +545,7 @@ function MandatsTab({ mandats, reload, clients, deals }) {
 // === FORMULAIRE MANDAT avec IMPORT IA ===
 function MandatForm({ mandat, onSave, onClose }) {
   const [data, setData] = useState(mandat || {
-    nom: '', adresse: '', ville: '', type: 'Immeubles', sousType: '', prix: 0, prixM2: 0,
+    nom: '', adresse: '', ville: '', type: "Immeuble d'habitation", sousType: '', prix: 0, prixM2: 0,
     surface: 0, loyersAnnuels: 0, rendement: 0, nbLots: 1,
     commercialisation: 'Off-market', dateSignature: null,
     statut: 'Sourcing', owner: 'JD', description: '',
@@ -521,6 +555,7 @@ function MandatForm({ mandat, onSave, onClose }) {
   const [importState, setImportState] = useState({ loading: false, error: null, result: null });
   const [importedFiles, setImportedFiles] = useState([]);
   const [filledFields, setFilledFields] = useState(new Set());
+  const [selectedActions, setSelectedActions] = useState(new Set());
 
   const update = (k, v) => setData({ ...data, [k]: v });
 
@@ -576,6 +611,15 @@ function MandatForm({ mandat, onSave, onClose }) {
       setData(newData);
       setFilledFields(newFilled);
       setImportedFiles([...importedFiles, ...files.map(f => f.name)]);
+      
+      // Cocher automatiquement les actions de priorité Haute et Moyenne
+      const actions = parsed.actions || [];
+      const autoSelected = new Set();
+      actions.forEach((a, i) => {
+        if (a.priorite === 'Haute' || a.priorite === 'Moyenne') autoSelected.add(i);
+      });
+      setSelectedActions(autoSelected);
+      
       setImportState({ loading: false, error: null, result: parsed });
     } catch (err) {
       console.error(err);
@@ -588,6 +632,51 @@ function MandatForm({ mandat, onSave, onClose }) {
     if (files.length) analyzeDocuments(files);
   };
 
+  // Charge des fichiers depuis Dropbox (via leur URL directe) puis les analyse
+  const handleDropboxFiles = async (dropboxFiles) => {
+    if (!dropboxFiles || !dropboxFiles.length) return;
+    setImportState({ loading: true, error: null, result: null });
+    try {
+      // Télécharge chaque fichier Dropbox et le convertit en File
+      const files = await Promise.all(dropboxFiles.map(async (dbf) => {
+        // dbf.link est l'URL de prévisualisation, on remplace dl=0 par dl=1 pour téléchargement direct
+        const directUrl = dbf.link.replace('?dl=0', '?dl=1').replace('&dl=0', '&dl=1');
+        const urlWithDl = directUrl.includes('dl=') ? directUrl : directUrl + (directUrl.includes('?') ? '&' : '?') + 'dl=1';
+        const response = await fetch(urlWithDl);
+        if (!response.ok) throw new Error(`Impossible de télécharger ${dbf.name}`);
+        const blob = await response.blob();
+        // Déduire le type MIME si besoin
+        let mime = blob.type;
+        if (!mime || mime === 'application/octet-stream') {
+          const ext = dbf.name.split('.').pop().toLowerCase();
+          if (ext === 'pdf') mime = 'application/pdf';
+          else if (['jpg','jpeg'].includes(ext)) mime = 'image/jpeg';
+          else if (ext === 'png') mime = 'image/png';
+          else if (ext === 'webp') mime = 'image/webp';
+          else if (ext === 'docx') mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          else mime = 'text/plain';
+        }
+        return new File([blob], dbf.name, { type: mime });
+      }));
+      await analyzeDocuments(files);
+    } catch (err) {
+      setImportState({ loading: false, error: err.message || "Erreur téléchargement Dropbox", result: null });
+    }
+  };
+
+  const openDropboxChooser = () => {
+    if (typeof window === 'undefined' || !window.Dropbox) {
+      setImportState({ loading: false, error: "Dropbox n'est pas encore chargé, réessayez dans quelques secondes.", result: null });
+      return;
+    }
+    window.Dropbox.choose({
+      success: handleDropboxFiles,
+      linkType: 'direct',
+      multiselect: true,
+      extensions: ['.pdf', '.docx', '.doc', '.png', '.jpg', '.jpeg', '.webp', '.txt']
+    });
+  };
+
   const missingFields = Object.entries(REQUIRED_FIELDS).filter(([k]) => {
     const v = data[k];
     return v === null || v === undefined || v === '' || v === 0;
@@ -595,7 +684,7 @@ function MandatForm({ mandat, onSave, onClose }) {
 
   const alertConfig = {
     critical: { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-800', icon: AlertCircle },
-    warning: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-800', icon: AlertTriangle },
+    warning: { bg: 'bg-sage-50', border: 'border-sage-light', text: 'text-sage-darker', icon: AlertTriangle },
     info: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-800', icon: Info }
   };
 
@@ -617,28 +706,43 @@ function MandatForm({ mandat, onSave, onClose }) {
         </div>
 
         {!mandat && (
-          <div className="p-6 border-b border-stone-200 bg-gradient-to-br from-amber-50/50 to-stone-50">
+          <div className="p-6 border-b border-stone-200 bg-gradient-to-br from-sage-50/70 to-cream-50">
             {!importState.result && !importState.loading && (
-              <label className="block border-2 border-dashed border-amber-300 rounded-xl p-6 text-center cursor-pointer hover:border-amber-500 hover:bg-white/50">
-                <input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.webp,.txt" onChange={handleFiles} className="hidden" />
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-12 h-12 gradient-gold rounded-xl flex items-center justify-center mb-1">
-                    <Wand2 className="w-6 h-6 text-stone-900" />
+              <>
+                <label className="block border-2 border-dashed border-sage-light rounded-xl p-6 text-center cursor-pointer hover:border-sage hover:bg-white/50">
+                  <input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.webp,.txt" onChange={handleFiles} className="hidden" />
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-12 h-12 gradient-sage-dark rounded-xl flex items-center justify-center mb-1">
+                      <Wand2 className="w-6 h-6 text-cream-50" />
+                    </div>
+                    <div className="font-display text-lg font-semibold text-stone-900">Importer un ou plusieurs dossiers</div>
+                    <div className="text-sm text-stone-600 max-w-md">Plaquette, fiche immeuble, baux, photos… Claude lira tout et remplira la fiche en signalant les points d'attention.</div>
+                    <div className="text-xs text-stone-500 mt-2 flex items-center gap-3">
+                      <span className="flex items-center gap-1"><FileText className="w-3 h-3" />PDF</span>
+                      <span className="flex items-center gap-1"><FileText className="w-3 h-3" />DOCX</span>
+                      <span className="flex items-center gap-1"><FileText className="w-3 h-3" />Images</span>
+                    </div>
                   </div>
-                  <div className="font-display text-lg font-semibold text-stone-900">Importer un ou plusieurs dossiers</div>
-                  <div className="text-sm text-stone-600 max-w-md">Plaquette, fiche immeuble, baux, photos… Claude lira tout et remplira la fiche en signalant les points d'attention.</div>
-                  <div className="text-xs text-stone-500 mt-2 flex items-center gap-3">
-                    <span className="flex items-center gap-1"><FileText className="w-3 h-3" />PDF</span>
-                    <span className="flex items-center gap-1"><FileText className="w-3 h-3" />DOCX</span>
-                    <span className="flex items-center gap-1"><FileText className="w-3 h-3" />Images</span>
-                  </div>
+                </label>
+                <div className="flex items-center gap-3 my-3">
+                  <div className="flex-1 h-px bg-sage-light/50"></div>
+                  <span className="text-xs text-stone-500 uppercase tracking-wide">ou</span>
+                  <div className="flex-1 h-px bg-sage-light/50"></div>
                 </div>
-              </label>
+                <button
+                  type="button"
+                  onClick={openDropboxChooser}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-sage-light rounded-xl hover:bg-sage-50 hover:border-sage transition-colors text-sm font-medium text-stone-800"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="#0061FF"><path d="M12 6.5L6 2.5l-6 4 6 4 6-4zm12 0l-6-4-6 4 6 4 6-4zM0 14.5l6 4 6-4-6-4-6 4zm18-4l-6 4 6 4 6-4-6-4zm-12 9.5l6 4 6-4-6-4-6 4z"/></svg>
+                  Importer depuis Dropbox
+                </button>
+              </>
             )}
 
             {importState.loading && (
-              <div className="flex items-center gap-4 p-4 bg-white rounded-xl border border-amber-200">
-                <Loader2 className="w-6 h-6 text-amber-600 animate-spin" />
+              <div className="flex items-center gap-4 p-4 bg-white rounded-xl border border-sage-light">
+                <Loader2 className="w-6 h-6 text-sage-dark animate-spin" />
                 <div>
                   <div className="font-medium text-stone-900 text-sm">Analyse en cours…</div>
                   <div className="text-xs text-stone-500">Claude lit vos documents et extrait les informations</div>
@@ -697,7 +801,7 @@ function MandatForm({ mandat, onSave, onClose }) {
                 )}
 
                 {missingFields.length > 0 && (
-                  <div className="p-3 rounded-lg bg-stone-100 border border-stone-200">
+                  <div className="p-3 rounded-lg bg-stone-100 border border-cream-dark">
                     <div className="text-xs font-semibold uppercase tracking-wide text-stone-700 mb-2 flex items-center gap-1.5">
                       <AlertCircle className="w-3.5 h-3.5" /> Informations manquantes ({missingFields.length})
                     </div>
@@ -722,6 +826,52 @@ function MandatForm({ mandat, onSave, onClose }) {
                         </li>
                       ))}
                     </ul>
+                  </div>
+                )}
+
+                {importState.result.actions && importState.result.actions.length > 0 && (
+                  <div className="p-3 rounded-lg bg-white border-2 border-sage-light">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-sage-darker flex items-center gap-1.5">
+                        <CheckSquare className="w-3.5 h-3.5" /> Actions à mener ({selectedActions.size}/{importState.result.actions.length})
+                      </div>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => setSelectedActions(new Set(importState.result.actions.map((_,i) => i)))}
+                          className="text-[10px] text-sage-dark hover:underline">Tout cocher</button>
+                        <button type="button" onClick={() => setSelectedActions(new Set())}
+                          className="text-[10px] text-stone-500 hover:underline">Tout décocher</button>
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-stone-600 mb-2 italic">Ces tâches seront créées dans votre to-do et liées à ce mandat dès l'enregistrement.</div>
+                    <div className="space-y-1.5">
+                      {importState.result.actions.map((a, i) => (
+                        <label key={i} className="flex items-start gap-2 p-2 rounded-md hover:bg-sage-50 cursor-pointer">
+                          <input type="checkbox" 
+                            checked={selectedActions.has(i)}
+                            onChange={() => {
+                              const s = new Set(selectedActions);
+                              if (s.has(i)) s.delete(i); else s.add(i);
+                              setSelectedActions(s);
+                            }}
+                            className="mt-0.5 accent-[#6B7F5A]" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-medium text-stone-900">{a.titre}</span>
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                                a.priorite === 'Haute' ? 'bg-red-50 text-red-700' : 
+                                a.priorite === 'Moyenne' ? 'bg-amber-50 text-amber-700' : 
+                                'bg-stone-100 text-stone-600'
+                              }`}>{a.priorite}</span>
+                              <span className="text-[10px] text-stone-500">
+                                <Calendar className="w-2.5 h-2.5 inline mr-0.5" />
+                                {a.echeanceJours}j
+                              </span>
+                            </div>
+                            {a.motif && <div className="text-[10px] text-stone-500 mt-0.5 italic">{a.motif}</div>}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -791,11 +941,17 @@ function MandatForm({ mandat, onSave, onClose }) {
         </div>
 
         <div className="flex gap-2 justify-end p-6 border-t border-stone-200 bg-stone-50 sticky bottom-0">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-stone-700 hover:bg-stone-200 rounded-lg">Annuler</button>
+          <button onClick={onClose} className="px-4 py-2 text-sm text-stone-700 hover:bg-cream-200 rounded-lg">Annuler</button>
           <button onClick={() => {
             const docsAjoutes = importedFiles.length ? [...(data.docs || []), ...importedFiles] : (data.docs || []);
-            onSave({ ...data, docs: docsAjoutes });
-          }} className="px-4 py-2 bg-stone-900 text-white rounded-lg text-sm hover:bg-stone-800">Enregistrer</button>
+            // Préparer les actions à créer dans la to-do
+            const actionsToCreate = importState.result?.actions 
+              ? importState.result.actions.filter((_, i) => selectedActions.has(i))
+              : [];
+            onSave({ ...data, docs: docsAjoutes }, actionsToCreate);
+          }} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
+            Enregistrer{selectedActions.size > 0 ? ` + ${selectedActions.size} tâche${selectedActions.size > 1 ? 's' : ''}` : ''}
+          </button>
         </div>
       </div>
     </div>
@@ -817,14 +973,14 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients }) {
           <h1 className="font-display text-4xl font-semibold text-stone-900 mb-2">{mandat.nom}</h1>
           <p className="text-stone-500 flex items-center gap-2"><MapPin className="w-4 h-4" />{mandat.adresse}</p>
         </div>
-        <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-stone-900 text-white rounded-lg text-sm hover:bg-stone-800">
+        <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
           <Edit2 className="w-4 h-4" /> Modifier
         </button>
       </div>
 
       <div className="grid grid-cols-3 gap-6">
         <div className="col-span-2 space-y-4">
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-stone-200">
+          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-xl font-semibold text-stone-900">Commercialisation</h2>
               <CommerceBadge comm={mandat.commercialisation} dateSignature={mandat.dateSignature} />
@@ -837,7 +993,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients }) {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-stone-200">
+          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Analyse financière</h2>
             <div className="grid grid-cols-4 gap-4">
               <DetailItem label="Prix net vendeur" value={`${(parseFloat(mandat.prix)/1000000).toFixed(2)}M€`} highlight />
@@ -848,11 +1004,11 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients }) {
           </div>
 
           {alerts.length > 0 && (
-            <div className="bg-white rounded-xl p-6 shadow-luxe border border-stone-200">
-              <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-amber-600" />Points d'attention</h2>
+            <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
+              <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-sage-dark" />Points d'attention</h2>
               <div className="space-y-2">
                 {alerts.map((a, i) => {
-                  const cfg = { critical: 'border-red-200 bg-red-50 text-red-800', warning: 'border-amber-200 bg-amber-50 text-amber-800', info: 'border-blue-200 bg-blue-50 text-blue-800' }[a.type] || 'border-stone-200 bg-stone-50 text-stone-800';
+                  const cfg = { critical: 'border-red-200 bg-red-50 text-red-800', warning: 'border-sage-light bg-sage-50 text-sage-darker', info: 'border-blue-200 bg-blue-50 text-blue-800' }[a.type] || 'border-stone-200 bg-stone-50 text-stone-800';
                   return (
                     <div key={i} className={`p-3 rounded-lg border ${cfg}`}>
                       <div className="font-medium text-sm">{a.title}</div>
@@ -865,8 +1021,8 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients }) {
           )}
 
           {highlights.length > 0 && (
-            <div className="bg-white rounded-xl p-6 shadow-luxe border border-stone-200">
-              <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2"><Sparkles className="w-5 h-5 text-amber-600" />Atouts commerciaux</h2>
+            <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
+              <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2"><Sparkles className="w-5 h-5 text-sage-dark" />Atouts commerciaux</h2>
               <ul className="space-y-1.5">
                 {highlights.map((h, i) => (
                   <li key={i} className="text-sm text-stone-700 flex items-start gap-2"><Check className="w-4 h-4 mt-0.5 flex-shrink-0 text-emerald-600" /><span>{h}</span></li>
@@ -876,7 +1032,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients }) {
           )}
 
           {mandat.description && (
-            <div className="bg-white rounded-xl p-6 shadow-luxe border border-stone-200">
+            <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
               <h2 className="font-display text-xl font-semibold text-stone-900 mb-3">Description</h2>
               <p className="text-stone-700 text-sm leading-relaxed">{mandat.description}</p>
             </div>
@@ -884,7 +1040,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients }) {
         </div>
 
         <div className="space-y-4">
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-stone-200">
+          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
             <h3 className="font-display text-lg font-semibold text-stone-900 mb-3">Contact</h3>
             <div className="space-y-2 text-sm">
               <div>
@@ -895,7 +1051,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients }) {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-stone-200">
+          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
             <h3 className="font-display text-lg font-semibold text-stone-900 mb-3">Documents</h3>
             <div className="space-y-1.5">
               {mandat.docs && mandat.docs.length > 0 ? mandat.docs.map((doc, i) => (
@@ -956,10 +1112,10 @@ function ClientsTab({ clients, reload, mandats, deals, interactions }) {
           <p className="text-stone-500">{filtered.length} investisseur{filtered.length > 1 ? 's' : ''}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowVoice(true)} className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-br from-amber-500 to-amber-700 text-white rounded-lg hover:from-amber-600 hover:to-amber-800 text-sm font-medium shadow-md">
+          <button onClick={() => setShowVoice(true)} className="flex items-center gap-2 px-4 py-2.5 gradient-sage-dark text-white rounded-lg hover:opacity-90 text-sm font-medium shadow-md">
             <Mic className="w-4 h-4" /> Note vocale
           </button>
-          <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-4 py-2.5 bg-stone-900 text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
+          <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-4 py-2.5 bg-ink-deep text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
             <Plus className="w-4 h-4" /> Nouveau client
           </button>
         </div>
@@ -1004,10 +1160,10 @@ function ClientsTab({ clients, reload, mandats, deals, interactions }) {
                 <MaturiteBadge maturite={c.maturite} />
               </div>
               <div className="flex flex-wrap gap-1.5 mb-3">
-                <span className="text-xs px-2 py-0.5 bg-stone-100 text-stone-700 rounded-full">{c.typologie}</span>
-                {(c.zones || []).slice(0, 2).map(z => <span key={z} className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full">{z}</span>)}
+                <span className="text-xs px-2 py-0.5 bg-cream-100 text-ink rounded-full">{c.typologie}</span>
+                {(c.zones || []).slice(0, 2).map(z => <span key={z} className="text-xs px-2 py-0.5 bg-sage-50 text-sage-dark rounded-full">{z}</span>)}
               </div>
-              <div className="grid grid-cols-3 gap-3 pt-3 border-t border-stone-100">
+              <div className="grid grid-cols-3 gap-3 pt-3 border-t border-cream">
                 <div><div className="text-[10px] text-stone-500 uppercase">Budget</div><div className="text-xs font-medium text-stone-900">{(parseFloat(c.budgetMin)/1000000).toFixed(1)}-{(parseFloat(c.budgetMax)/1000000).toFixed(1)}M€</div></div>
                 <div><div className="text-[10px] text-stone-500 uppercase">Rdt min</div><div className="text-xs font-medium text-stone-900">{c.rendementMin}%</div></div>
                 <div><div className="text-[10px] text-stone-500 uppercase">Deals</div><div className="text-xs font-medium text-stone-900">{nbDeals}</div></div>
@@ -1059,7 +1215,7 @@ function ClientForm({ client, onSave, onClose }) {
   return (
     <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-6" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-luxe-hover max-w-2xl w-full max-h-[90vh] overflow-y-auto scrollbar-thin" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-6 border-b border-stone-200">
+        <div className="flex items-center justify-between p-6 border-b border-cream-dark">
           <h2 className="font-display text-2xl font-semibold text-stone-900">{client ? 'Modifier' : 'Nouveau'} client</h2>
           <button onClick={onClose}><X className="w-5 h-5 text-stone-500" /></button>
         </div>
@@ -1094,7 +1250,7 @@ function ClientForm({ client, onSave, onClose }) {
             <div className="flex flex-wrap gap-2">
               {ZONES.map(z => (
                 <button key={z} type="button" onClick={() => toggleArray('zones', z)}
-                  className={`px-3 py-1 text-xs rounded-full border ${(data.zones || []).includes(z) ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{z}</button>
+                  className={`px-3 py-1 text-xs rounded-full border ${(data.zones || []).includes(z) ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{z}</button>
               ))}
             </div>
           </Field>
@@ -1102,7 +1258,7 @@ function ClientForm({ client, onSave, onClose }) {
             <div className="flex flex-wrap gap-2">
               {TYPES_ACTIF.map(t => (
                 <button key={t} type="button" onClick={() => toggleArray('typologiesRecherchees', t)}
-                  className={`px-3 py-1 text-xs rounded-full border ${(data.typologiesRecherchees || []).includes(t) ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{t}</button>
+                  className={`px-3 py-1 text-xs rounded-full border ${(data.typologiesRecherchees || []).includes(t) ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{t}</button>
               ))}
             </div>
           </Field>
@@ -1119,9 +1275,9 @@ function ClientForm({ client, onSave, onClose }) {
             </Field>
           </div>
         </div>
-        <div className="flex gap-2 justify-end p-6 border-t border-stone-200 bg-stone-50">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-stone-700 hover:bg-stone-200 rounded-lg">Annuler</button>
-          <button onClick={() => onSave(data)} className="px-4 py-2 bg-stone-900 text-white rounded-lg text-sm hover:bg-stone-800">Enregistrer</button>
+        <div className="flex gap-2 justify-end p-6 border-t border-stone-200 bg-cream-50">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-stone-700 hover:bg-cream-200 rounded-lg">Annuler</button>
+          <button onClick={() => onSave(data)} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Enregistrer</button>
         </div>
       </div>
     </div>
@@ -1165,14 +1321,14 @@ function ClientDetail({ client, reload, interactions, onBack, onEdit, deals, man
           <h1 className="font-display text-4xl font-semibold text-stone-900 mb-1">{client.prenom} {client.nom}</h1>
           <p className="text-stone-500">{client.societe}</p>
         </div>
-        <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-stone-900 text-white rounded-lg text-sm hover:bg-stone-800">
+        <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
           <Edit2 className="w-4 h-4" /> Modifier
         </button>
       </div>
 
       <div className="grid grid-cols-3 gap-6">
         <div className="col-span-2 space-y-4">
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-stone-200">
+          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Critères d'investissement</h2>
             <div className="grid grid-cols-3 gap-4">
               <DetailItem label="Typologie" value={client.typologie} />
@@ -1183,23 +1339,23 @@ function ClientDetail({ client, reload, interactions, onBack, onEdit, deals, man
               <DetailItem label="Statut" value={client.statut} />
             </div>
             {(client.zones || []).length > 0 && (
-              <div className="mt-4 pt-4 border-t border-stone-100">
+              <div className="mt-4 pt-4 border-t border-cream">
                 <div className="text-xs text-stone-500 uppercase mb-2">Zones</div>
-                <div className="flex flex-wrap gap-1.5">{(client.zones || []).map(z => <span key={z} className="text-xs px-2 py-1 bg-amber-50 text-amber-700 rounded-full">{z}</span>)}</div>
+                <div className="flex flex-wrap gap-1.5">{(client.zones || []).map(z => <span key={z} className="text-xs px-2 py-1 bg-sage-50 text-sage-dark rounded-full">{z}</span>)}</div>
               </div>
             )}
             {(client.typologiesRecherchees || []).length > 0 && (
               <div className="mt-3">
                 <div className="text-xs text-stone-500 uppercase mb-2">Typologies recherchées</div>
-                <div className="flex flex-wrap gap-1.5">{(client.typologiesRecherchees || []).map(t => <span key={t} className="text-xs px-2 py-1 bg-stone-100 text-stone-700 rounded-full">{t}</span>)}</div>
+                <div className="flex flex-wrap gap-1.5">{(client.typologiesRecherchees || []).map(t => <span key={t} className="text-xs px-2 py-1 bg-cream-100 text-ink rounded-full">{t}</span>)}</div>
               </div>
             )}
           </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-stone-200">
+          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-xl font-semibold text-stone-900">Historique des interactions</h2>
-              <button onClick={() => setShowNewInter(!showNewInter)} className="flex items-center gap-1.5 text-sm px-3 py-1.5 bg-stone-100 hover:bg-stone-200 rounded-lg">
+              <button onClick={() => setShowNewInter(!showNewInter)} className="flex items-center gap-1.5 text-sm px-3 py-1.5 bg-stone-100 hover:bg-cream-200 rounded-lg">
                 <Plus className="w-3.5 h-3.5" /> Nouvelle
               </button>
             </div>
@@ -1224,8 +1380,8 @@ function ClientDetail({ client, reload, interactions, onBack, onEdit, deals, man
                   <input type="date" value={newInter.dateNextStep} onChange={e => setNewInter({...newInter, dateNextStep: e.target.value})} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-white focus:outline-none focus:border-stone-900" />
                 </div>
                 <div className="flex gap-2 justify-end">
-                  <button onClick={() => setShowNewInter(false)} className="px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-200 rounded-lg">Annuler</button>
-                  <button onClick={addInteraction} className="px-3 py-1.5 bg-stone-900 text-white rounded-lg text-sm hover:bg-stone-800">Ajouter</button>
+                  <button onClick={() => setShowNewInter(false)} className="px-3 py-1.5 text-sm text-stone-700 hover:bg-cream-200 rounded-lg">Annuler</button>
+                  <button onClick={addInteraction} className="px-3 py-1.5 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Ajouter</button>
                 </div>
               </div>
             )}
@@ -1234,15 +1390,15 @@ function ClientDetail({ client, reload, interactions, onBack, onEdit, deals, man
               {clientInteractions.length === 0 ? (
                 <p className="text-sm text-stone-500 italic text-center py-6">Aucune interaction</p>
               ) : clientInteractions.map(i => (
-                <div key={i.id} className="border-l-2 border-amber-300 pl-4 py-2 group">
+                <div key={i.id} className="border-l-2 border-sage-light pl-4 py-2 group">
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <TypeInteractionBadge type={i.type} />
-                      <span className="text-xs font-medium text-stone-900 bg-amber-50 px-2 py-0.5 rounded-md">
+                      <span className="text-xs font-medium text-stone-900 bg-sage-50 px-2 py-0.5 rounded-md">
                         {new Date(i.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
                       </span>
                     </div>
-                    <button onClick={() => deleteInteraction(i.id)} className="opacity-0 group-hover:opacity-100 text-stone-400 hover:text-red-600">
+                    <button onClick={() => deleteInteraction(i.id)} className="opacity-0 group-hover:opacity-100 text-cream-400 hover:text-red-600">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -1251,7 +1407,7 @@ function ClientDetail({ client, reload, interactions, onBack, onEdit, deals, man
                     <div className="flex items-center gap-2 text-xs text-stone-500 mt-1.5">
                       <ChevronRight className="w-3 h-3" />
                       <span>{i.nextStep}</span>
-                      {i.dateNextStep && <span className="text-amber-700 font-medium">• {new Date(i.dateNextStep).toLocaleDateString('fr-FR')}</span>}
+                      {i.dateNextStep && <span className="text-sage-dark font-medium">• {new Date(i.dateNextStep).toLocaleDateString('fr-FR')}</span>}
                     </div>
                   )}
                 </div>
@@ -1261,7 +1417,7 @@ function ClientDetail({ client, reload, interactions, onBack, onEdit, deals, man
         </div>
 
         <div className="space-y-4">
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-stone-200">
+          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
             <h3 className="font-display text-lg font-semibold text-stone-900 mb-3">Coordonnées</h3>
             <div className="space-y-2 text-sm">
               {client.tel && <div className="flex items-center gap-2 text-stone-700"><Phone className="w-3.5 h-3.5 text-stone-400" />{client.tel}</div>}
@@ -1270,7 +1426,7 @@ function ClientDetail({ client, reload, interactions, onBack, onEdit, deals, man
           </div>
 
           {clientDeals.length > 0 && (
-            <div className="bg-white rounded-xl p-6 shadow-luxe border border-stone-200">
+            <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
               <h3 className="font-display text-lg font-semibold text-stone-900 mb-3">Deals ({clientDeals.length})</h3>
               <div className="space-y-2">
                 {clientDeals.map(d => {
@@ -1332,10 +1488,10 @@ function DealsTab({ deals, reload, mandats, clients }) {
           <p className="text-stone-500">{filtered.length} rapprochement{filtered.length > 1 ? 's' : ''}</p>
         </div>
         <div className="flex items-center gap-2 bg-white border border-stone-200 rounded-lg p-1">
-          <button onClick={() => setView('table')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium ${view === 'table' ? 'bg-stone-900 text-white' : 'text-stone-600 hover:bg-stone-100'}`}>
+          <button onClick={() => setView('table')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium ${view === 'table' ? 'bg-ink-deep text-white' : 'text-stone-600 hover:bg-stone-100'}`}>
             <List className="w-4 h-4" /> Tableau
           </button>
-          <button onClick={() => setView('kanban')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium ${view === 'kanban' ? 'bg-stone-900 text-white' : 'text-stone-600 hover:bg-stone-100'}`}>
+          <button onClick={() => setView('kanban')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium ${view === 'kanban' ? 'bg-ink-deep text-white' : 'text-stone-600 hover:bg-stone-100'}`}>
             <LayoutGrid className="w-4 h-4" /> Kanban
           </button>
         </div>
@@ -1352,7 +1508,7 @@ function DealsTab({ deals, reload, mandats, clients }) {
       {view === 'table' ? (
         <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden">
           <table className="w-full">
-            <thead className="bg-stone-50 border-b border-stone-200">
+            <thead className="bg-stone-50 border-b border-cream-dark">
               <tr>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-stone-600 uppercase">Bien</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-stone-600 uppercase">Acquéreur</th>
@@ -1364,7 +1520,7 @@ function DealsTab({ deals, reload, mandats, clients }) {
             </thead>
             <tbody>
               {filtered.map(d => (
-                <tr key={d.id} className="border-b border-stone-100 hover:bg-stone-50">
+                <tr key={d.id} className="border-b border-stone-100 hover:bg-cream-50">
                   <td className="px-5 py-4">
                     <div className="font-medium text-stone-900 text-sm">{d.mandat.nom}</div>
                     <div className="text-xs text-stone-500">{(parseFloat(d.mandat.prix)/1000000).toFixed(2)}M€</div>
@@ -1481,14 +1637,14 @@ function MatchingTab({ mandats, clients, deals, reload }) {
       {mandat && (
         <div className="space-y-3">
           <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="w-4 h-4 text-amber-600" />
+            <Sparkles className="w-4 h-4 text-sage-dark" />
             <h2 className="font-display text-xl font-semibold text-stone-900">Acquéreurs compatibles</h2>
             <span className="text-sm text-stone-500">({matches.filter(m => m.score > 0).length} matches)</span>
           </div>
           {matches.filter(m => m.score > 0).map(({ client, score, alreadyLinked }) => (
             <div key={client.id} className="bg-white rounded-xl p-5 shadow-luxe border border-stone-200 flex items-center gap-4">
               <div className={`w-16 h-16 rounded-xl flex flex-col items-center justify-center flex-shrink-0 ${
-                score >= 80 ? 'bg-emerald-100 text-emerald-700' : score >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-stone-100 text-stone-600'
+                score >= 80 ? 'bg-emerald-100 text-emerald-700' : score >= 50 ? 'bg-sage-100 text-sage-dark' : 'bg-cream-100 text-ink/80'
               }`}>
                 <div className="font-display text-2xl font-bold">{score}</div>
                 <div className="text-[9px] uppercase font-medium">Score</div>
@@ -1497,15 +1653,15 @@ function MatchingTab({ mandats, clients, deals, reload }) {
                 <div className="font-display text-lg font-semibold text-stone-900">{client.prenom} {client.nom}</div>
                 <div className="text-sm text-stone-600 mb-2">{client.societe}</div>
                 <div className="flex flex-wrap gap-1.5">
-                  <span className="text-xs px-2 py-0.5 bg-stone-100 text-stone-700 rounded-full">{client.typologie}</span>
-                  <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full">{(parseFloat(client.budgetMin)/1000000).toFixed(1)}-{(parseFloat(client.budgetMax)/1000000).toFixed(1)}M€</span>
+                  <span className="text-xs px-2 py-0.5 bg-cream-100 text-ink rounded-full">{client.typologie}</span>
+                  <span className="text-xs px-2 py-0.5 bg-sage-50 text-sage-dark rounded-full">{(parseFloat(client.budgetMin)/1000000).toFixed(1)}-{(parseFloat(client.budgetMax)/1000000).toFixed(1)}M€</span>
                   <MaturiteBadge maturite={client.maturite} />
                 </div>
               </div>
               {alreadyLinked ? (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-stone-100 text-stone-600 rounded-lg text-sm"><CheckCircle2 className="w-4 h-4" /> Déjà lié</span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cream-100 text-ink/80 rounded-lg text-sm"><CheckCircle2 className="w-4 h-4" /> Déjà lié</span>
               ) : (
-                <button onClick={() => addMatch(client.id)} className="px-4 py-2 bg-stone-900 text-white rounded-lg text-sm hover:bg-stone-800 flex items-center gap-1.5">
+                <button onClick={() => addMatch(client.id)} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-stone-800 flex items-center gap-1.5">
                   <Plus className="w-4 h-4" /> Rapprocher
                 </button>
               )}
@@ -1583,7 +1739,7 @@ function TodosTab({ todos, reload, mandats, clients, deals }) {
           <h1 className="font-display text-4xl font-semibold text-stone-900 mb-1">To-do personnelle</h1>
           <p className="text-stone-500">Vos priorités, liées ou indépendantes</p>
         </div>
-        <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-4 py-2.5 bg-stone-900 text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
+        <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-4 py-2.5 bg-ink-deep text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
           <Plus className="w-4 h-4" /> Nouvelle tâche
         </button>
       </div>
@@ -1597,7 +1753,7 @@ function TodosTab({ todos, reload, mandats, clients, deals }) {
           { id: 'done', label: 'Terminées', count: todos.filter(t => t.statut === 'Terminé').length }
         ].map(f => (
           <button key={f.id} onClick={() => setFilter(f.id)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${filter === f.id ? 'bg-stone-900 text-white' : 'bg-white text-stone-700 hover:bg-stone-100 border border-stone-200'}`}>
+            className={`px-4 py-2 rounded-lg text-sm font-medium ${filter === f.id ? 'bg-ink-deep text-white' : 'bg-white text-stone-700 hover:bg-stone-100 border border-stone-200'}`}>
             {f.label} <span className="opacity-70">({f.count})</span>
           </button>
         ))}
@@ -1633,7 +1789,7 @@ function TodosTab({ todos, reload, mandats, clients, deals }) {
           )}
           <div className="flex gap-2 justify-end">
             <button onClick={() => setShowNew(false)} className="px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-100 rounded-lg">Annuler</button>
-            <button onClick={addTodo} className="px-3 py-1.5 bg-stone-900 text-white rounded-lg text-sm hover:bg-stone-800">Ajouter</button>
+            <button onClick={addTodo} className="px-3 py-1.5 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Ajouter</button>
           </div>
         </div>
       )}
@@ -1655,7 +1811,7 @@ function TodosTab({ todos, reload, mandats, clients, deals }) {
                   <div className={`text-sm font-medium ${t.statut === 'Terminé' ? 'line-through text-stone-500' : 'text-stone-900'}`}>{t.titre}</div>
                   <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      t.priorite === 'Haute' ? 'bg-red-50 text-red-700' : t.priorite === 'Moyenne' ? 'bg-amber-50 text-amber-700' : 'bg-stone-100 text-stone-600'
+                      t.priorite === 'Haute' ? 'bg-red-50 text-red-700' : t.priorite === 'Moyenne' ? 'bg-sage-50 text-sage-dark' : 'bg-cream-100 text-ink/80'
                     }`}>{t.priorite}</span>
                     <select value={t.statut} onChange={e => updateTodo(t.id, { statut: e.target.value })} className="text-xs px-2 py-0.5 border border-stone-200 rounded-md bg-white focus:outline-none">
                       <option>À faire</option><option>En cours</option><option>Terminé</option>
@@ -1664,13 +1820,13 @@ function TodosTab({ todos, reload, mandats, clients, deals }) {
                     {lien && <span className="text-xs text-stone-600 bg-stone-100 px-2 py-0.5 rounded-full">{lien}</span>}
                   </div>
                 </div>
-                <button onClick={() => deleteTodo(t.id)} className="opacity-0 group-hover:opacity-100 text-stone-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+                <button onClick={() => deleteTodo(t.id)} className="opacity-0 group-hover:opacity-100 text-cream-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
               </div>
             </div>
           );
         })}
         {filtered.length === 0 && (
-          <div className="text-center py-12 text-stone-500 text-sm bg-white rounded-xl border border-stone-200">Aucune tâche</div>
+          <div className="text-center py-12 text-stone-500 text-sm bg-white rounded-xl border border-cream-dark">Aucune tâche</div>
         )}
       </div>
     </div>
@@ -1709,7 +1865,7 @@ function AnnoncesTab({ annonces, reload, mandats }) {
 
   const getColorStatut = (s) => {
     if (s === 'En ligne') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-    if (s === 'En attente') return 'bg-amber-100 text-amber-700 border-amber-200';
+    if (s === 'En attente') return 'bg-sage-100 text-sage-dark border-sage-light';
     if (s === 'À corriger') return 'bg-red-100 text-red-700 border-red-200';
     return 'bg-stone-100 text-stone-500 border-stone-200';
   };
@@ -1725,7 +1881,7 @@ function AnnoncesTab({ annonces, reload, mandats }) {
           <p className="text-stone-500">Diffusion multi-portails — alimentation manuelle en attendant l'API</p>
         </div>
         <button onClick={() => setShowNew(!showNew)} disabled={mandatsDispo.length === 0}
-          className="flex items-center gap-2 px-4 py-2.5 bg-stone-900 text-white rounded-lg hover:bg-stone-800 disabled:opacity-40 text-sm font-medium">
+          className="flex items-center gap-2 px-4 py-2.5 bg-ink-deep text-white rounded-lg hover:bg-stone-800 disabled:opacity-40 text-sm font-medium">
           <Plus className="w-4 h-4" /> Publier un bien
         </button>
       </div>
@@ -1736,7 +1892,7 @@ function AnnoncesTab({ annonces, reload, mandats }) {
           <div className="grid grid-cols-2 gap-2">
             {mandatsDispo.map(m => (
               <button key={m.id} onClick={() => addAnnonce(m.id)}
-                className="text-left p-3 border border-stone-200 rounded-lg hover:border-stone-900 hover:bg-stone-50">
+                className="text-left p-3 border border-stone-200 rounded-lg hover:border-stone-900 hover:bg-cream-50">
                 <div className="font-medium text-sm text-stone-900">{m.nom}</div>
                 <div className="text-xs text-stone-500 mt-0.5">{m.type} • {(parseFloat(m.prix)/1000000).toFixed(2)}M€</div>
               </button>
@@ -1751,7 +1907,7 @@ function AnnoncesTab({ annonces, reload, mandats }) {
           if (!m) return null;
           const nbEnLigne = Object.values(a.portails || {}).filter(p => p === 'En ligne').length;
           return (
-            <div key={a.id} className="bg-white rounded-xl p-5 shadow-luxe border border-stone-200">
+            <div key={a.id} className="bg-white rounded-xl p-5 shadow-luxe border border-cream-dark">
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <div className="font-display text-lg font-semibold text-stone-900">{m.nom}</div>
@@ -1845,9 +2001,9 @@ function QuestionnairesTab({ questionnaires, reload }) {
 
       <div className="grid grid-cols-2 gap-4 mb-8">
         {Object.entries(templates).map(([key, t]) => (
-          <div key={key} className="bg-white rounded-xl p-6 shadow-luxe border border-stone-200">
+          <div key={key} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
             <div className={`inline-flex w-12 h-12 rounded-xl mb-4 items-center justify-center ${
-              t.color === 'amber' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+              t.color === 'amber' ? 'bg-sage-100 text-sage-dark' : 'bg-emerald-100 text-emerald-700'
             }`}>
               <FileQuestion className="w-6 h-6" />
             </div>
@@ -1863,10 +2019,10 @@ function QuestionnairesTab({ questionnaires, reload }) {
               ))}
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setSelectedTemplate(key)} className="flex-1 px-3 py-2 bg-stone-100 text-stone-800 rounded-lg text-sm hover:bg-stone-200 flex items-center justify-center gap-1.5">
+              <button onClick={() => setSelectedTemplate(key)} className="flex-1 px-3 py-2 bg-stone-100 text-stone-800 rounded-lg text-sm hover:bg-cream-200 flex items-center justify-center gap-1.5">
                 <Eye className="w-3.5 h-3.5" /> Aperçu
               </button>
-              <button onClick={() => sendQuestionnaire(key)} className="flex-1 px-3 py-2 bg-stone-900 text-white rounded-lg text-sm hover:bg-stone-800 flex items-center justify-center gap-1.5">
+              <button onClick={() => sendQuestionnaire(key)} className="flex-1 px-3 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-stone-800 flex items-center justify-center gap-1.5">
                 <Send className="w-3.5 h-3.5" /> Générer un lien
               </button>
             </div>
@@ -1881,7 +2037,7 @@ function QuestionnairesTab({ questionnaires, reload }) {
             {questionnaires.map(q => (
               <div key={q.id} className="bg-white rounded-xl p-4 shadow-luxe border border-stone-200 flex items-center gap-4">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                  q.type === 'vendeur' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                  q.type === 'vendeur' ? 'bg-sage-100 text-sage-dark' : 'bg-emerald-100 text-emerald-700'
                 }`}>
                   <FileQuestion className="w-5 h-5" />
                 </div>
@@ -1908,7 +2064,7 @@ function QuestionnairesTab({ questionnaires, reload }) {
       {selectedTemplate && (
         <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-6" onClick={() => setSelectedTemplate(null)}>
           <div className="bg-white rounded-xl shadow-luxe-hover max-w-2xl w-full max-h-[90vh] overflow-y-auto scrollbar-thin" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-6 border-b border-stone-200">
+            <div className="flex items-center justify-between p-6 border-b border-cream-dark">
               <h2 className="font-display text-2xl font-semibold text-stone-900">{templates[selectedTemplate].nom}</h2>
               <button onClick={() => setSelectedTemplate(null)}><X className="w-5 h-5 text-stone-500" /></button>
             </div>
@@ -1954,10 +2110,10 @@ function QuestionnairesTab({ questionnaires, reload }) {
             </div>
             <p className="text-xs text-stone-500 font-mono mb-4 break-all">{showQR.lien}</p>
             <div className="flex gap-2">
-              <button onClick={() => navigator.clipboard.writeText(showQR.lien)} className="flex-1 px-4 py-2 bg-stone-100 text-stone-800 rounded-lg text-sm hover:bg-stone-200 flex items-center justify-center gap-1.5">
+              <button onClick={() => navigator.clipboard.writeText(showQR.lien)} className="flex-1 px-4 py-2 bg-stone-100 text-stone-800 rounded-lg text-sm hover:bg-cream-200 flex items-center justify-center gap-1.5">
                 <Copy className="w-3.5 h-3.5" /> Copier le lien
               </button>
-              <button onClick={() => setShowQR(null)} className="flex-1 px-4 py-2 bg-stone-900 text-white rounded-lg text-sm hover:bg-stone-800">Fermer</button>
+              <button onClick={() => setShowQR(null)} className="flex-1 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Fermer</button>
             </div>
           </div>
         </div>
@@ -2017,7 +2173,7 @@ function EmailingsTab({ campagnes, reload, clients }) {
           <h1 className="font-display text-4xl font-semibold text-stone-900 mb-1">Emailings & Sourcing</h1>
           <p className="text-stone-500">Segmentez vos acquéreurs et activez-les sur les bons actifs</p>
         </div>
-        <button onClick={() => setShowNew(!showNew)} className="flex items-center gap-2 px-4 py-2.5 bg-stone-900 text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
+        <button onClick={() => setShowNew(!showNew)} className="flex items-center gap-2 px-4 py-2.5 bg-ink-deep text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
           <Plus className="w-4 h-4" /> Nouvelle campagne
         </button>
       </div>
@@ -2036,7 +2192,7 @@ function EmailingsTab({ campagnes, reload, clients }) {
                 <div className="flex flex-wrap gap-2">
                   {TYPOLOGIES_CLIENT.map(t => (
                     <button key={t} onClick={() => toggleSegment('typologies', t)}
-                      className={`px-3 py-1 text-xs rounded-full border ${segment.typologies.includes(t) ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{t}</button>
+                      className={`px-3 py-1 text-xs rounded-full border ${segment.typologies.includes(t) ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{t}</button>
                   ))}
                 </div>
               </Field>
@@ -2044,7 +2200,7 @@ function EmailingsTab({ campagnes, reload, clients }) {
                 <div className="flex flex-wrap gap-2">
                   {ZONES.map(z => (
                     <button key={z} onClick={() => toggleSegment('zones', z)}
-                      className={`px-3 py-1 text-xs rounded-full border ${segment.zones.includes(z) ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{z}</button>
+                      className={`px-3 py-1 text-xs rounded-full border ${segment.zones.includes(z) ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{z}</button>
                   ))}
                 </div>
               </Field>
@@ -2052,7 +2208,7 @@ function EmailingsTab({ campagnes, reload, clients }) {
                 <div className="flex flex-wrap gap-2">
                   {TYPES_ACTIF.map(t => (
                     <button key={t} onClick={() => toggleSegment('typologiesRecherchees', t)}
-                      className={`px-3 py-1 text-xs rounded-full border ${segment.typologiesRecherchees.includes(t) ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{t}</button>
+                      className={`px-3 py-1 text-xs rounded-full border ${segment.typologiesRecherchees.includes(t) ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{t}</button>
                   ))}
                 </div>
               </Field>
@@ -2063,16 +2219,16 @@ function EmailingsTab({ campagnes, reload, clients }) {
               </div>
             </div>
           </div>
-          <div className="flex gap-2 justify-end mt-4 pt-4 border-t border-stone-200">
+          <div className="flex gap-2 justify-end mt-4 pt-4 border-t border-cream-dark">
             <button onClick={() => setShowNew(false)} className="px-4 py-2 text-sm text-stone-700 hover:bg-stone-100 rounded-lg">Annuler</button>
-            <button onClick={createCampagne} className="px-4 py-2 bg-stone-900 text-white rounded-lg text-sm hover:bg-stone-800">Créer la campagne</button>
+            <button onClick={createCampagne} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Créer la campagne</button>
           </div>
         </div>
       )}
 
       <div className="space-y-3">
         {campagnes.map(c => (
-          <div key={c.id} className="bg-white rounded-xl p-5 shadow-luxe border border-stone-200">
+          <div key={c.id} className="bg-white rounded-xl p-5 shadow-luxe border border-cream-dark">
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 bg-stone-100 rounded-xl flex items-center justify-center flex-shrink-0">
                 <Mail className="w-5 h-5 text-stone-700" />
@@ -2081,7 +2237,7 @@ function EmailingsTab({ campagnes, reload, clients }) {
                 <div className="flex items-center gap-2 mb-1">
                   <div className="font-display text-lg font-semibold text-stone-900">{c.nom}</div>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    c.statut === 'Envoyée' ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-100 text-stone-600'
+                    c.statut === 'Envoyée' ? 'bg-emerald-50 text-emerald-700' : 'bg-cream-100 text-ink/80'
                   }`}>{c.statut}</span>
                 </div>
                 <div className="text-sm text-stone-500 mb-3">{c.segment}</div>
@@ -2093,7 +2249,7 @@ function EmailingsTab({ campagnes, reload, clients }) {
               </div>
               <div>
                 {c.statut === 'Brouillon' ? (
-                  <button onClick={() => sendCampagne(c.id)} className="flex items-center gap-1.5 px-4 py-2 bg-stone-900 text-white rounded-lg text-sm hover:bg-stone-800">
+                  <button onClick={() => sendCampagne(c.id)} className="flex items-center gap-1.5 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
                     <Send className="w-3.5 h-3.5" /> Envoyer
                   </button>
                 ) : (

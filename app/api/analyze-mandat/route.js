@@ -45,7 +45,7 @@ Retourne UNIQUEMENT un objet JSON valide (pas de markdown, pas de texte avant/ap
     "nom": "string ou null",
     "adresse": "string ou null",
     "ville": "string ou null",
-    "type": "Immeubles | Hotels | Résidentiel | Terrains | Parking | Locaux commerciaux | null",
+    "type": "Immeuble d'habitation | Immeuble mixte | Immeuble tertiaire | Local commercial | Local d'activité | Hôtel | Hébergement hôtelier | Appartement | Maison | Studio | Terrain | Bureau | Promotion immobilière | null",
     "sousType": "string ou null",
     "prix": number ou null,
     "prixM2": number ou null,
@@ -60,7 +60,10 @@ Retourne UNIQUEMENT un objet JSON valide (pas de markdown, pas de texte avant/ap
   "alerts": [
     { "type": "warning | info | critical", "title": "titre court", "message": "explication courte" }
   ],
-  "highlights": ["point important 1", "point important 2"]
+  "highlights": ["point important 1", "point important 2"],
+  "actions": [
+    { "titre": "action à mener", "priorite": "Haute | Moyenne | Basse", "echeanceJours": number, "motif": "pourquoi cette action" }
+  ]
 }
 
 RÈGLES :
@@ -72,12 +75,32 @@ RÈGLES :
 - Si prix et loyers présents, vérifie la cohérence du rendement (écart >0.3 pt = warning)
 - Calcule prix/m² si surface et prix présents
 
+RÈGLES POUR "actions" (TRÈS IMPORTANT) :
+Génère des tâches concrètes à faire par le courtier pour COMPLÉTER les informations manquantes ou CONFIRMER les points d'attention. Pour chaque champ critique absent ou alerte, propose une action avec :
+- titre : phrase d'action claire (ex : "Demander le montant de la taxe foncière au propriétaire", "Vérifier la date d'échéance des baux commerciaux", "Obtenir le DPE à jour")
+- priorite : "Haute" pour les infos bloquantes commercialisation (prix, contact propriétaire, baux, contentieux) ; "Moyenne" pour infos utiles (DPE, TF, travaux) ; "Basse" pour compléments (photos, plans)
+- echeanceJours : nombre de jours à partir d'aujourd'hui pour traiter l'action (3 pour Haute, 7 pour Moyenne, 14 pour Basse)
+- motif : 1 phrase expliquant pourquoi cette action est nécessaire
+
+Propose entre 3 et 8 actions maximum, uniquement les plus pertinentes. Une action par info critique manquante.
+
+EXEMPLES D'ACTIONS TYPIQUES :
+- "Demander le contact direct du propriétaire" si contact manquant
+- "Obtenir les baux commerciaux signés" si nb lots commerciaux > 0 mais détails baux manquants
+- "Vérifier la date d'échéance des baux" si loyers connus mais dates non
+- "Demander la taxe foncière des 2 dernières années" si TF manquante
+- "Obtenir le DPE et audit énergétique" si mentions mais pas de valeur
+- "Clarifier la situation d'indivision" si alerte critique indivision
+- "Organiser une visite du bien" systématiquement si off-market nouveau
+- "Demander la liste des travaux réalisés récemment" si travaux mentionnés sans détail
+- "Vérifier l'absence de préemption" pour biens à Paris
+
 Réponds UNIQUEMENT avec le JSON.`
     });
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 2000,
+      max_tokens: 3000,
       messages: [{ role: 'user', content }]
     });
 

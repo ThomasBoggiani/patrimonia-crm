@@ -3,9 +3,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Mic, Square, Loader2, X, Check, AlertCircle, CheckCircle2, Sparkles, Info, RotateCw } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
-const TYPES_ACTIF = ['Immeubles', 'Hotels', 'Résidentiel', 'Terrains', 'Parking', 'Locaux commerciaux'];
+const TYPES_ACTIF = ['Immeuble d\'habitation', 'Immeuble mixte', 'Immeuble tertiaire', 'Local commercial', 'Local d\'activité', 'Hôtel', 'Hébergement hôtelier', 'Appartement', 'Maison', 'Studio', 'Terrain', 'Bureau', 'Promotion immobilière'];
 const TYPOLOGIES_CLIENT = ['Foncières', 'Marchands de biens', 'Particuliers', 'Fonds', 'Promoteurs', 'Family Office'];
-const ZONES = ['Paris', 'IDF', 'France', 'Europe'];
+const ZONES = ['Paris 3e', 'Paris 4e', 'Paris 8e', 'Paris 9e', 'Paris 10e', 'Paris 11e', 'Paris 13e', 'Paris 15e', 'Paris 16e', 'Paris 17e', 'Paris 18e', 'Paris 19e', 'Paris 20e', 'Hauts-de-Seine (92)', 'Seine-Saint-Denis (93)', 'Val-de-Marne (94)', 'Val-d\'Oise (95)', 'Yvelines (78)', 'Seine-et-Marne (77)', 'Essonne (91)', 'Province'];
 
 export default function VoiceNoteModal({ existingClients, onClose, onSuccess }) {
   const [step, setStep] = useState('ready'); // ready | recording | transcribing | processing | review | saving
@@ -204,12 +204,12 @@ export default function VoiceNoteModal({ existingClients, onClose, onSuccess }) 
   });
 
   return (
-    <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-ink/70 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[95vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-6 border-b border-stone-200 sticky top-0 bg-white z-10">
           <div>
             <h2 className="font-display text-2xl font-semibold text-stone-900 flex items-center gap-2">
-              <Mic className="w-6 h-6 text-amber-600" /> Note vocale
+              <Mic className="w-6 h-6 text-sage-dark" /> Note vocale
             </h2>
             <p className="text-xs text-stone-500 mt-0.5">Claude écoute, transcrit et structure en fiche client</p>
           </div>
@@ -234,7 +234,7 @@ export default function VoiceNoteModal({ existingClients, onClose, onSuccess }) 
           {step === 'ready' && supported && (
             <div className="text-center py-8">
               <button onClick={startRecording}
-                className="w-24 h-24 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-lg hover:scale-105 transition-transform flex items-center justify-center mx-auto mb-6">
+                className="w-24 h-24 rounded-full gradient-sage-dark text-white shadow-lg hover:scale-105 transition-transform flex items-center justify-center mx-auto mb-6">
                 <Mic className="w-10 h-10" />
               </button>
               <h3 className="font-display text-xl font-semibold text-stone-900 mb-2">Prêt à enregistrer</h3>
@@ -274,7 +274,7 @@ export default function VoiceNoteModal({ existingClients, onClose, onSuccess }) 
 
           {step === 'processing' && (
             <div className="text-center py-12">
-              <Loader2 className="w-12 h-12 text-amber-600 animate-spin mx-auto mb-4" />
+              <Loader2 className="w-12 h-12 text-sage-dark animate-spin mx-auto mb-4" />
               <div className="font-display text-lg font-semibold text-stone-900 mb-1">Claude structure votre note…</div>
               <div className="text-sm text-stone-500">Extraction des informations et détection de doublons</div>
             </div>
@@ -374,7 +374,7 @@ export default function VoiceNoteModal({ existingClients, onClose, onSuccess }) 
                   <div className="flex flex-wrap gap-2">
                     {ZONES.map(z => (
                       <button key={z} type="button" onClick={() => toggleArrayField('zones', z)}
-                        className={`px-3 py-1 text-xs rounded-full border ${(editedData.zones || []).includes(z) ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{z}</button>
+                        className={`px-3 py-1 text-xs rounded-full border ${(editedData.zones || []).includes(z) ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{z}</button>
                     ))}
                   </div>
                 </div>
@@ -384,21 +384,21 @@ export default function VoiceNoteModal({ existingClients, onClose, onSuccess }) 
                   <div className="flex flex-wrap gap-2">
                     {TYPES_ACTIF.map(t => (
                       <button key={t} type="button" onClick={() => toggleArrayField('typologiesRecherchees', t)}
-                        className={`px-3 py-1 text-xs rounded-full border ${(editedData.typologiesRecherchees || []).includes(t) ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{t}</button>
+                        className={`px-3 py-1 text-xs rounded-full border ${(editedData.typologiesRecherchees || []).includes(t) ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{t}</button>
                     ))}
                   </div>
                 </div>
 
                 {/* Interaction qui sera créée */}
                 {result.interaction && (
-                  <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-amber-900 mb-2 flex items-center gap-1.5">
+                  <div className="mt-4 p-4 bg-sage-50 border border-sage-light rounded-xl">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-sage-darker mb-2 flex items-center gap-1.5">
                       <CheckCircle2 className="w-3.5 h-3.5" /> Interaction qui sera ajoutée à l'historique
                     </div>
                     <div className="text-sm text-stone-800 mb-1"><span className="font-medium">{result.interaction.type}</span> du {new Date().toLocaleDateString('fr-FR')}</div>
                     <div className="text-xs text-stone-700 italic mb-1">"{result.interaction.resume}"</div>
                     {result.interaction.nextStep && (
-                      <div className="text-xs text-amber-900 mt-2 font-medium">
+                      <div className="text-xs text-sage-darker mt-2 font-medium">
                         → Prochaine action : {result.interaction.nextStep}
                         {result.interaction.dateNextStep && ` (${new Date(result.interaction.dateNextStep).toLocaleDateString('fr-FR')})`}
                       </div>
@@ -411,7 +411,7 @@ export default function VoiceNoteModal({ existingClients, onClose, onSuccess }) 
 
           {step === 'saving' && (
             <div className="text-center py-12">
-              <Loader2 className="w-12 h-12 text-amber-600 animate-spin mx-auto mb-4" />
+              <Loader2 className="w-12 h-12 text-sage-dark animate-spin mx-auto mb-4" />
               <div className="font-display text-lg font-semibold text-stone-900">Enregistrement…</div>
             </div>
           )}
@@ -420,8 +420,8 @@ export default function VoiceNoteModal({ existingClients, onClose, onSuccess }) 
         {step === 'review' && (
           <div className="flex gap-2 justify-end p-6 border-t border-stone-200 bg-stone-50 sticky bottom-0">
             <button onClick={() => { setStep('ready'); setTranscript(''); setResult(null); setEditedData(null); }}
-              className="px-4 py-2 text-sm text-stone-700 hover:bg-stone-200 rounded-lg">Recommencer</button>
-            <button onClick={saveResult} className="px-4 py-2 bg-stone-900 text-white rounded-lg text-sm hover:bg-stone-800 flex items-center gap-1.5">
+              className="px-4 py-2 text-sm text-stone-700 hover:bg-cream-200 rounded-lg">Recommencer</button>
+            <button onClick={saveResult} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink flex items-center gap-1.5">
               <Check className="w-4 h-4" /> Valider et enregistrer
             </button>
           </div>

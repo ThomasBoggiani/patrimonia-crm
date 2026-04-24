@@ -1,0 +1,21 @@
+{
+  "name": "Immeubles & Patrimoine — CRM",
+  "short_name": "I&P CRM",
+  "description": "CRM de l'agence Immeubles & Patrimoine",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F9F5ED",
+  "theme_color": "#F9F5ED",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}
