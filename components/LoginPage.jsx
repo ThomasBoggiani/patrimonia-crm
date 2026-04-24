@@ -18,7 +18,7 @@ export default function LoginPage() {
     setLoading(false);
     if (error) {
       if (error.message.includes('Invalid login credentials')) setError('Email ou mot de passe incorrect');
-      else if (error.message.includes('Email not confirmed')) setError("Votre compte n'est pas encore active. Verifiez votre email.");
+      else if (error.message.includes('Email not confirmed')) setError("Votre compte n'est pas encore activé. Vérifiez votre email.");
       else setError(error.message);
     }
   };
@@ -39,30 +39,30 @@ export default function LoginPage() {
     <div className="min-h-screen bg-cream-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
-          <img src="/logo-light.png" alt="Immeubles et Patrimoine" className="w-40 h-40 mb-3" />
-          <p className="text-xs uppercase tracking-widest text-sage-dark">Transactions immobilieres</p>
-          <p className="text-xs text-cream-400 mt-0.5">Paris - Ile-de-France</p>
+          <img src="/logo-light.png" alt="Immeubles & Patrimoine" className="w-40 h-40 mb-3" />
+          <p className="text-xs uppercase tracking-[0.2em] text-sage-dark">Transactions immobilières</p>
+          <p className="text-xs text-cream-400 mt-0.5">Paris · Île-de-France</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-luxe border border-cream-dark p-8">
           <h1 className="font-display text-2xl font-semibold text-ink mb-1">
-            {mode === 'login' ? 'Connexion' : 'Mot de passe oublie'}
+            {mode === 'login' ? 'Connexion' : 'Mot de passe oublié'}
           </h1>
           <p className="text-sm text-sage-dark mb-6">
             {mode === 'login' 
-              ? "Acces reserve a l'equipe Immeubles et Patrimoine"
-              : "Entrez votre email, vous recevrez un lien de reinitialisation"}
+              ? "Accès réservé à l'équipe Immeubles & Patrimoine"
+              : "Entrez votre email, vous recevrez un lien de réinitialisation"}
           </p>
 
           {error && (
             <div className="p-3 mb-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
-              {error}
+              ⚠ {error}
             </div>
           )}
 
           {resetSent && (
             <div className="p-3 mb-4 bg-sage-50 border border-sage-light rounded-lg text-sm text-sage-darker">
-              Email envoye ! Verifiez votre boite de reception (et les spams).
+              ✓ Email envoyé ! Vérifiez votre boîte de réception (et les spams).
             </div>
           )}
 
@@ -107,18 +107,18 @@ export default function LoginPage() {
           <div className="mt-5 text-center">
             {mode === 'login' ? (
               <button onClick={() => setMode('reset')} className="text-xs text-sage-dark hover:underline">
-                Mot de passe oublie ?
+                Mot de passe oublié ?
               </button>
             ) : (
               <button onClick={() => { setMode('login'); setResetSent(false); setError(null); }} className="text-xs text-sage-dark hover:underline">
-                Retour a la connexion
+                ← Retour à la connexion
               </button>
             )}
           </div>
         </div>
 
         <p className="text-center text-xs text-cream-400 mt-6">
-          Probleme de connexion ? Contactez Thomas Boggiani
+          Problème de connexion ? Contactez Thomas Boggiani
         </p>
       </div>
     </div>
