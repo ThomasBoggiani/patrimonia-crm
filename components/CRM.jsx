@@ -7,13 +7,17 @@ import {
   LayoutGrid, List, QrCode, Clock, AlertCircle,
   ChevronRight, Home, Send, Upload,
   Circle, CheckCircle2, Eye, Copy, Sparkles,
-  FileUp, Loader2, AlertTriangle, Info, Wand2, Mic
+  FileUp, Loader2, AlertTriangle, Info, Wand2, Mic,
+  User as UserIcon, LogOut, Shield
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
 import VoiceNoteModal from './VoiceNoteModal';
 import SmartImportModal from './SmartImportModal';
 import GlobalVoiceModal from './GlobalVoiceModal';
 import AgendaTab from './AgendaTab';
+import TeamTab from './TeamTab';
+import NotificationBell from './NotificationBell';
 
 // === CONSTANTES ===
 const STATUTS_MANDAT = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisation', 'Offre', 'Promesse', 'Acte', 'Perdu'];
@@ -50,6 +54,7 @@ const toSnake = (obj) => {
 
 // === COMPOSANT PRINCIPAL ===
 export default function CRM() {
+  const { profile, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(true);
   const [showSmartImport, setShowSmartImport] = useState(false);
@@ -107,7 +112,8 @@ export default function CRM() {
     { id: 'agenda', label: 'Agenda', icon: Calendar },
     { id: 'annonces', label: 'Annonces', icon: Megaphone },
     { id: 'questionnaires', label: 'Questionnaires', icon: FileQuestion },
-    { id: 'emailings', label: 'Emailings & Sourcing', icon: Mail }
+    { id: 'emailings', label: 'Emailings & Sourcing', icon: Mail },
+    ...(isAdmin(profile) ? [{ id: 'team', label: 'Équipe', icon: Users, admin: true }] : [])
   ];
 
   if (loading) {
@@ -174,13 +180,19 @@ export default function CRM() {
           </nav>
           <div className="border-t border-cream-dark">
             <div className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full gradient-sage-dark flex items-center justify-center text-white font-medium text-xs flex-shrink-0">TB</div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium text-ink truncate">Thomas Boggiani</div>
-                  <div className="text-[10px] text-sage-dark truncate">Directeur du développement</div>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-9 h-9 rounded-full gradient-sage-dark flex items-center justify-center text-white font-medium text-xs flex-shrink-0">
+                  {getCurrentUserInitials(profile)}
                 </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-ink truncate">{getCurrentUserName(profile)}</div>
+                  <div className="text-[10px] text-sage-dark truncate">{profile?.fonction || profile?.role || 'Utilisateur'}</div>
+                </div>
+                <NotificationBell />
               </div>
+              <button onClick={signOut} className="w-full text-[11px] text-ink/60 hover:text-ink py-1 rounded hover:bg-cream-100">
+                Se déconnecter
+              </button>
             </div>
             <div className="px-4 pb-4 pt-2 border-t border-cream bg-cream-50/60">
               <div className="text-[10px] uppercase tracking-[0.15em] text-sage-dark mb-1.5">Agence</div>
@@ -202,6 +214,7 @@ export default function CRM() {
             {activeTab === 'matching' && <MatchingTab mandats={mandats} clients={clients} deals={deals} reload={loadAll} />}
             {activeTab === 'todos' && <TodosTab todos={todos} reload={loadAll} mandats={mandats} clients={clients} deals={deals} />}
             {activeTab === 'agenda' && <AgendaTab />}
+            {activeTab === 'team' && <TeamTab />}
             {activeTab === 'annonces' && <AnnoncesTab annonces={annonces} reload={loadAll} mandats={mandats} />}
             {activeTab === 'questionnaires' && <QuestionnairesTab questionnaires={questionnaires} reload={loadAll} />}
             {activeTab === 'emailings' && <EmailingsTab campagnes={campagnes} reload={loadAll} clients={clients} />}
@@ -471,6 +484,7 @@ function TypeInteractionBadge({ type }) {
 
 // === MANDATS ===
 function MandatsTab({ mandats, reload, clients, deals }) {
+  const { user, profile } = useAuth();
   const [search, setSearch] = useState('');
   const [filterComm, setFilterComm] = useState('Tous');
   const [filterType, setFilterType] = useState('Tous');
@@ -491,9 +505,11 @@ function MandatsTab({ mandats, reload, clients, deals }) {
     delete snakeData.updated_at;
     let mandatId = mandat.id;
     if (mandat.id) {
+      snakeData.updated_by = user?.id;
       await supabase.from('mandats').update(snakeData).eq('id', mandat.id);
     } else {
       delete snakeData.id;
+      snakeData.created_by = user?.id;
       const { data: created } = await supabase.from('mandats').insert(snakeData).select().single();
       if (created) mandatId = created.id;
     }
@@ -508,6 +524,9 @@ function MandatsTab({ mandats, reload, clients, deals }) {
           priorite: a.priorite || 'Moyenne',
           statut: 'À faire',
           echeance: echeance.toISOString().split('T')[0],
+          assignee: getCurrentUserName(profile),
+          assigned_to_user_id: user?.id,
+          created_by: user?.id,
           lien_type: 'mandat',
           lien_id: mandatId
         };
@@ -1226,6 +1245,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients }) {
 
 // === CLIENTS ===
 function ClientsTab({ clients, reload, mandats, deals, interactions }) {
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [filterTypo, setFilterTypo] = useState('Tous');
   const [editingClient, setEditingClient] = useState(null);
@@ -1245,9 +1265,11 @@ function ClientsTab({ clients, reload, mandats, deals, interactions }) {
     delete snakeData.created_at;
     delete snakeData.updated_at;
     if (client.id) {
+      snakeData.updated_by = user?.id;
       await supabase.from('clients').update(snakeData).eq('id', client.id);
     } else {
       delete snakeData.id;
+      snakeData.created_by = user?.id;
       await supabase.from('clients').insert(snakeData);
     }
     setEditingClient(null);
@@ -1834,15 +1856,32 @@ function MatchingTab({ mandats, clients, deals, reload }) {
 
 // === TODOS ===
 function TodosTab({ todos, reload, mandats, clients, deals }) {
+  const { user, profile } = useAuth();
+  const [allProfiles, setAllProfiles] = useState([]);
   const [filter, setFilter] = useState('all');
   const [showNew, setShowNew] = useState(false);
-  const [newTodo, setNewTodo] = useState({ titre: '', priorite: 'Moyenne', statut: 'À faire', echeance: '', lienType: null, lienId: null });
+  const [newTodo, setNewTodo] = useState({ titre: '', priorite: 'Moyenne', statut: 'À faire', echeance: '', assignee: '', assignedToUserId: null, lienType: null, lienId: null });
+  const [filterPerson, setFilterPerson] = useState('all'); // all | me | <userId>
+
+  useEffect(() => {
+    supabase.from('profiles').select('id, prenom, nom').eq('actif', true).then(({ data }) => {
+      setAllProfiles(data || []);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (profile && !newTodo.assignee) {
+      setNewTodo(prev => ({ ...prev, assignee: getCurrentUserName(profile), assignedToUserId: user?.id }));
+    }
+  }, [profile, user]);
 
   const filtered = todos.filter(t => {
-    if (filter === 'todo') return t.statut === 'À faire';
-    if (filter === 'doing') return t.statut === 'En cours';
-    if (filter === 'done') return t.statut === 'Terminé';
-    if (filter === 'urgent') return t.priorite === 'Haute' && t.statut !== 'Terminé';
+    if (filter === 'todo' && t.statut !== 'À faire') return false;
+    if (filter === 'doing' && t.statut !== 'En cours') return false;
+    if (filter === 'done' && t.statut !== 'Terminé') return false;
+    if (filter === 'urgent' && (t.priorite !== 'Haute' || t.statut === 'Terminé')) return false;
+    if (filterPerson === 'me' && t.assignedToUserId !== user?.id) return false;
+    if (filterPerson !== 'all' && filterPerson !== 'me' && t.assignedToUserId !== filterPerson) return false;
     return true;
   }).sort((a, b) => {
     const p = { 'Haute': 0, 'Moyenne': 1, 'Basse': 2 };
@@ -1856,10 +1895,13 @@ function TodosTab({ todos, reload, mandats, clients, deals }) {
       priorite: newTodo.priorite,
       statut: newTodo.statut,
       echeance: newTodo.echeance || null,
+      assignee: newTodo.assignee || getCurrentUserName(profile),
+      assigned_to_user_id: newTodo.assignedToUserId || user?.id,
+      created_by: user?.id,
       lien_type: newTodo.lienType,
       lien_id: newTodo.lienId || null
     });
-    setNewTodo({ titre: '', priorite: 'Moyenne', statut: 'À faire', echeance: '', lienType: null, lienId: null });
+    setNewTodo({ titre: '', priorite: 'Moyenne', statut: 'À faire', echeance: '', assignee: getCurrentUserName(profile), assignedToUserId: user?.id, lienType: null, lienId: null });
     setShowNew(false);
     reload();
   };
@@ -1900,7 +1942,7 @@ function TodosTab({ todos, reload, mandats, clients, deals }) {
         </button>
       </div>
 
-      <div className="flex gap-2 mb-6 flex-wrap">
+      <div className="flex gap-2 mb-3 flex-wrap">
         {[
           { id: 'all', label: 'Toutes', count: todos.length },
           { id: 'urgent', label: 'Urgentes', count: todos.filter(t => t.priorite === 'Haute' && t.statut !== 'Terminé').length },
@@ -1914,16 +1956,51 @@ function TodosTab({ todos, reload, mandats, clients, deals }) {
           </button>
         ))}
       </div>
+      
+      <div className="flex gap-2 mb-6 flex-wrap items-center">
+        <span className="text-xs uppercase tracking-wide text-sage-dark">Assignée à :</span>
+        <button onClick={() => setFilterPerson('all')}
+          className={`px-3 py-1 rounded-full text-xs font-medium ${filterPerson === 'all' ? 'bg-sage-dark text-white' : 'bg-white text-ink/70 hover:bg-cream-100 border border-cream-dark'}`}>
+          Tout le monde
+        </button>
+        <button onClick={() => setFilterPerson('me')}
+          className={`px-3 py-1 rounded-full text-xs font-medium ${filterPerson === 'me' ? 'bg-sage-dark text-white' : 'bg-white text-ink/70 hover:bg-cream-100 border border-cream-dark'}`}>
+          Moi ({todos.filter(t => t.assignedToUserId === user?.id).length})
+        </button>
+        {allProfiles.filter(p => p.id !== user?.id).map(p => (
+          <button key={p.id} onClick={() => setFilterPerson(p.id)}
+            className={`px-3 py-1 rounded-full text-xs font-medium ${filterPerson === p.id ? 'bg-sage-dark text-white' : 'bg-white text-ink/70 hover:bg-cream-100 border border-cream-dark'}`}>
+            {p.prenom} ({todos.filter(t => t.assignedToUserId === p.id).length})
+          </button>
+        ))}
+      </div>
 
       {showNew && (
         <div className="bg-white rounded-xl p-5 shadow-luxe border border-stone-200 mb-4 space-y-3">
           <input autoFocus value={newTodo.titre} onChange={e => setNewTodo({...newTodo, titre: e.target.value})} placeholder="Que devez-vous faire ?"
             className="w-full px-3 py-2 border-b border-stone-200 text-base focus:outline-none focus:border-stone-900" />
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             <select value={newTodo.priorite} onChange={e => setNewTodo({...newTodo, priorite: e.target.value})} className="px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
               <option>Haute</option><option>Moyenne</option><option>Basse</option>
             </select>
             <input type="date" value={newTodo.echeance} onChange={e => setNewTodo({...newTodo, echeance: e.target.value})} className="px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" />
+            <select 
+              value={newTodo.assignedToUserId || ''} 
+              onChange={e => {
+                const selected = allProfiles.find(p => p.id === e.target.value);
+                setNewTodo({
+                  ...newTodo,
+                  assignedToUserId: e.target.value,
+                  assignee: selected ? `${selected.prenom} ${selected.nom}` : ''
+                });
+              }}
+              className="px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
+              {allProfiles.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.prenom} {p.nom}{p.id === user?.id ? ' (moi)' : ''}
+                </option>
+              ))}
+            </select>
             <select value={newTodo.lienType || ''} onChange={e => setNewTodo({...newTodo, lienType: e.target.value || null, lienId: null})} className="px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
               <option value="">Aucun lien</option>
               <option value="mandat">Mandat</option>
@@ -1974,6 +2051,14 @@ function TodosTab({ todos, reload, mandats, clients, deals }) {
                     </select>
                     {t.echeance && <span className={`text-xs flex items-center gap-1 ${enRetard ? 'text-red-600 font-medium' : 'text-stone-500'}`}><Calendar className="w-3 h-3" />{new Date(t.echeance).toLocaleDateString('fr-FR')}</span>}
                     {lien && <span className="text-xs text-stone-600 bg-stone-100 px-2 py-0.5 rounded-full">{lien}</span>}
+                    {t.assignee && (
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1 ${
+                        t.assignedToUserId === user?.id ? 'bg-sage-100 text-sage-darker' : 'bg-cream-100 text-ink/70'
+                      }`}>
+                        <UserIcon className="w-3 h-3" />
+                        {t.assignedToUserId === user?.id ? 'Moi' : t.assignee}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <button onClick={() => deleteTodo(t.id)} className="opacity-0 group-hover:opacity-100 text-cream-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
