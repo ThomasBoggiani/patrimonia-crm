@@ -1,15 +1,11 @@
 'use client';
 import { AuthProvider, useAuth } from '@/lib/auth';
+import LoginPage from '@/components/LoginPage';
 
 function Inner() {
-  const { user, loading } = useAuth();
-  return (
-    <div style={{padding: 40, fontFamily: 'sans-serif'}}>
-      <h1>Test AuthProvider</h1>
-      <p>Loading: {loading ? 'oui' : 'non'}</p>
-      <p>User: {user ? 'connecté' : 'non connecté'}</p>
-    </div>
-  );
+  const { loading } = useAuth();
+  if (loading) return <div style={{padding:40}}>Chargement...</div>;
+  return <LoginPage />;
 }
 
 export default function Home() {
