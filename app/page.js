@@ -1,31 +1,10 @@
 'use client';
-import { AuthProvider, useAuth } from '@/lib/auth';
-import CRM from '@/components/CRM';
-import LoginPage from '@/components/LoginPage';
-import { Loader2 } from 'lucide-react';
-
-function AppGate() {
-  const { user, loading } = useAuth();
-  
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-cream-50">
-        <div className="text-center">
-          <Loader2 className="w-10 h-10 animate-spin text-sage-dark mx-auto mb-3" />
-          <div className="text-sm text-sage-dark">Chargement…</div>
-        </div>
-      </div>
-    );
-  }
-  
-  if (!user) return <LoginPage />;
-  return <CRM />;
-}
 
 export default function Home() {
   return (
-    <AuthProvider>
-      <AppGate />
-    </AuthProvider>
+    <div style={{padding: 40, fontFamily: 'sans-serif'}}>
+      <h1>Test de base</h1>
+      <p>Si vous voyez cette page, c'est que le problème vient d'un composant importé.</p>
+    </div>
   );
 }
