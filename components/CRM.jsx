@@ -7,9 +7,10 @@ import {
   LayoutGrid, List, QrCode, Clock, AlertCircle,
   ChevronRight, Home, Send, Upload,
   Circle, CheckCircle2, Eye, Copy, Sparkles,
-  FileUp, Loader2, AlertTriangle, Info, Wand2
+  FileUp, Loader2, AlertTriangle, Info, Wand2, Mic
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import VoiceNoteModal from './VoiceNoteModal';
 
 // === CONSTANTES ===
 const STATUTS_MANDAT = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisation', 'Offre', 'Promesse', 'Acte', 'Perdu'];
@@ -918,6 +919,8 @@ function ClientsTab({ clients, reload, mandats, deals, interactions }) {
   const [editingClient, setEditingClient] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
+  const [showVoice, setShowVoice] = useState(false);
+  const [voiceFeedback, setVoiceFeedback] = useState(null);
 
   const filtered = clients.filter(c => {
     if (search && !`${c.prenom || ''} ${c.nom} ${c.societe || ''}`.toLowerCase().includes(search.toLowerCase())) return false;
@@ -952,10 +955,27 @@ function ClientsTab({ clients, reload, mandats, deals, interactions }) {
           <h1 className="font-display text-4xl font-semibold text-stone-900 mb-1">Clients</h1>
           <p className="text-stone-500">{filtered.length} investisseur{filtered.length > 1 ? 's' : ''}</p>
         </div>
-        <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-4 py-2.5 bg-stone-900 text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
-          <Plus className="w-4 h-4" /> Nouveau client
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowVoice(true)} className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-br from-amber-500 to-amber-700 text-white rounded-lg hover:from-amber-600 hover:to-amber-800 text-sm font-medium shadow-md">
+            <Mic className="w-4 h-4" /> Note vocale
+          </button>
+          <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-4 py-2.5 bg-stone-900 text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
+            <Plus className="w-4 h-4" /> Nouveau client
+          </button>
+        </div>
       </div>
+
+      {voiceFeedback && (
+        <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-sm">
+          <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+          <span className="text-emerald-900">
+            {voiceFeedback.action === 'update' ? 'Fiche client enrichie' : 'Nouveau client créé'} via note vocale avec succès.
+          </span>
+          <button onClick={() => setVoiceFeedback(null)} className="ml-auto text-emerald-700 hover:text-emerald-900">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       <div className="flex gap-3 mb-6">
         <div className="flex-1 relative">
@@ -1005,6 +1025,19 @@ function ClientsTab({ clients, reload, mandats, deals, interactions }) {
 
       {(editingClient || showNew) && (
         <ClientForm client={editingClient} onSave={handleSave} onClose={() => { setEditingClient(null); setShowNew(false); }} />
+      )}
+
+      {showVoice && (
+        <VoiceNoteModal
+          existingClients={clients}
+          onClose={() => setShowVoice(false)}
+          onSuccess={(action, clientId) => {
+            setShowVoice(false);
+            setVoiceFeedback({ action, clientId });
+            reload();
+            setTimeout(() => setVoiceFeedback(null), 5000);
+          }}
+        />
       )}
     </div>
   );
