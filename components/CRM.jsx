@@ -9,7 +9,7 @@ import {
   Circle, CheckCircle2, Eye, Copy, Sparkles,
   FileUp, Loader2, AlertTriangle, Info, Wand2, Mic,
   User as UserIcon, LogOut, Shield, Menu,
-  Image as ImageIcon, Camera
+  Image as ImageIcon, Camera, Plug
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
@@ -20,6 +20,7 @@ import AgendaTab from './AgendaTab';
 import TeamTab from './TeamTab';
 import NotificationBell from './NotificationBell';
 import PhotoUploader from './PhotoUploader';
+import IntegrationsTab from './IntegrationsTab';
 
 // === CONSTANTES ===
 const STATUTS_MANDAT = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisation', 'Offre', 'Promesse', 'Acte', 'Perdu'];
@@ -125,6 +126,7 @@ export default function CRM() {
     { id: 'annonces', label: 'Annonces', icon: Megaphone },
     { id: 'questionnaires', label: 'Questionnaires', icon: FileQuestion },
     { id: 'emailings', label: 'Emailings & Sourcing', icon: Mail },
+    { id: 'integrations', label: 'Intégrations', icon: Plug },
     ...(isAdmin(profile) ? [{ id: 'team', label: 'Équipe', icon: Users, admin: true }] : [])
   ];
 
@@ -256,6 +258,7 @@ export default function CRM() {
             {activeTab === 'matching' && <MatchingTab mandats={mandats} clients={clients} deals={deals} reload={loadAll} />}
             {activeTab === 'todos' && <TodosTab todos={todos} reload={loadAll} mandats={mandats} clients={clients} deals={deals} />}
             {activeTab === 'agenda' && <AgendaTab />}
+            {activeTab === 'integrations' && <IntegrationsTab />}
             {activeTab === 'team' && <TeamTab />}
             {activeTab === 'annonces' && <AnnoncesTab annonces={annonces} reload={loadAll} mandats={mandats} />}
             {activeTab === 'questionnaires' && <QuestionnairesTab questionnaires={questionnaires} reload={loadAll} />}
