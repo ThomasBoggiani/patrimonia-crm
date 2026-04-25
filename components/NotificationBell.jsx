@@ -13,14 +13,25 @@ export default function NotificationBell() {
   useEffect(() => {
     if (!user) return;
     loadNotifications();
-    // Subscribe aux nouvelles notifications en temps réel
-    const channel = supabase
-      .channel('notifications-changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, () => {
-        loadNotifications();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    
+    // Nom de channel unique par user pour éviter les conflits
+    const channelName = `notifications-${user.id}-${Date.now()}`;
+    const channel = supabase.channel(channelName);
+    
+    channel
+      .on('postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
+        () => { loadNotifications(); }
+      )
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('Realtime notifications channel error:', status);
+        }
+      });
+    
+    return () => { 
+      try { supabase.removeChannel(channel); } catch (e) {}
+    };
   }, [user]);
 
   async function loadNotifications() {
