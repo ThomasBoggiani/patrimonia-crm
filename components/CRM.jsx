@@ -21,6 +21,7 @@ import TeamTab from './TeamTab';
 import NotificationBell from './NotificationBell';
 import PhotoUploader from './PhotoUploader';
 import IntegrationsTab from './IntegrationsTab';
+import ClientEmails from './ClientEmails';
 
 // === CONSTANTES ===
 const STATUTS_MANDAT = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisation', 'Offre', 'Promesse', 'Acte', 'Perdu'];
@@ -1605,6 +1606,14 @@ function ClientDetail({ client, reload, interactions, onBack, onEdit, deals, man
                 <div className="flex flex-wrap gap-1.5">{(client.typologiesRecherchees || []).map(t => <span key={t} className="text-xs px-2 py-1 bg-cream-100 text-ink rounded-full">{t}</span>)}</div>
               </div>
             )}
+          </div>
+
+          {/* Emails Outlook avec ce client */}
+          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
+            <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
+              <Mail className="w-5 h-5 text-sage-dark" />Emails Outlook
+            </h2>
+            <ClientEmails client={client} />
           </div>
 
           <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
