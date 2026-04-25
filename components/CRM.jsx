@@ -63,6 +63,15 @@ export default function CRM() {
   const [showGlobalVoice, setShowGlobalVoice] = useState(false);
   const [importToast, setImportToast] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isMobileView, setIsMobileView] = useState(false);
+  
+  // Détection responsive avec écouteur de redimensionnement
+  useEffect(() => {
+    const checkMobile = () => setIsMobileView(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
   
   const [mandats, setMandats] = useState([]);
   const [clients, setClients] = useState([]);
@@ -145,7 +154,7 @@ export default function CRM() {
           <img src="/logo-light.png" alt="I&P" className="w-8 h-8" />
           <span className="font-display text-sm font-semibold text-ink">Immeubles & Patrimoine</span>
         </div>
-        <NotificationBell />
+        {isMobileView && <NotificationBell />}
       </header>
 
       {/* OVERLAY MOBILE - quand sidebar ouverte */}
@@ -229,9 +238,7 @@ export default function CRM() {
                   <div className="text-sm font-medium text-ink truncate">{getCurrentUserName(profile)}</div>
                   <div className="text-[10px] text-sage-dark truncate">{profile?.fonction || profile?.role || 'Utilisateur'}</div>
                 </div>
-                <div className="hidden md:block">
-                  <NotificationBell />
-                </div>
+                {!isMobileView && <NotificationBell />}
               </div>
               <button onClick={signOut} className="w-full text-[11px] text-ink/60 hover:text-ink py-1 rounded hover:bg-cream-100">
                 Se déconnecter
