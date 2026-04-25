@@ -8,9 +8,8 @@ import {
   ChevronRight, Home, Send, Upload,
   Circle, CheckCircle2, Eye, Copy, Sparkles,
   FileUp, Loader2, AlertTriangle, Info, Wand2, Mic,
-  Image as ImageIcon, Camera
-  }
   User as UserIcon, LogOut, Shield, Menu,
+  Image as ImageIcon, Camera
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
@@ -39,6 +38,7 @@ const toCamel = (obj) => {
   for (const key in obj) {
     const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
     result[camelKey] = obj[key];
+  }
   return result;
 };
 
