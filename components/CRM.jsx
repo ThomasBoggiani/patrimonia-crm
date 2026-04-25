@@ -8,7 +8,9 @@ import {
   ChevronRight, Home, Send, Upload,
   Circle, CheckCircle2, Eye, Copy, Sparkles,
   FileUp, Loader2, AlertTriangle, Info, Wand2, Mic,
-  User as UserIcon, LogOut, Shield
+  Image as ImageIcon, Camera
+  }
+  User as UserIcon, LogOut, Shield, Menu,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
@@ -18,6 +20,7 @@ import GlobalVoiceModal from './GlobalVoiceModal';
 import AgendaTab from './AgendaTab';
 import TeamTab from './TeamTab';
 import NotificationBell from './NotificationBell';
+import PhotoUploader from './PhotoUploader';
 
 // === CONSTANTES ===
 const STATUTS_MANDAT = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisation', 'Offre', 'Promesse', 'Acte', 'Perdu'];
@@ -36,7 +39,6 @@ const toCamel = (obj) => {
   for (const key in obj) {
     const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
     result[camelKey] = obj[key];
-  }
   return result;
 };
 
@@ -60,6 +62,7 @@ export default function CRM() {
   const [showSmartImport, setShowSmartImport] = useState(false);
   const [showGlobalVoice, setShowGlobalVoice] = useState(false);
   const [importToast, setImportToast] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   
   const [mandats, setMandats] = useState([]);
   const [clients, setClients] = useState([]);
@@ -129,8 +132,46 @@ export default function CRM() {
 
   return (
     <div className="min-h-screen bg-cream-50">
-      <div className="flex h-screen overflow-hidden">
-        <aside className="w-64 bg-white border-r border-cream-dark text-ink flex flex-col flex-shrink-0">
+      {/* HEADER MOBILE - visible uniquement sur mobile */}
+      <header className="md:hidden fixed top-0 left-0 right-0 h-14 bg-white border-b border-cream-dark z-30 flex items-center justify-between px-3">
+        <button 
+          onClick={() => setSidebarOpen(true)}
+          className="p-2 rounded-lg hover:bg-cream-100"
+          aria-label="Ouvrir le menu"
+        >
+          <Menu className="w-5 h-5 text-ink" />
+        </button>
+        <div className="flex items-center gap-2">
+          <img src="/logo-light.png" alt="I&P" className="w-8 h-8" />
+          <span className="font-display text-sm font-semibold text-ink">Immeubles & Patrimoine</span>
+        </div>
+        <NotificationBell />
+      </header>
+
+      {/* OVERLAY MOBILE - quand sidebar ouverte */}
+      {sidebarOpen && (
+        <div 
+          className="md:hidden fixed inset-0 bg-ink/50 z-40"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      <div className="flex h-screen overflow-hidden pt-14 md:pt-0">
+        <aside className={`
+          fixed md:relative top-0 left-0 h-full
+          w-72 md:w-64 bg-white border-r border-cream-dark text-ink flex flex-col flex-shrink-0
+          z-50 md:z-auto
+          transform transition-transform duration-300 ease-in-out
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        `}>
+          {/* Bouton fermer sur mobile */}
+          <button 
+            onClick={() => setSidebarOpen(false)}
+            className="md:hidden absolute top-3 right-3 p-2 rounded-lg hover:bg-cream-100 z-10"
+            aria-label="Fermer le menu"
+          >
+            <X className="w-5 h-5 text-ink" />
+          </button>
           <div className="p-6 border-b border-cream-dark bg-gradient-to-b from-cream-50 to-white">
             <div className="flex flex-col items-center text-center">
               <img 
@@ -147,7 +188,7 @@ export default function CRM() {
           <nav className="flex-1 p-3 overflow-y-auto scrollbar-thin">
             {/* Bouton Import intelligent - accessible partout */}
             <button 
-              onClick={() => setShowSmartImport(true)}
+              onClick={() => { setShowSmartImport(true); setSidebarOpen(false); }}
               className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm mb-2 gradient-sage-dark text-white hover:opacity-90 shadow-luxe font-medium"
             >
               <Sparkles className="w-4 h-4" />
@@ -155,7 +196,7 @@ export default function CRM() {
             </button>
             {/* Bouton Note vocale globale */}
             <button 
-              onClick={() => setShowGlobalVoice(true)}
+              onClick={() => { setShowGlobalVoice(true); setSidebarOpen(false); }}
               className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm mb-3 bg-white border border-sage text-sage-dark hover:bg-sage-50 font-medium"
             >
               <Mic className="w-4 h-4" />
@@ -165,7 +206,7 @@ export default function CRM() {
               const Icon = tab.icon;
               const active = activeTab === tab.id;
               return (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all mb-1 ${
                     active 
                       ? 'bg-sage-50 text-sage-darker font-medium border border-sage-light' 
@@ -188,7 +229,9 @@ export default function CRM() {
                   <div className="text-sm font-medium text-ink truncate">{getCurrentUserName(profile)}</div>
                   <div className="text-[10px] text-sage-dark truncate">{profile?.fonction || profile?.role || 'Utilisateur'}</div>
                 </div>
-                <NotificationBell />
+                <div className="hidden md:block">
+                  <NotificationBell />
+                </div>
               </div>
               <button onClick={signOut} className="w-full text-[11px] text-ink/60 hover:text-ink py-1 rounded hover:bg-cream-100">
                 Se déconnecter
@@ -213,6 +256,15 @@ export default function CRM() {
           </div>
         </main>
       </div>
+
+      {/* BOUTON FLOTTANT MOBILE : Note vocale rapide */}
+      <button
+        onClick={() => setShowGlobalVoice(true)}
+        className="md:hidden fixed bottom-5 right-5 z-30 w-14 h-14 rounded-full gradient-sage-dark text-white shadow-luxe-hover flex items-center justify-center hover:opacity-90 active:scale-95 transition-transform"
+        aria-label="Note vocale rapide"
+      >
+        <Mic className="w-6 h-6" />
+      </button>
 
       {/* Toast de succès après import intelligent */}
       {importToast && (
@@ -540,7 +592,7 @@ function MandatsTab({ mandats, reload, clients, deals }) {
 
   if (selectedMandat) {
     const currentMandat = mandats.find(m => m.id === selectedMandat.id) || selectedMandat;
-    return <MandatDetail mandat={currentMandat} onBack={() => setSelectedMandat(null)} onEdit={() => { setEditingMandat(currentMandat); setSelectedMandat(null); }} deals={deals} clients={clients} />;
+    return <MandatDetail mandat={currentMandat} onBack={() => setSelectedMandat(null)} onEdit={() => { setEditingMandat(currentMandat); setSelectedMandat(null); }} deals={deals} clients={clients} reload={reload} />;
   }
 
   return (
@@ -891,6 +943,13 @@ function MandatForm({ mandat, onSave, onClose }) {
                     </div>
                   </div>
                 </label>
+
+                {/* Bouton appareil photo direct (mobile) */}
+                <label className="md:hidden mt-3 flex items-center justify-center gap-2 px-4 py-3 bg-ink-deep text-white rounded-xl text-sm font-medium hover:bg-ink cursor-pointer">
+                  <input type="file" accept="image/*" capture="environment" onChange={handleFiles} className="hidden" />
+                  <Camera className="w-5 h-5" />
+                  Prendre une photo du dossier
+                </label>
                 <div className="flex items-center gap-3 my-3">
                   <div className="flex-1 h-px bg-sage-light/50"></div>
                   <span className="text-xs text-stone-500 uppercase tracking-wide">ou</span>
@@ -1125,7 +1184,7 @@ function MandatForm({ mandat, onSave, onClose }) {
   );
 }
 
-function MandatDetail({ mandat, onBack, onEdit, deals, clients }) {
+function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload }) {
   const mandatDeals = deals.filter(d => d.mandatId === mandat.id);
   const alerts = mandat.alerts || [];
   const highlights = mandat.highlights || [];
@@ -1197,6 +1256,22 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients }) {
               </ul>
             </div>
           )}
+
+          {/* Section Photos du bien */}
+          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
+            <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
+              <ImageIcon className="w-5 h-5 text-sage-dark" />Photos du bien
+            </h2>
+            <PhotoUploader 
+              mandatId={mandat.id}
+              photos={mandat.photos || []}
+              onChange={async (newPhotos) => {
+                await supabase.from('mandats').update({ photos: newPhotos }).eq('id', mandat.id);
+                if (typeof reload === 'function') reload();
+              }}
+              storage="supabase"
+            />
+          </div>
 
           {mandat.description && (
             <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
