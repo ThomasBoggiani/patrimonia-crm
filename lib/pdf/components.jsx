@@ -1,35 +1,35 @@
 // ═══════════════════════════════════════════════════════════════════
-// lib/pdf/components.jsx
-// Composants partagés entre les 3 templates PDF
+// lib/pdf/components.jsx — REFONTE Direction 1 v12.3
 // ═══════════════════════════════════════════════════════════════════
 
 import React from 'react';
 import { View, Text, Image } from '@react-pdf/renderer';
 import { getStyles } from './styles';
 import {
-  buildTitleCommercial,
   ensureAbsoluteUrl,
   safeText,
+  formatPrix,
 } from './helpers';
 
 // ─────────────────────────────────────────────────────────────────
-// HEADER de page (titre section + numéro)
-// Reproduit le header de la plaquette existante
+// HEADER de page (eyebrow + titre serif + numéro page)
 // ─────────────────────────────────────────────────────────────────
 
-export function PageHeader({ title, pageNumber, isOffMarket }) {
+export function PageHeader({ eyebrow, title, pageNumber, isOffMarket }) {
   const styles = getStyles(isOffMarket);
   return (
     <View style={styles.pageHeader}>
-      <View style={{ width: 24 }} />
-      <Text style={styles.pageHeaderTitle}>{title}</Text>
-      <Text style={styles.pageHeaderNumber}>{pageNumber}</Text>
+      <View>
+        {eyebrow && <Text style={styles.pageHeaderEyebrow}>{eyebrow}</Text>}
+        <Text style={styles.pageHeaderTitle}>{title}</Text>
+      </View>
+      <Text style={styles.pageHeaderNumber}>{String(pageNumber).padStart(2, '0')}</Text>
     </View>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────
-// FOOTER de page (conseiller + agence + site + mention)
+// FOOTER de page
 // ─────────────────────────────────────────────────────────────────
 
 export function PageFooter({ conseiller, isOffMarket }) {
@@ -42,46 +42,55 @@ export function PageFooter({ conseiller, isOffMarket }) {
         {isOffMarket ? 'OFF-MARKET — DIFFUSION RESTREINTE' : 'Confidentiel et non contractuel'}
       </Text>
 
-      <View style={styles.footerLeft || {}}>
+      <View>
         {c.full_name && (
           <Text style={styles.footerText}>
             {c.full_name}
-            {c.tel ? ` — ${c.tel}` : ''}
-            {c.email ? ` — ${c.email}` : ''}
+            {c.tel ? ` · ${c.tel}` : ''}
+            {c.email ? ` · ${c.email}` : ''}
           </Text>
         )}
-        <Text style={styles.footerText}>Immeubles & Patrimoine</Text>
         <Text style={styles.footerText}>
-          7 rue de Penthièvre, 75008 Paris
+          IMMEUBLES & PATRIMOINE · 7 rue de Penthièvre, 75008 Paris
         </Text>
       </View>
 
-      <View style={styles.footerRight || {}}>
-        <Text style={styles.footerText}>www.immeubles-patrimoine.fr</Text>
-      </View>
+      <Text style={styles.footerText}>www.immeubles-patrimoine.fr</Text>
     </View>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────
-// COUVERTURE — Reproduction fidèle de la plaquette existante
+// COUVERTURE — refondue Direction 1
 // ─────────────────────────────────────────────────────────────────
 
 export function CoverContent({ mandat, conseiller, logoUrl, heroPhotoUrl, isOffMarket }) {
   const styles = getStyles(isOffMarket);
-  const titre = buildTitleCommercial(mandat);
   const c = conseiller || {};
   const heroUrl = heroPhotoUrl ? ensureAbsoluteUrl(heroPhotoUrl) : null;
+  
+  // Eyebrow : type de bien en majuscules
+  const eyebrow = [
+    mandat.is_off_market ? 'Off-market' : null,
+    mandat?.type ? `${mandat.type} à vendre` : 'Bien à vendre',
+  ].filter(Boolean).join(' · ');
+  
+  // Référence basée sur les 8 premiers caractères de l'id
+  const reference = `Réf. ${(mandat?.id || '').slice(0, 8).toUpperCase()}`;
 
   return (
     <>
-      {/* Logo centré en haut */}
-      <View style={styles.coverLogoContainer}>
+      {/* Top bar : logo + référence */}
+      <View style={styles.coverTopBar}>
         {logoUrl ? (
           <Image src={logoUrl} style={styles.coverLogo} />
         ) : (
-          <View style={{ height: 140, width: 140 }} />
+          <View style={{ height: 50, width: 50 }} />
         )}
+        <View style={styles.coverReferenceBlock}>
+          <Text style={styles.coverReferenceLabel}>Référence</Text>
+          <Text style={styles.coverReferenceValue}>{reference}</Text>
+        </View>
       </View>
 
       {/* Badge OFF-MARKET (uniquement en mode off-market) */}
@@ -89,43 +98,61 @@ export function CoverContent({ mandat, conseiller, logoUrl, heroPhotoUrl, isOffM
         <View style={styles.coverOffMarketBadge}>
           <Text style={styles.coverOffMarketText}>OFF-MARKET</Text>
           <Text style={styles.coverOffMarketSubtext}>
-            Document confidentiel — Diffusion strictement restreinte
+            Document confidentiel · Diffusion strictement restreinte
           </Text>
         </View>
       )}
 
-      {/* Photo principale */}
+      {/* Photo hero — domine la page */}
       {heroUrl ? (
         <Image src={heroUrl} style={styles.coverHero} />
       ) : (
         <View style={styles.coverHeroPlaceholder}>
           <Text style={styles.coverHeroPlaceholderText}>
-            (Aucune photo principale renseignée)
+            Photo principale à venir
           </Text>
         </View>
       )}
 
-      {/* Bandeau titre */}
-      <View style={styles.coverTitleBand}>
-        <Text style={styles.coverTitleText}>{titre}</Text>
+      {/* Bloc bas : titre + prix */}
+      <View style={styles.coverBottomBlock}>
+        <Text style={styles.coverEyebrow}>{eyebrow.toUpperCase()}</Text>
+        <View style={styles.coverTitleRow}>
+          <View style={styles.coverTitleLeft}>
+            <Text style={styles.coverTitleText}>
+              {safeText(mandat?.nom, 'Bien sans nom')}
+            </Text>
+            {mandat?.ville && (
+              <Text style={styles.coverLocation}>
+                {[mandat?.adresse, mandat?.ville].filter(Boolean).join(' · ').toUpperCase()}
+              </Text>
+            )}
+          </View>
+          {mandat?.prix && (
+            <View style={styles.coverPriceBlock}>
+              <Text style={styles.coverPriceLabel}>Prix de vente</Text>
+              <Text style={styles.coverPriceValue}>
+                {formatPrix(mandat.prix)}
+              </Text>
+            </View>
+          )}
+        </View>
       </View>
 
-      {/* Bloc contact (agence + conseiller) */}
-      <View style={styles.coverContact}>
-        <View style={styles.coverContactBlock}>
-          <Text style={styles.coverContactLabel}>Immeubles & Patrimoine</Text>
-          <Text style={styles.coverContactLine}>7 rue de Penthièvre</Text>
-          <Text style={styles.coverContactLine}>75008 PARIS</Text>
-          <Text style={styles.coverContactLine}>www.immeubles-patrimoine.fr</Text>
+      {/* Bloc contact en bas */}
+      <View style={styles.coverFooter}>
+        <View style={styles.coverFooterBlock}>
+          <Text style={styles.coverFooterLabel}>Contact agence</Text>
+          <Text style={styles.coverFooterLine}>7 rue de Penthièvre · 75008 Paris</Text>
+          <Text style={styles.coverFooterLine}>www.immeubles-patrimoine.fr</Text>
         </View>
-
-        <View style={styles.coverContactBlock}>
-          <Text style={styles.coverContactLabel}>Votre conseiller</Text>
-          <Text style={[styles.coverContactLine, { fontFamily: 'Helvetica-Bold' }]}>
+        <View style={styles.coverFooterBlock}>
+          <Text style={styles.coverFooterLabel}>Votre conseiller</Text>
+          <Text style={styles.coverFooterName}>
             {safeText(c.full_name, 'À renseigner')}
           </Text>
-          {c.email && <Text style={styles.coverContactLine}>{c.email}</Text>}
-          {c.tel && <Text style={styles.coverContactLine}>{c.tel}</Text>}
+          {c.tel && <Text style={styles.coverFooterLine}>{c.tel}</Text>}
+          {c.email && <Text style={styles.coverFooterLine}>{c.email}</Text>}
         </View>
       </View>
     </>
@@ -133,48 +160,57 @@ export function CoverContent({ mandat, conseiller, logoUrl, heroPhotoUrl, isOffM
 }
 
 // ─────────────────────────────────────────────────────────────────
-// SOMMAIRE
+// SOMMAIRE refondu (numéros romains italiques)
 // ─────────────────────────────────────────────────────────────────
 
 export function TableOfContents({ items, isOffMarket }) {
   const styles = getStyles(isOffMarket);
   return (
     <View>
-      <Text style={styles.tocTitle}>Sommaire</Text>
+      <Text style={styles.tocEyebrow}>Sommaire</Text>
+      <Text style={styles.tocTitle}>Présentation</Text>
       {items.map((item, i) => (
         <View key={i} style={styles.tocItem}>
+          <Text style={styles.tocItemNumber}>{romanize(i + 1)}.</Text>
           <Text style={styles.tocItemText}>{item.label}</Text>
-          <Text style={styles.tocItemNumber}>{item.page}</Text>
+          <Text style={styles.tocItemPage}>{item.page}</Text>
         </View>
       ))}
     </View>
   );
 }
 
+function romanize(n) {
+  const lookup = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9, X: 10 };
+  return Object.keys(lookup).find((k) => lookup[k] === n) || String(n);
+}
+
 // ─────────────────────────────────────────────────────────────────
-// SECTION TITRE + CONTENU
+// SECTION : eyebrow + titre serif + filet
 // ─────────────────────────────────────────────────────────────────
 
-export function Section({ label, children, isOffMarket }) {
+export function Section({ eyebrow, title, children, isOffMarket }) {
   const styles = getStyles(isOffMarket);
   return (
-    <View style={{ marginBottom: 16 }}>
-      <Text style={styles.sectionLabel}>{label.toUpperCase()}</Text>
+    <View style={{ marginBottom: 28 }}>
+      {eyebrow && <Text style={styles.sectionEyebrow}>{eyebrow}</Text>}
+      {title && <Text style={styles.sectionTitle}>{title}</Text>}
+      <View style={styles.sectionRule} />
       <View>{children}</View>
     </View>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────
-// LISTE DE HIGHLIGHTS ("Nous aimons")
+// HIGHLIGHTS — numérotés "01", "02"...
 // ─────────────────────────────────────────────────────────────────
 
 export function HighlightsList({ highlights, isOffMarket }) {
   const styles = getStyles(isOffMarket);
   if (!highlights || !Array.isArray(highlights) || highlights.length === 0) {
     return (
-      <Text style={{ ...styles.sectionContent, fontStyle: 'italic', color: styles.kpiLabel.color }}>
-        (Aucun point fort renseigné)
+      <Text style={{ ...styles.sectionContent, fontStyle: 'italic', color: '#76716A' }}>
+        Aucun point fort renseigné
       </Text>
     );
   }
@@ -183,7 +219,7 @@ export function HighlightsList({ highlights, isOffMarket }) {
     <View>
       {highlights.map((h, i) => (
         <View key={i} style={styles.highlightItem}>
-          <Text style={styles.highlightDash}>—</Text>
+          <Text style={styles.highlightNumber}>{String(i + 1).padStart(2, '0')}</Text>
           <Text style={styles.highlightText}>{h}</Text>
         </View>
       ))}
@@ -195,25 +231,25 @@ export function HighlightsList({ highlights, isOffMarket }) {
 // LIGNE FINANCIÈRE clé/valeur
 // ─────────────────────────────────────────────────────────────────
 
-export function FinancialRow({ label, value, isOffMarket }) {
+export function FinancialRow({ label, value, big = false, isOffMarket }) {
   const styles = getStyles(isOffMarket);
   return (
     <View style={styles.finRow}>
       <Text style={styles.finLabel}>{label}</Text>
-      <Text style={styles.finValue}>{value || '—'}</Text>
+      <Text style={big ? styles.finValueBig : styles.finValue}>{value || '—'}</Text>
     </View>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────
-// KPI Card (rapport vendeur, fiche interne)
+// KPI Card (rapport vendeur)
 // ─────────────────────────────────────────────────────────────────
 
 export function KpiCard({ label, value, unit, isOffMarket }) {
   const styles = getStyles(isOffMarket);
   return (
     <View style={styles.kpiCard}>
-      <Text style={styles.kpiLabel}>{label.toUpperCase()}</Text>
+      <Text style={styles.kpiLabel}>{label}</Text>
       <Text style={styles.kpiValue}>{value || '—'}</Text>
       {unit && <Text style={styles.kpiUnit}>{unit}</Text>}
     </View>
@@ -221,7 +257,7 @@ export function KpiCard({ label, value, unit, isOffMarket }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// GRILLE DE PHOTOS
+// GRILLE PHOTOS (2 par ligne, photo plus grande)
 // ─────────────────────────────────────────────────────────────────
 
 export function PhotoGrid({ photos, isOffMarket }) {
@@ -229,7 +265,7 @@ export function PhotoGrid({ photos, isOffMarket }) {
   if (!photos || photos.length === 0) {
     return (
       <Text style={{ ...styles.sectionContent, fontStyle: 'italic' }}>
-        (Aucune photo renseignée pour ce mandat)
+        Aucune photo renseignée pour ce mandat
       </Text>
     );
   }
@@ -240,6 +276,20 @@ export function PhotoGrid({ photos, isOffMarket }) {
           <Image src={ensureAbsoluteUrl(photo)} style={styles.photoImage} />
         </View>
       ))}
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// PHOTO PLEINE LARGEUR (pour première page photos)
+// ─────────────────────────────────────────────────────────────────
+
+export function PhotoFull({ photo, isOffMarket }) {
+  const styles = getStyles(isOffMarket);
+  if (!photo) return null;
+  return (
+    <View style={styles.photoCellTall}>
+      <Image src={ensureAbsoluteUrl(photo)} style={styles.photoImage} />
     </View>
   );
 }
