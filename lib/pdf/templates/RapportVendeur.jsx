@@ -1,20 +1,20 @@
 // ═══════════════════════════════════════════════════════════════════
-// lib/pdf/templates/RapportVendeur.jsx
+// lib/pdf/templates/RapportVendeur.jsx — REFONTE Direction 1 v12.3
 // 
-// Rapport périodique pour le vendeur (propriétaire du bien)
-// Période choisie au moment de l'export
+// Rapport périodique pour le vendeur (propriétaire).
+// Style : Maison de prestige (Times-Roman, sage/crème)
 // 
-// Contenu :
-//   - Couverture sobre (sans prix en gros, plus pro)
-//   - KPIs de la période (visites organisées, contacts, offres, vues)
-//   - Activité détaillée (timeline d'événements)
-//   - Avancement pipeline (étape actuelle)
-//   - Pas de noms d'acheteurs / pas de commissions / pas de notes internes
+// Pages :
+//   1. Couverture sobre (logo + titre + période + date édition)
+//   2. Sommaire
+//   3. Synthèse activité (KPIs + analyse)
+//   4. Détail des événements
+//   5. Le bien & avancement
 // ═══════════════════════════════════════════════════════════════════
 
 import React from 'react';
-import { Document, Page, View, Text } from '@react-pdf/renderer';
-import { getStyles, LAYOUT } from '../styles';
+import { Document, Page, View, Text, Image } from '@react-pdf/renderer';
+import { getStyles, COLORS, LAYOUT } from '../styles';
 import {
   PageHeader,
   PageFooter,
@@ -28,23 +28,23 @@ import {
   formatSurface,
   formatDate,
   formatPeriodLabel,
-  buildTitleCommercial,
   safeText,
+  ensureAbsoluteUrl,
 } from '../helpers';
 
 export default function RapportVendeur({
   mandat,
   conseiller,
   logoUrl,
-  period, // { start, end }
-  stats, // { nb_visites, nb_contacts, nb_offres, nb_vues, etc. }
-  events, // [{ date, type, description }]
+  period,
+  stats,
+  events,
 }) {
   const isOffMarket = mandat?.is_off_market === true;
   const styles = getStyles(isOffMarket);
+  const palette = isOffMarket ? COLORS.offmarket : COLORS.standard;
   const periodLabel = formatPeriodLabel(period?.start, period?.end);
 
-  // Stats par défaut (si non fournies)
   const s = stats || {};
   const safeStats = {
     nb_visites: s.nb_visites ?? 0,
@@ -54,83 +54,122 @@ export default function RapportVendeur({
   };
 
   const tocItems = [
-    { label: "Synthèse de l'activité", page: 1 },
-    { label: "Détail des événements", page: 2 },
-    { label: 'Le bien & avancement', page: 3 },
+    { label: "Synthèse de l'activité", page: 'p. 03' },
+    { label: "Détail des événements", page: 'p. 04' },
+    { label: 'Le bien & avancement', page: 'p. 05' },
   ];
 
   return (
     <Document
-      title={`Rapport vendeur - ${safeText(mandat?.nom, 'Mandat')}`}
+      title={`Rapport vendeur — ${safeText(mandat?.nom, 'Mandat')}`}
       author="Immeubles & Patrimoine"
       subject="Rapport périodique vendeur"
     >
       {/* ═══════════════════════════════════════ */}
       {/* PAGE 1 : COUVERTURE SOBRE               */}
       {/* ═══════════════════════════════════════ */}
-      <Page size="A4" style={styles.page}>
+      <Page size="A4" style={styles.coverPage}>
+        {/* Top bar : logo seul */}
+        <View style={styles.coverTopBar}>
+          {logoUrl ? (
+            <Image src={logoUrl} style={styles.coverLogo} />
+          ) : (
+            <View style={{ width: 50, height: 50 }} />
+          )}
+          <View />
+        </View>
+
+        {/* Bloc central : titre + période */}
         <View
           style={{
             justifyContent: 'center',
             alignItems: 'center',
-            paddingTop: 80,
+            paddingHorizontal: 60,
+            paddingTop: 100,
             paddingBottom: 40,
           }}
         >
-          {logoUrl && (
-            <View style={{ alignItems: 'center', marginBottom: 40 }}>
-              {/* Image style — réutiliser le coverLogo */}
-              <Text style={{ fontSize: 8, color: styles.kpiLabel.color }}>I&P</Text>
-            </View>
-          )}
-
           <Text
             style={{
-              fontSize: 11,
+              fontSize: LAYOUT.font.tiny,
+              fontFamily: 'Times-Bold',
+              color: palette.muted || palette.sageDeep,
               letterSpacing: 4,
-              color: isOffMarket ? styles.coverContactLabel.color : styles.sectionLabel.color,
-              marginBottom: 24,
+              textTransform: 'uppercase',
+              marginBottom: 32,
             }}
           >
-            RAPPORT MANDAT VENDEUR
+            Rapport mandat vendeur
           </Text>
 
           <Text
             style={{
-              fontSize: 22,
-              fontFamily: 'Helvetica-Bold',
-              color: isOffMarket ? styles.coverTitleText.color : '#2D2D2A',
+              fontSize: LAYOUT.font.huge,
+              fontFamily: 'Times-Bold',
+              color: isOffMarket ? COLORS.offmarket.cream : COLORS.standard.ink,
               textAlign: 'center',
-              marginBottom: 8,
+              marginBottom: 12,
+              lineHeight: 1.1,
             }}
           >
             {safeText(mandat?.nom, 'Bien à renseigner')}
           </Text>
 
-          <Text style={{ fontSize: 11, color: styles.kpiLabel.color, marginBottom: 32 }}>
-            {[mandat?.type, mandat?.ville].filter(Boolean).join(' — ')}
+          <Text
+            style={{
+              fontSize: LAYOUT.font.label,
+              fontFamily: 'Times-Italic',
+              color: isOffMarket ? COLORS.offmarket.muted : COLORS.standard.muted,
+              marginBottom: 60,
+              letterSpacing: 1,
+            }}
+          >
+            {[mandat?.type, mandat?.ville].filter(Boolean).join(' · ')}
           </Text>
 
           {periodLabel && (
             <View
               style={{
-                paddingVertical: 12,
-                paddingHorizontal: 24,
+                paddingVertical: 24,
+                paddingHorizontal: 36,
                 borderTopWidth: 0.5,
                 borderBottomWidth: 0.5,
-                borderColor: isOffMarket ? styles.pageHeader.borderBottomColor : '#D5D2C8',
+                borderColor: isOffMarket ? COLORS.offmarket.gold : COLORS.standard.sageDark,
+                alignItems: 'center',
               }}
             >
-              <Text style={{ fontSize: 10, color: styles.kpiLabel.color, letterSpacing: 1 }}>
-                PÉRIODE COUVERTE
+              <Text
+                style={{
+                  fontSize: LAYOUT.font.micro,
+                  fontFamily: 'Times-Bold',
+                  color: isOffMarket ? COLORS.offmarket.muted : COLORS.standard.muted,
+                  letterSpacing: 2,
+                  textTransform: 'uppercase',
+                  marginBottom: 8,
+                }}
+              >
+                Période couverte
               </Text>
-              <Text style={{ fontSize: 12, fontFamily: 'Helvetica-Bold', marginTop: 4 }}>
+              <Text
+                style={{
+                  fontSize: LAYOUT.font.label,
+                  fontFamily: 'Times-Roman',
+                  color: isOffMarket ? COLORS.offmarket.cream : COLORS.standard.ink,
+                }}
+              >
                 {periodLabel}
               </Text>
             </View>
           )}
 
-          <Text style={{ fontSize: 10, color: styles.kpiLabel.color, marginTop: 60, fontStyle: 'italic' }}>
+          <Text
+            style={{
+              fontSize: LAYOUT.font.small,
+              fontFamily: 'Times-Italic',
+              color: isOffMarket ? COLORS.offmarket.muted : COLORS.standard.muted,
+              marginTop: 80,
+            }}
+          >
             Édité le {formatDate(new Date().toISOString())}
           </Text>
         </View>
@@ -142,7 +181,9 @@ export default function RapportVendeur({
       {/* PAGE 2 : SOMMAIRE                       */}
       {/* ═══════════════════════════════════════ */}
       <Page size="A4" style={styles.page}>
-        <TableOfContents items={tocItems} isOffMarket={isOffMarket} />
+        <View style={{ paddingTop: 80 }}>
+          <TableOfContents items={tocItems} isOffMarket={isOffMarket} />
+        </View>
         <PageFooter conseiller={conseiller} isOffMarket={isOffMarket} />
       </Page>
 
@@ -150,15 +191,20 @@ export default function RapportVendeur({
       {/* PAGE 3 : SYNTHÈSE D'ACTIVITÉ            */}
       {/* ═══════════════════════════════════════ */}
       <Page size="A4" style={styles.page}>
-        <PageHeader title="Synthèse de l'activité" pageNumber={1} isOffMarket={isOffMarket} />
+        <PageHeader
+          eyebrow="Chapitre I"
+          title="Synthèse de l'activité"
+          pageNumber={1}
+          isOffMarket={isOffMarket}
+        />
 
         {periodLabel && (
           <Text
             style={{
-              fontSize: 10,
-              color: styles.kpiLabel.color,
-              marginBottom: 16,
-              fontStyle: 'italic',
+              fontSize: LAYOUT.font.small,
+              fontFamily: 'Times-Italic',
+              color: palette.muted,
+              marginBottom: 24,
             }}
           >
             Période : {periodLabel}
@@ -191,7 +237,7 @@ export default function RapportVendeur({
           />
         </View>
 
-        <Section label="Notre analyse" isOffMarket={isOffMarket}>
+        <Section eyebrow="Notre analyse" isOffMarket={isOffMarket}>
           <Text style={styles.sectionContent}>
             {generateAnalysisText(safeStats, mandat)}
           </Text>
@@ -205,38 +251,59 @@ export default function RapportVendeur({
       {/* ═══════════════════════════════════════ */}
       <Page size="A4" style={styles.page}>
         <PageHeader
+          eyebrow="Chapitre II"
           title="Détail des événements"
           pageNumber={2}
           isOffMarket={isOffMarket}
         />
 
-        <Section label="Activité de la période" isOffMarket={isOffMarket}>
+        <Section eyebrow="Activité de la période" isOffMarket={isOffMarket}>
           {events && events.length > 0 ? (
             events.map((event, i) => (
               <View
                 key={i}
                 style={{
                   flexDirection: 'row',
-                  paddingVertical: 8,
+                  paddingVertical: 12,
                   borderBottomWidth: 0.5,
-                  borderBottomColor: styles.finRow.borderBottomColor,
+                  borderBottomColor: palette.borderLight || palette.accentLine,
                 }}
               >
-                <Text style={{ width: 100, fontSize: 9, color: styles.kpiLabel.color }}>
+                <Text
+                  style={{
+                    width: 110,
+                    fontSize: LAYOUT.font.small,
+                    fontFamily: 'Times-Italic',
+                    color: palette.muted,
+                  }}
+                >
                   {formatDate(event.date)}
                 </Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }}>
+                  <Text
+                    style={{
+                      fontSize: LAYOUT.font.body,
+                      fontFamily: 'Times-Bold',
+                      color: isOffMarket ? COLORS.offmarket.cream : COLORS.standard.ink,
+                    }}
+                  >
                     {event.type || 'Événement'}
                   </Text>
-                  <Text style={{ fontSize: 9, color: styles.kpiLabel.color, marginTop: 2 }}>
+                  <Text
+                    style={{
+                      fontSize: LAYOUT.font.small,
+                      fontFamily: 'Times-Roman',
+                      color: palette.muted,
+                      marginTop: 4,
+                    }}
+                  >
                     {event.description || '—'}
                   </Text>
                 </View>
               </View>
             ))
           ) : (
-            <Text style={{ ...styles.sectionContent, fontStyle: 'italic' }}>
+            <Text style={{ ...styles.sectionContent, fontFamily: 'Times-Italic' }}>
               Aucun événement enregistré sur cette période.
             </Text>
           )}
@@ -250,53 +317,55 @@ export default function RapportVendeur({
       {/* ═══════════════════════════════════════ */}
       <Page size="A4" style={styles.page}>
         <PageHeader
+          eyebrow="Chapitre III"
           title="Le bien & avancement"
           pageNumber={3}
           isOffMarket={isOffMarket}
         />
 
-        <Section label="Caractéristiques principales" isOffMarket={isOffMarket}>
+        <Section eyebrow="Caractéristiques principales" isOffMarket={isOffMarket}>
           <FinancialRow
-            label="Bien :"
+            label="Bien"
             value={safeText(mandat?.nom, '—')}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Type :"
-            value={[mandat?.type, mandat?.sous_type].filter(Boolean).join(' — ') || '—'}
+            label="Type"
+            value={[mandat?.type, mandat?.sous_type].filter(Boolean).join(' · ') || '—'}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Adresse :"
+            label="Adresse"
             value={[mandat?.adresse, mandat?.ville].filter(Boolean).join(', ') || '—'}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Surface :"
+            label="Surface"
             value={formatSurface(mandat?.surface)}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Prix de présentation :"
+            label="Prix de présentation"
             value={formatPrix(mandat?.prix)}
+            big={true}
             isOffMarket={isOffMarket}
           />
         </Section>
 
-        <Section label="Avancement du mandat" isOffMarket={isOffMarket}>
+        <Section eyebrow="Avancement du mandat" isOffMarket={isOffMarket}>
           <FinancialRow
-            label="Statut actuel :"
+            label="Statut actuel"
             value={safeText(mandat?.statut, 'En cours de commercialisation')}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Type de mandat :"
+            label="Type de mandat"
             value={safeText(mandat?.commercialisation, '—')}
             isOffMarket={isOffMarket}
           />
           {mandat?.date_signature && (
             <FinancialRow
-              label="Date de signature :"
+              label="Date de signature"
               value={formatDate(mandat?.date_signature)}
               isOffMarket={isOffMarket}
             />
@@ -309,7 +378,10 @@ export default function RapportVendeur({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────
 // Génération d'une phrase d'analyse selon les stats
+// ─────────────────────────────────────────────────────────────────
+
 function generateAnalysisText(stats, mandat) {
   const lines = [];
   const { nb_visites, nb_contacts, nb_offres, nb_vues } = stats;
