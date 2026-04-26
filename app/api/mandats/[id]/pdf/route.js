@@ -1,31 +1,27 @@
 // ═══════════════════════════════════════════════════════════════════
-// app/api/mandats/[id]/pdf/route.js
+// app/api/mandats/[id]/pdf/route.js — VERSION CORRIGÉE v12.2.1
 // 
-// Endpoint qui génère le PDF d'un mandat selon le template choisi.
+// Utilise @supabase/ssr (déjà dans ton package.json v12) pour gérer 
+// l'auth de manière robuste, quel que soit le format de cookie.
 // 
 // Usage :
 //   GET /api/mandats/{uuid}/pdf?template=plaquette
 //   GET /api/mandats/{uuid}/pdf?template=rapport&start=2026-01-01&end=2026-04-01
 //   GET /api/mandats/{uuid}/pdf?template=interne
-// 
-// Templates :
-//   - plaquette : pour les acheteurs (= défaut)
-//   - rapport   : pour le vendeur (avec params start + end)
-//   - interne   : pour archive équipe
-// 
-// Auth : utilisateur authentifié (cookie Supabase)
 // ═══════════════════════════════════════════════════════════════════
 
 import { renderToStream } from '@react-pdf/renderer';
 import React from 'react';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
 
 import PlaquetteAcheteur from '@/lib/pdf/templates/PlaquetteAcheteur';
 import RapportVendeur from '@/lib/pdf/templates/RapportVendeur';
 import FicheInterne from '@/lib/pdf/templates/FicheInterne';
 
-// Client Supabase admin (on charge le mandat sans avoir besoin de RLS).
-// L'auth utilisateur est vérifiée séparément via le cookie.
+// Client admin pour charger les données (bypasse RLS).
+// On vérifie l'auth séparément AVANT d'utiliser ce client.
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -33,33 +29,29 @@ const supabaseAdmin = createClient(
 );
 
 // ─────────────────────────────────────────────────────────────────
-// AUTH : vérifie que l'utilisateur appelant est bien authentifié
+// AUTH : utilise @supabase/ssr pour gérer les cookies proprement
 // ─────────────────────────────────────────────────────────────────
 
-async function getCurrentUser(request) {
-  // Récupère le token Supabase depuis le cookie
-  const cookieHeader = request.headers.get('cookie') || '';
+async function getCurrentUser() {
+  const cookieStore = cookies();
 
-  // Le nom du cookie Supabase commence par "sb-" et finit par "-auth-token"
-  const cookieMatch = cookieHeader.match(/sb-[^=]+-auth-token=([^;]+)/);
-  if (!cookieMatch) return null;
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    {
+      cookies: {
+        get(name) {
+          return cookieStore.get(name)?.value;
+        },
+        // Pas besoin de set/remove pour une simple lecture
+        set() {},
+        remove() {},
+      },
+    }
+  );
 
-  let token;
-  try {
-    // Le cookie est encodé URL + JSON
-    const decoded = decodeURIComponent(cookieMatch[1]);
-    const parsed = JSON.parse(decoded);
-    token = Array.isArray(parsed) ? parsed[0] : parsed.access_token;
-  } catch (e) {
-    return null;
-  }
-
-  if (!token) return null;
-
-  // Vérifie le token et récupère le user
-  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+  const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return null;
-
   return user;
 }
 
@@ -68,7 +60,6 @@ async function getCurrentUser(request) {
 // ─────────────────────────────────────────────────────────────────
 
 async function loadMandatData(mandatId) {
-  // Charge le mandat
   const { data: mandat, error: mErr } = await supabaseAdmin
     .from('mandats')
     .select('*')
@@ -79,7 +70,6 @@ async function loadMandatData(mandatId) {
     return { error: 'Mandat introuvable', mandat: null };
   }
 
-  // Charge le conseiller via profile_id (puis fallback owner texte)
   let conseiller = null;
   if (mandat.profile_id) {
     const { data: profile } = await supabaseAdmin
@@ -90,10 +80,9 @@ async function loadMandatData(mandatId) {
     conseiller = profile;
   }
 
-  // Si pas de profile_id, on construit un conseiller basique avec les initiales
   if (!conseiller && mandat.owner) {
     conseiller = {
-      full_name: mandat.owner, // affiche les initiales par défaut
+      full_name: mandat.owner,
       email: null,
       tel: null,
     };
@@ -105,27 +94,12 @@ async function loadMandatData(mandatId) {
 // ─────────────────────────────────────────────────────────────────
 // LOAD STATS POUR LE RAPPORT VENDEUR
 // ─────────────────────────────────────────────────────────────────
-// Pour la v1, on calcule des stats simples basées sur les interactions
-// du CRM dans la période donnée. À enrichir plus tard avec un vrai pipeline.
 
 async function loadVendeurStats(mandatId, period) {
   if (!period?.start || !period?.end) {
     return { stats: {}, events: [] };
   }
-
-  // Pour l'instant, on retourne des stats basiques.
-  // À connecter aux vraies tables (visites, deals, etc.) selon ton schéma v12.
-  // Tu pourras ajuster cette fonction quand tu auras défini ces tables.
-
-  // EXEMPLE : si tu as une table "visites" liée aux mandats par mandat_id :
-  //
-  // const { data: visites } = await supabaseAdmin
-  //   .from('visites')
-  //   .select('*')
-  //   .eq('mandat_id', mandatId)
-  //   .gte('date', period.start)
-  //   .lte('date', period.end);
-
+  // À enrichir plus tard avec les vraies tables (visites, deals…)
   return {
     stats: {
       nb_visites: 0,
@@ -138,11 +112,10 @@ async function loadVendeurStats(mandatId, period) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// CONSTRUCTION URL DES LOGOS (absolues)
+// CONSTRUCTION URL DES LOGOS
 // ─────────────────────────────────────────────────────────────────
 
 function getLogoUrl(request, isOffMarket) {
-  // On construit l'URL absolue à partir de l'host de la requête
   const host = request.headers.get('host') || 'patrimonia-crm.vercel.app';
   const protocol = host.includes('localhost') ? 'http' : 'https';
   const baseUrl = `${protocol}://${host}`;
@@ -159,7 +132,7 @@ function getLogoUrl(request, isOffMarket) {
 export async function GET(request, { params }) {
   try {
     // 1. Auth
-    const user = await getCurrentUser(request);
+    const user = await getCurrentUser();
     if (!user) {
       return new Response(
         JSON.stringify({ ok: false, error: 'Authentification requise' }),
@@ -167,7 +140,7 @@ export async function GET(request, { params }) {
       );
     }
 
-    // 2. Récupération paramètres
+    // 2. Paramètres
     const { id: mandatId } = params;
     const url = new URL(request.url);
     const template = url.searchParams.get('template') || 'plaquette';
@@ -205,7 +178,6 @@ export async function GET(request, { params }) {
       });
       filename = `Plaquette_${slugify(mandat.nom)}.pdf`;
     } else if (template === 'rapport') {
-      // Validation des dates pour le rapport
       if (!startStr || !endStr) {
         return new Response(
           JSON.stringify({
