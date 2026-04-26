@@ -1,19 +1,17 @@
 // ═══════════════════════════════════════════════════════════════════
-// app/api/mandats/[id]/pdf/route.js — VERSION CORRIGÉE v12.2.1
+// app/api/mandats/[id]/pdf/route.js — VERSION FINALE v12.2.2
 // 
-// Utilise @supabase/ssr (déjà dans ton package.json v12) pour gérer 
-// l'auth de manière robuste, quel que soit le format de cookie.
+// Auth par token Supabase passé dans l'URL (param ?token=...)
+// Le token est récupéré côté client via supabase.auth.getSession()
 // 
 // Usage :
-//   GET /api/mandats/{uuid}/pdf?template=plaquette
-//   GET /api/mandats/{uuid}/pdf?template=rapport&start=2026-01-01&end=2026-04-01
-//   GET /api/mandats/{uuid}/pdf?template=interne
+//   GET /api/mandats/{uuid}/pdf?template=plaquette&token=eyJhbG...
+//   GET /api/mandats/{uuid}/pdf?template=rapport&start=...&end=...&token=...
+//   GET /api/mandats/{uuid}/pdf?template=interne&token=...
 // ═══════════════════════════════════════════════════════════════════
 
 import { renderToStream } from '@react-pdf/renderer';
 import React from 'react';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
 
 import PlaquetteAcheteur from '@/lib/pdf/templates/PlaquetteAcheteur';
@@ -21,7 +19,6 @@ import RapportVendeur from '@/lib/pdf/templates/RapportVendeur';
 import FicheInterne from '@/lib/pdf/templates/FicheInterne';
 
 // Client admin pour charger les données (bypasse RLS).
-// On vérifie l'auth séparément AVANT d'utiliser ce client.
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -29,29 +26,21 @@ const supabaseAdmin = createClient(
 );
 
 // ─────────────────────────────────────────────────────────────────
-// AUTH : utilise @supabase/ssr pour gérer les cookies proprement
+// AUTH par token URL
 // ─────────────────────────────────────────────────────────────────
 
-async function getCurrentUser() {
-  const cookieStore = cookies();
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
-      cookies: {
-        get(name) {
-          return cookieStore.get(name)?.value;
-        },
-        // Pas besoin de set/remove pour une simple lecture
-        set() {},
-        remove() {},
-      },
-    }
-  );
-
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) return null;
+async function verifyToken(token) {
+  if (!token) return null;
+  
+  // On utilise le client admin pour vérifier le token
+  // (Supabase admin peut décoder n'importe quel JWT signé par le projet)
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+  
+  if (error || !user) {
+    console.warn('[/api/mandats/[id]/pdf] Token invalide:', error?.message);
+    return null;
+  }
+  
   return user;
 }
 
@@ -74,10 +63,16 @@ async function loadMandatData(mandatId) {
   if (mandat.profile_id) {
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('id, email, full_name, tel')
+      .select('id, email, prenom, nom, tel')
       .eq('id', mandat.profile_id)
       .maybeSingle();
-    conseiller = profile;
+    
+    if (profile) {
+      conseiller = {
+        ...profile,
+        full_name: `${profile.prenom || ''} ${profile.nom || ''}`.trim() || 'Conseiller',
+      };
+    }
   }
 
   if (!conseiller && mandat.owner) {
@@ -131,8 +126,14 @@ function getLogoUrl(request, isOffMarket) {
 
 export async function GET(request, { params }) {
   try {
-    // 1. Auth
-    const user = await getCurrentUser();
+    const url = new URL(request.url);
+    const token = url.searchParams.get('token');
+    const template = url.searchParams.get('template') || 'plaquette';
+    const startStr = url.searchParams.get('start');
+    const endStr = url.searchParams.get('end');
+
+    // 1. Auth par token URL
+    const user = await verifyToken(token);
     if (!user) {
       return new Response(
         JSON.stringify({ ok: false, error: 'Authentification requise' }),
@@ -140,13 +141,8 @@ export async function GET(request, { params }) {
       );
     }
 
-    // 2. Paramètres
+    // 2. ID mandat
     const { id: mandatId } = params;
-    const url = new URL(request.url);
-    const template = url.searchParams.get('template') || 'plaquette';
-    const startStr = url.searchParams.get('start');
-    const endStr = url.searchParams.get('end');
-
     if (!mandatId) {
       return new Response(
         JSON.stringify({ ok: false, error: 'ID mandat manquant' }),
