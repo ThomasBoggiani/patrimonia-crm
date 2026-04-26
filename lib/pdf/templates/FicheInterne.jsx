@@ -1,22 +1,19 @@
 // ═══════════════════════════════════════════════════════════════════
-// lib/pdf/templates/FicheInterne.jsx
+// lib/pdf/templates/FicheInterne.jsx — REFONTE Direction 1 v12.3
 // 
 // Fiche interne complète pour archivage / équipe I&P
+// Style : Maison de prestige (Times-Roman, sage/crème)
 // 
-// Contenu : TOUT
-//   - Toutes les infos commerciales (publiques)
-//   - Owner, profile_id, contact vendeur, tel
-//   - Highlights, description longue
-//   - Toutes les photos
-//   - Statut, commercialisation, dates
-//   - Mandat type, signature, mise à jour
-// 
-// Pas de sucre design : dense, lisible, facile à archiver / imprimer
+// Pages :
+//   1. Identification + Localisation + Caractéristiques + Données financières
+//   2. Mandat + Conseiller + Contact vendeur
+//   3. Description + Points forts
+//   4+. Photos
 // ═══════════════════════════════════════════════════════════════════
 
 import React from 'react';
 import { Document, Page, View, Text } from '@react-pdf/renderer';
-import { getStyles, LAYOUT } from '../styles';
+import { getStyles, COLORS, LAYOUT } from '../styles';
 import {
   PageHeader,
   PageFooter,
@@ -31,7 +28,6 @@ import {
   formatSurface,
   formatRendement,
   formatDate,
-  buildTitleCommercial,
   normalizePhotos,
   chunkPhotos,
   safeText,
@@ -40,13 +36,14 @@ import {
 export default function FicheInterne({ mandat, conseiller, logoUrl }) {
   const isOffMarket = mandat?.is_off_market === true;
   const styles = getStyles(isOffMarket);
+  const palette = isOffMarket ? COLORS.offmarket : COLORS.standard;
 
   const photos = normalizePhotos(mandat?.photos);
   const photoChunks = chunkPhotos(photos, 6);
 
   return (
     <Document
-      title={`Fiche interne - ${safeText(mandat?.nom, 'Mandat')}`}
+      title={`Fiche interne — ${safeText(mandat?.nom, 'Mandat')}`}
       author="Immeubles & Patrimoine"
       subject="Fiche interne mandat"
       keywords="interne, archive, confidentiel"
@@ -55,39 +52,57 @@ export default function FicheInterne({ mandat, conseiller, logoUrl }) {
       {/* PAGE 1 : EN-TÊTE + IDENTIFICATION       */}
       {/* ═══════════════════════════════════════ */}
       <Page size="A4" style={styles.page}>
-        <PageHeader title="Fiche interne mandat" pageNumber={1} isOffMarket={isOffMarket} />
+        <PageHeader
+          eyebrow="Document interne"
+          title="Fiche mandat"
+          pageNumber={1}
+          isOffMarket={isOffMarket}
+        />
 
         {/* Bandeau identification */}
         <View
           style={{
-            paddingVertical: 16,
-            paddingHorizontal: 18,
+            paddingVertical: 20,
+            paddingHorizontal: 22,
             backgroundColor: isOffMarket
-              ? styles.kpiCard.backgroundColor
-              : '#EBE9E2',
-            marginBottom: 20,
-            borderLeftWidth: 4,
+              ? COLORS.offmarket.bgDeep
+              : COLORS.standard.creamWarm,
+            marginBottom: 28,
+            borderLeftWidth: 3,
             borderLeftColor: isOffMarket
-              ? styles.kpiCard.borderLeftColor
-              : '#94A084',
+              ? COLORS.offmarket.gold
+              : COLORS.standard.sageDark,
           }}
         >
-          <Text style={{ fontSize: 9, color: styles.kpiLabel.color, letterSpacing: 1 }}>
-            RÉFÉRENCE INTERNE · {safeText(mandat?.id?.slice(0, 8), '—').toUpperCase()}
+          <Text
+            style={{
+              fontSize: LAYOUT.font.tiny,
+              fontFamily: 'Times-Bold',
+              color: palette.muted,
+              letterSpacing: 2,
+              textTransform: 'uppercase',
+            }}
+          >
+            Référence interne · {safeText(mandat?.id?.slice(0, 8), '—').toUpperCase()}
           </Text>
           <Text
             style={{
-              fontSize: 16,
-              fontFamily: 'Helvetica-Bold',
-              color: isOffMarket
-                ? styles.coverContactLine.color
-                : '#2D2D2A',
-              marginTop: 6,
+              fontSize: LAYOUT.font.title,
+              fontFamily: 'Times-Bold',
+              color: isOffMarket ? COLORS.offmarket.cream : COLORS.standard.ink,
+              marginTop: 8,
             }}
           >
             {safeText(mandat?.nom, 'Bien sans nom')}
           </Text>
-          <Text style={{ fontSize: 10, color: styles.kpiLabel.color, marginTop: 4 }}>
+          <Text
+            style={{
+              fontSize: LAYOUT.font.small,
+              fontFamily: 'Times-Italic',
+              color: palette.muted,
+              marginTop: 6,
+            }}
+          >
             {[
               mandat?.type,
               mandat?.sous_type,
@@ -99,11 +114,11 @@ export default function FicheInterne({ mandat, conseiller, logoUrl }) {
           {isOffMarket && (
             <Text
               style={{
-                fontSize: 9,
-                color: styles.coverContactLabel.color,
-                marginTop: 8,
-                letterSpacing: 1.5,
-                fontFamily: 'Helvetica-Bold',
+                fontSize: LAYOUT.font.tiny,
+                fontFamily: 'Times-Bold',
+                color: COLORS.offmarket.gold,
+                marginTop: 12,
+                letterSpacing: 2,
               }}
             >
               ⊘ OFF-MARKET
@@ -112,52 +127,53 @@ export default function FicheInterne({ mandat, conseiller, logoUrl }) {
         </View>
 
         {/* Localisation */}
-        <Section label="Localisation" isOffMarket={isOffMarket}>
+        <Section eyebrow="Localisation" isOffMarket={isOffMarket}>
           <FinancialRow
-            label="Adresse :"
+            label="Adresse"
             value={safeText(mandat?.adresse, '—')}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Ville :"
+            label="Ville"
             value={safeText(mandat?.ville, '—')}
             isOffMarket={isOffMarket}
           />
         </Section>
 
         {/* Caractéristiques */}
-        <Section label="Caractéristiques" isOffMarket={isOffMarket}>
+        <Section eyebrow="Caractéristiques" isOffMarket={isOffMarket}>
           <FinancialRow
-            label="Type :"
+            label="Type"
             value={safeText(mandat?.type, '—')}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Sous-type :"
+            label="Sous-type"
             value={safeText(mandat?.sous_type, '—')}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Surface :"
+            label="Surface"
             value={formatSurface(mandat?.surface)}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Nombre de lots :"
+            label="Nombre de lots"
             value={mandat?.nb_lots ? String(mandat.nb_lots) : '—'}
             isOffMarket={isOffMarket}
           />
         </Section>
 
         {/* Données financières */}
-        <Section label="Données financières" isOffMarket={isOffMarket}>
+        <Section eyebrow="Données financières" isOffMarket={isOffMarket}>
           <FinancialRow
-            label="Prix FAI :"
+            label="Prix FAI"
             value={formatPrix(mandat?.prix)}
+            big={true}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Prix au m² :"
+            label="Prix au m²"
             value={
               mandat?.prix_m2
                 ? formatPrix(mandat.prix_m2, { suffix: '/m²' })
@@ -166,22 +182,22 @@ export default function FicheInterne({ mandat, conseiller, logoUrl }) {
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Loyers annuels :"
+            label="Loyers annuels"
             value={mandat?.loyers_annuels ? formatPrix(mandat.loyers_annuels) : '—'}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Rendement brut :"
+            label="Rendement brut"
             value={formatRendement(mandat?.rendement)}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Honoraires à charge :"
+            label="Honoraires à charge"
             value={safeText(mandat?.honoraires_charge, "De l'acquéreur")}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Statut copropriété :"
+            label="Statut copropriété"
             value={safeText(
               mandat?.statut_copropriete,
               'Non soumis au statut de la copropriété'
@@ -197,49 +213,54 @@ export default function FicheInterne({ mandat, conseiller, logoUrl }) {
       {/* PAGE 2 : MANDAT + CONTACTS              */}
       {/* ═══════════════════════════════════════ */}
       <Page size="A4" style={styles.page}>
-        <PageHeader title="Mandat & contacts" pageNumber={2} isOffMarket={isOffMarket} />
+        <PageHeader
+          eyebrow="Document interne"
+          title="Mandat & contacts"
+          pageNumber={2}
+          isOffMarket={isOffMarket}
+        />
 
-        <Section label="Suivi du mandat" isOffMarket={isOffMarket}>
+        <Section eyebrow="Suivi du mandat" isOffMarket={isOffMarket}>
           <FinancialRow
-            label="Type de mandat :"
+            label="Type de mandat"
             value={safeText(mandat?.commercialisation, '—')}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Statut commercial :"
+            label="Statut commercial"
             value={safeText(mandat?.statut, '—')}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Date de signature :"
+            label="Date de signature"
             value={formatDate(mandat?.date_signature)}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Date de création :"
+            label="Date de création"
             value={formatDate(mandat?.created_at)}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Dernière mise à jour :"
+            label="Dernière mise à jour"
             value={formatDate(mandat?.updated_at)}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Off-market :"
+            label="Off-market"
             value={isOffMarket ? 'Oui' : 'Non'}
             isOffMarket={isOffMarket}
           />
         </Section>
 
-        <Section label="Conseiller en charge" isOffMarket={isOffMarket}>
+        <Section eyebrow="Conseiller en charge" isOffMarket={isOffMarket}>
           <FinancialRow
-            label="Initiales :"
+            label="Initiales"
             value={safeText(mandat?.owner, '—')}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Profile lié :"
+            label="Profile lié"
             value={
               mandat?.profile_id
                 ? mandat.profile_id.slice(0, 8) + '…'
@@ -249,35 +270,35 @@ export default function FicheInterne({ mandat, conseiller, logoUrl }) {
           />
           {conseiller?.full_name && (
             <FinancialRow
-              label="Nom :"
+              label="Nom"
               value={conseiller.full_name}
               isOffMarket={isOffMarket}
             />
           )}
           {conseiller?.email && (
             <FinancialRow
-              label="Email :"
+              label="Email"
               value={conseiller.email}
               isOffMarket={isOffMarket}
             />
           )}
           {conseiller?.tel && (
             <FinancialRow
-              label="Téléphone :"
+              label="Téléphone"
               value={conseiller.tel}
               isOffMarket={isOffMarket}
             />
           )}
         </Section>
 
-        <Section label="Contact vendeur (côté apporteur)" isOffMarket={isOffMarket}>
+        <Section eyebrow="Contact vendeur" isOffMarket={isOffMarket}>
           <FinancialRow
-            label="Contact :"
+            label="Contact"
             value={safeText(mandat?.contact, '—')}
             isOffMarket={isOffMarket}
           />
           <FinancialRow
-            label="Téléphone :"
+            label="Téléphone"
             value={safeText(mandat?.tel, '—')}
             isOffMarket={isOffMarket}
           />
@@ -290,15 +311,20 @@ export default function FicheInterne({ mandat, conseiller, logoUrl }) {
       {/* PAGE 3 : DESCRIPTION & POINTS FORTS     */}
       {/* ═══════════════════════════════════════ */}
       <Page size="A4" style={styles.page}>
-        <PageHeader title="Description & atouts" pageNumber={3} isOffMarket={isOffMarket} />
+        <PageHeader
+          eyebrow="Document interne"
+          title="Description & atouts"
+          pageNumber={3}
+          isOffMarket={isOffMarket}
+        />
 
-        <Section label="Description commerciale" isOffMarket={isOffMarket}>
+        <Section eyebrow="Description commerciale" isOffMarket={isOffMarket}>
           <Text style={styles.sectionContent}>
             {safeText(mandat?.description, '(Aucune description renseignée)')}
           </Text>
         </Section>
 
-        <Section label="Points forts (Nous aimons)" isOffMarket={isOffMarket}>
+        <Section eyebrow="Points forts" isOffMarket={isOffMarket}>
           <HighlightsList
             highlights={mandat?.highlights}
             isOffMarket={isOffMarket}
@@ -314,6 +340,7 @@ export default function FicheInterne({ mandat, conseiller, logoUrl }) {
       {photoChunks.map((chunk, i) => (
         <Page key={`photos-${i}`} size="A4" style={styles.page}>
           <PageHeader
+            eyebrow="Document interne"
             title="Photos"
             pageNumber={4 + i}
             isOffMarket={isOffMarket}
