@@ -1,6 +1,5 @@
-
 // ═══════════════════════════════════════════════════════════════════
-// app/api/leads/estimation/route.js — VERSION FINALE v12.1
+// app/api/leads/contact/route.js — VERSION FINALE v12.1
 // ═══════════════════════════════════════════════════════════════════
 
 import {
@@ -16,7 +15,7 @@ export async function OPTIONS() {
 
 export async function POST(request) {
   const ip = extractIp(request);
-  const endpoint = '/api/leads/estimation';
+  const endpoint = '/api/leads/contact';
   let email = null;
 
   try {
@@ -56,39 +55,24 @@ export async function POST(request) {
     const prenom = sanitizeString(body.prenom, 100);
     const nom = sanitizeString(body.nom, 100);
     const telephone = sanitizePhone(body.telephone);
-    const typeBien = sanitizeString(body.type_bien, 100);
-    const adresseBien = sanitizeString(body.adresse_bien, 500);
-    const surface = sanitizeString(body.surface, 50);
-    const nbPieces = sanitizeString(body.nb_pieces, 20);
-    const messageEstimation = sanitizeString(body.message, 2000);
+    const message = sanitizeString(body.message, 2000);
 
     if (!nom && !prenom) {
       await logCapture({ ip, endpoint, email, status: 'error', errorMessage: 'Nom requis' });
       return jsonResponse({ ok: false, error: 'Nom requis' }, 400);
     }
 
-    if (!adresseBien) {
-      await logCapture({ ip, endpoint, email, status: 'error', errorMessage: 'Adresse du bien requise' });
-      return jsonResponse({ ok: false, error: 'Adresse du bien requise' }, 400);
-    }
-
     const ownerInfo = await resolveOwner({ bienRef: null });
 
     const sourceDetail = {
-      type_demande: 'estimation',
-      formulaire: 'estimer_mon_bien',
+      type_demande: 'contact',
+      formulaire: 'contact_general',
       page_origine: sanitizeString(body.page_origine, 500),
       utm_source: sanitizeString(body.utm_source, 100),
       utm_medium: sanitizeString(body.utm_medium, 100),
       utm_campaign: sanitizeString(body.utm_campaign, 100),
       ip,
       user_agent: sanitizeString(request.headers.get('user-agent'), 500),
-      bien_a_estimer: {
-        type: typeBien,
-        adresse: adresseBien,
-        surface,
-        nb_pieces: nbPieces,
-      },
       received_at: new Date().toISOString(),
     };
 
@@ -99,48 +83,44 @@ export async function POST(request) {
       ownerId: ownerInfo.ownerId,
     });
 
-    const resumeInteraction = `Demande d'estimation
-Type de bien : ${typeBien || 'non précisé'}
-Adresse : ${adresseBien}
-Surface : ${surface || 'non précisée'}
-Nombre de pièces : ${nbPieces || 'non précisé'}
-${messageEstimation ? '\nMessage : ' + messageEstimation : ''}`;
-
     await createInteraction({
       clientId: client.id,
-      type: 'lead_site_estimation',
-      resume: resumeInteraction,
+      type: 'lead_site_contact',
+      resume: message || '(Pas de message)',
       metadata: {
         page_origine: sourceDetail.page_origine,
-        bien_a_estimer: sourceDetail.bien_a_estimer,
         utm_source: sourceDetail.utm_source,
+        utm_medium: sourceDetail.utm_medium,
+        utm_campaign: sourceDetail.utm_campaign,
       },
       createdBy: ownerInfo.ownerId,
     });
 
+    // Notification : si client existe déjà, notifier son owner actuel ; sinon, l'owner résolu
     const ownerNotifId = isNew ? ownerInfo.ownerId : (client.owner || ownerInfo.ownerId);
     const titleNotif = isNew
-      ? `Nouvelle estimation : ${prenom} ${nom}`
-      : `${prenom} ${nom} demande une estimation`;
-    const bodyNotif = `${typeBien || 'Bien'} à ${adresseBien}${surface ? ' · ' + surface + ' m²' : ''}`;
+      ? `Nouveau lead : ${prenom} ${nom}`
+      : `${prenom} ${nom} a renvoyé un formulaire`;
+    const bodyNotif = message
+      ? `${message.slice(0, 100)}${message.length > 100 ? '...' : ''}`
+      : 'Formulaire contact reçu';
 
     await notifyOwner({
       ownerId: ownerNotifId,
       title: titleNotif,
       body: bodyNotif,
       linkUrl: `/clients/${client.id}`,
-      metadata: { source: 'site_wordpress', type_demande: 'estimation', client_id: client.id },
+      metadata: { source: 'site_wordpress', type_demande: 'contact', client_id: client.id },
     });
 
     await logCapture({ ip, endpoint, email, status: 'success' });
 
     return jsonResponse({
-      ok: true, id: client.id, isNew,
-      message: 'Demande d\'estimation enregistrée',
+      ok: true, id: client.id, isNew, message: 'Lead enregistré',
     }, 200);
 
   } catch (err) {
-    console.error('[/api/leads/estimation] Erreur:', err);
+    console.error('[/api/leads/contact] Erreur:', err);
     await logCapture({ ip, endpoint, email, status: 'error', errorMessage: err.message });
     return jsonResponse({ ok: false, error: 'Erreur serveur' }, 500);
   }
