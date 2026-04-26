@@ -23,6 +23,7 @@ import PhotoUploader from './PhotoUploader';
 import IntegrationsTab from './IntegrationsTab';
 import ClientEmails from './ClientEmails';
 import ContactsImportModal from './ContactsImportModal';
+import PdfExportButtons from '@/components/PdfExportButtons';
 
 // === CONSTANTES ===
 const STATUTS_MANDAT = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisation', 'Offre', 'Promesse', 'Acte', 'Perdu'];
@@ -1214,6 +1215,12 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload }) {
         <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
           <Edit2 className="w-4 h-4" /> Modifier
         </button>
+      </div>
+
+      {/* Boutons d'export PDF */}
+      <div className="mb-6 pb-6 border-b border-stone-200">
+        <h3 className="text-xs font-medium text-stone-500 uppercase tracking-wide mb-3">Export PDF</h3>
+        <PdfExportButtons mandatId={mandat.id} mandatNom={mandat.nom} isOffMarket={mandat.is_off_market} />
       </div>
 
       <div className="grid grid-cols-3 gap-6">
