@@ -5,7 +5,7 @@ import {
   Mail, Plus, Search, Calendar, Phone, MessageSquare, 
   MapPin, FileText, Trash2, Edit2, X, Check, 
   LayoutGrid, List, QrCode, Clock, AlertCircle,
-  ChevronRight, Home, Send, Upload,
+  ChevronRight, Home, Send, Upload, Download,
   Circle, CheckCircle2, Eye, Copy, Sparkles,
   FileUp, Loader2, AlertTriangle, Info, Wand2, Mic,
   User as UserIcon, LogOut, Shield, Menu,
@@ -22,6 +22,7 @@ import NotificationBell from './NotificationBell';
 import PhotoUploader from './PhotoUploader';
 import IntegrationsTab from './IntegrationsTab';
 import ClientEmails from './ClientEmails';
+import ContactsImportModal from './ContactsImportModal';
 
 // === CONSTANTES ===
 const STATUTS_MANDAT = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisation', 'Offre', 'Promesse', 'Acte', 'Perdu'];
@@ -1331,6 +1332,18 @@ function ClientsTab({ clients, reload, mandats, deals, interactions }) {
   const [selectedClient, setSelectedClient] = useState(null);
   const [showVoice, setShowVoice] = useState(false);
   const [voiceFeedback, setVoiceFeedback] = useState(null);
+  const [showImportContacts, setShowImportContacts] = useState(false);
+  const [outlookConnected, setOutlookConnected] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('user_integrations')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('provider', 'microsoft')
+      .maybeSingle()
+      .then(({ data }) => setOutlookConnected(!!data));
+  }, [user]);
 
   const filtered = clients.filter(c => {
     if (search && !`${c.prenom || ''} ${c.nom} ${c.societe || ''}`.toLowerCase().includes(search.toLowerCase())) return false;
@@ -1368,6 +1381,11 @@ function ClientsTab({ clients, reload, mandats, deals, interactions }) {
           <p className="text-stone-500">{filtered.length} investisseur{filtered.length > 1 ? 's' : ''}</p>
         </div>
         <div className="flex items-center gap-2">
+          {outlookConnected && (
+            <button onClick={() => setShowImportContacts(true)} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-cream-dark text-ink rounded-lg hover:bg-cream-50 text-sm font-medium">
+              <Download className="w-4 h-4" /> Importer Outlook
+            </button>
+          )}
           <button onClick={() => setShowVoice(true)} className="flex items-center gap-2 px-4 py-2.5 gradient-sage-dark text-white rounded-lg hover:opacity-90 text-sm font-medium shadow-md">
             <Mic className="w-4 h-4" /> Note vocale
           </button>
@@ -1449,6 +1467,13 @@ function ClientsTab({ clients, reload, mandats, deals, interactions }) {
             reload();
             setTimeout(() => setVoiceFeedback(null), 5000);
           }}
+        />
+      )}
+
+      {showImportContacts && (
+        <ContactsImportModal
+          onClose={() => setShowImportContacts(false)}
+          onImported={() => { setShowImportContacts(false); reload(); }}
         />
       )}
     </div>
@@ -1541,8 +1566,22 @@ function ClientForm({ client, onSave, onClose }) {
 }
 
 function ClientDetail({ client, reload, interactions, onBack, onEdit, deals, mandats }) {
+  const { user } = useAuth();
   const [showNewInter, setShowNewInter] = useState(false);
   const [newInter, setNewInter] = useState({ date: new Date().toISOString().split('T')[0], type: 'Appel', resume: '', nextStep: '', dateNextStep: '' });
+  const [outlookConnected, setOutlookConnected] = useState(false);
+  const [pushingOutlook, setPushingOutlook] = useState(false);
+  const [pushFeedback, setPushFeedback] = useState(null);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('user_integrations')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('provider', 'microsoft')
+      .maybeSingle()
+      .then(({ data }) => setOutlookConnected(!!data));
+  }, [user]);
 
   const clientDeals = deals.filter(d => d.clientId === client.id);
   const clientInteractions = interactions.filter(i => i.clientId === client.id);
@@ -1567,19 +1606,71 @@ function ClientDetail({ client, reload, interactions, onBack, onEdit, deals, man
     reload();
   };
 
+  const pushToOutlook = async () => {
+    if (!client.email) {
+      setPushFeedback({ type: 'error', text: 'Email du client requis' });
+      return;
+    }
+    setPushingOutlook(true);
+    setPushFeedback(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/microsoft/contacts/push', {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ clientId: client.id })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Erreur');
+      }
+      setPushFeedback({ type: 'success', text: client.outlook_contact_id ? 'Contact mis à jour dans Outlook' : 'Contact ajouté à Outlook' });
+      reload();
+      setTimeout(() => setPushFeedback(null), 4000);
+    } catch (err) {
+      setPushFeedback({ type: 'error', text: err.message });
+    } finally {
+      setPushingOutlook(false);
+    }
+  };
+
   return (
     <div className="p-8 max-w-5xl">
       <button onClick={onBack} className="flex items-center gap-2 text-sm text-stone-600 hover:text-stone-900 mb-6">
         <ChevronRight className="w-4 h-4 rotate-180" /> Retour aux clients
       </button>
+      
+      {pushFeedback && (
+        <div className={`mb-4 p-3 rounded-lg flex items-start gap-2 text-sm ${
+          pushFeedback.type === 'success' 
+            ? 'bg-sage-50 border border-sage-light text-sage-darker' 
+            : 'bg-red-50 border border-red-200 text-red-800'
+        }`}>
+          {pushFeedback.type === 'success' ? <Check className="w-4 h-4 flex-shrink-0 mt-0.5" /> : <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />}
+          <div>{pushFeedback.text}</div>
+        </div>
+      )}
+      
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="font-display text-4xl font-semibold text-stone-900 mb-1">{client.prenom} {client.nom}</h1>
           <p className="text-stone-500">{client.societe}</p>
         </div>
-        <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
-          <Edit2 className="w-4 h-4" /> Modifier
-        </button>
+        <div className="flex items-center gap-2">
+          {outlookConnected && (
+            <button onClick={pushToOutlook} disabled={pushingOutlook || !client.email}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-cream-dark text-ink rounded-lg text-sm hover:bg-cream-50 disabled:opacity-50">
+              {pushingOutlook ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              {client.outlook_contact_id ? 'MAJ Outlook' : 'Pousser Outlook'}
+            </button>
+          )}
+          <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
+            <Edit2 className="w-4 h-4" /> Modifier
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-6">
