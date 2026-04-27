@@ -186,17 +186,15 @@ export default function CRM() {
           >
             <X className="w-5 h-5 text-ink" />
           </button>
-          <div className="p-6 border-b border-cream-dark bg-gradient-to-b from-cream-50 to-white">
-            <div className="flex flex-col items-center text-center">
+         <div className="px-4 py-5 border-b border-cream-dark bg-gradient-to-b from-cream-50 to-white">
+            <div className="flex items-center justify-center">
               <img 
                 src="/logo-light.png" 
                 alt="Immeubles & Patrimoine" 
-                className="w-32 h-32 mb-2"
+                className="w-12 h-12"
               />
-              <div className="mt-1">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-sage-dark">Transactions immobilières</p>
-                <p className="text-[10px] text-cream-400 mt-0.5">Paris · Île-de-France</p>
-              </div>
+            </div>
+          </div>
             </div>
           </div>
           <nav className="flex-1 p-3 overflow-y-auto scrollbar-thin">
