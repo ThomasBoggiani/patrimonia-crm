@@ -24,6 +24,7 @@ import IntegrationsTab from './IntegrationsTab';
 import ClientEmails from './ClientEmails';
 import ContactsImportModal from './ContactsImportModal';
 import PdfExportButtons from '@/components/PdfExportButtons';
+import { PhotosModal, VisiteModal, MandantModal } from './MandatModals';
 // ═══ HELPERS PRIX ═══
 const eurFormatter = new Intl.NumberFormat('fr-FR', {
   style: 'currency',
@@ -1235,6 +1236,7 @@ function MandatForm({ mandat, onSave, onClose }) {
 }
 
 function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, annonces }) {
+  const [openModal, setOpenModal] = useState(null); // 'photos' | 'visite' | 'mandant' | null
   const mandatDeals = deals.filter(d => d.mandatId === mandat.id);
   const alerts = mandat.alerts || [];
   const highlights = mandat.highlights || [];
@@ -1304,14 +1306,14 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           <h3 className="text-xs font-medium text-stone-500 uppercase tracking-wide mb-2">Dossier</h3>
           <div className="flex flex-wrap gap-2 items-center">
             <PdfExportButtons mandatId={mandat.id} mandatNom={mandat.nom} isOffMarket={mandat.is_off_market} />
-            <button onClick={() => alert('Photos — modal à venir')} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
-              <ImageIcon className="w-4 h-4" /> Photos
+            <button onClick={() => setOpenModal('photos')} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
+              <ImageIcon className="w-4 h-4" /> Photos {(mandat.photos || []).length > 0 && <span className="text-[10px] bg-sage-100 text-sage-dark px-1.5 py-0.5 rounded-full ml-0.5">{mandat.photos.length}</span>}
             </button>
-            <button onClick={() => alert('Visite — modal à venir (codes, gardien, etc.)')} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
-              <Eye className="w-4 h-4" /> Visite
+            <button onClick={() => setOpenModal('visite')} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
+              <Eye className="w-4 h-4" /> Visite {(mandat.visiteInfo || mandat.visite_info) && Object.values(mandat.visiteInfo || mandat.visite_info).some(v => v) && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
             </button>
-            <button onClick={() => alert('Mandant — modal à venir (contact, coordonnées)')} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
-              <UserIcon className="w-4 h-4" /> Mandant
+            <button onClick={() => setOpenModal('mandant')} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
+              <UserIcon className="w-4 h-4" /> Mandant {(mandat.mandantInfo || mandat.mandant_info) && Object.values(mandat.mandantInfo || mandat.mandant_info).some(v => v) && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
             </button>
           </div>
         </div>
@@ -1453,8 +1455,19 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
             <p className="text-xs text-stone-600 mb-4 max-w-[200px]">Stratégie, angle commercial, cible acquéreur, points forts, objections...</p>
             <div className="text-[10px] uppercase tracking-wider text-sage-dark font-medium">Bientôt disponible</div>
           </div>
-        </div>
+       </div>
       </div>
+
+      {/* ═══ MODALS ═══ */}
+      {openModal === 'photos' && (
+        <PhotosModal mandat={mandat} onClose={() => setOpenModal(null)} onUpdate={reload} />
+      )}
+      {openModal === 'visite' && (
+        <VisiteModal mandat={mandat} onClose={() => setOpenModal(null)} onUpdate={reload} />
+      )}
+      {openModal === 'mandant' && (
+        <MandantModal mandat={mandat} onClose={() => setOpenModal(null)} onUpdate={reload} />
+      )}
     </div>
   );
 }
