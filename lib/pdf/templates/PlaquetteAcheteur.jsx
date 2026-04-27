@@ -96,7 +96,6 @@ export default function PlaquetteAcheteur({
 
   const photos = normalizePhotos(mandat?.photos);
   const photoChunks = chunkPhotos(photos, 6); // 6 photos par page (3×2)
-  
   // Détection des sections optionnelles
   const hasMapImage = !!mandat?.map_image_url;
   const hasAerialImage = !!mandat?.aerial_image_url;
@@ -132,19 +131,46 @@ export default function PlaquetteAcheteur({
   });
 
   // ───── Préparation des chiffres clés (Page "LE BIEN") ─────
+  // 3 cards en ligne, toujours pertinentes pour un acheteur :
+  // 1. Surface
+  // 2. Type de bien
+  // 3. Prix au m² (si calculable) OU Rendement (si présent)
   const cards = [];
-  if (mandat?.surface) {
-    cards.push({ number: parseFloat(mandat.surface).toLocaleString('fr-FR'), label: 'Surface (m²)' });
+  
+  // Card 1 : Surface
+  if (mandat?.surface && parseFloat(mandat.surface) > 0) {
+    cards.push({ 
+      number: parseFloat(mandat.surface).toLocaleString('fr-FR').replace(/[\u00A0\u202F]/g, ' '), 
+      label: 'Surface (m²)' 
+    });
   }
-  if (mandat?.nb_lots && parseInt(mandat.nb_lots) > 0) {
-    cards.push({ number: mandat.nb_lots, label: parseInt(mandat.nb_lots) > 1 ? 'Lots' : 'Lot' });
-  }
+  
+  // Card 2 : Type
   if (mandat?.type) {
-    // Card "Type" : on affiche par exemple "MIXTE" ou "STUDIO"
-    cards.push({ number: mandat.type.toUpperCase().substring(0, 14), label: 'Type' });
+    // Tronquer le type s'il est trop long pour rester compact
+    const typeShort = mandat.type.length > 12 
+      ? mandat.type.toUpperCase().substring(0, 12) 
+      : mandat.type.toUpperCase();
+    cards.push({ number: typeShort, label: 'Type de bien' });
   }
+  
+  // Card 3 : Rendement si > 0, sinon Prix au m², sinon Lots (si pertinent ≥ 2)
   if (mandat?.rendement && parseFloat(mandat.rendement) > 0) {
-    cards.push({ number: `${parseFloat(mandat.rendement).toFixed(1).replace('.', ',')}%`, label: 'Rendement' });
+    cards.push({ 
+      number: `${parseFloat(mandat.rendement).toFixed(1).replace('.', ',')}%`, 
+      label: 'Rendement' 
+    });
+  } else if (mandat?.surface && parseFloat(mandat.surface) > 0 && mandat?.prix) {
+    const prixM2 = Math.round(parseFloat(mandat.prix) / parseFloat(mandat.surface));
+    cards.push({ 
+      number: prixM2.toLocaleString('fr-FR').replace(/[\u00A0\u202F]/g, ' ') + ' €', 
+      label: 'Prix au m²' 
+    });
+  } else if (mandat?.nb_lots && parseInt(mandat.nb_lots) >= 2) {
+    cards.push({ 
+      number: mandat.nb_lots, 
+      label: 'Lots' 
+    });
   }
 
   // ───── Données financières ─────
@@ -385,7 +411,7 @@ export default function PlaquetteAcheteur({
               isOffMarket={isOffMarket} 
             />
           </View>
-          <PageFooter isOffMarket={isOffMarket} />
+          <PageFooter pageNumber={null} isOffMarket={isOffMarket} />
         </Page>
       ))}
 
