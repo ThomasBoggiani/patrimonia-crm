@@ -167,11 +167,38 @@ export async function GET(request, { params }) {
     let filename;
 
     if (template === 'plaquette') {
-      pdfElement = React.createElement(PlaquetteAcheteur, {
-        mandat,
-        conseiller,
-        logoUrl,
-      });
+  // Construction du dictionnaire des membres pour la page équipe
+  const { data: profiles } = await supabaseAdmin
+    .from('profiles')
+    .select('id, prenom, nom, email, tel, fonction, photo_url')
+    .eq('actif', true);
+  
+  const teamMembers = {};
+  for (const p of (profiles || [])) {
+    const initials = `${(p.prenom || '').charAt(0)}${(p.nom || '').charAt(0)}`.toUpperCase();
+    if (initials) {
+      teamMembers[initials] = {
+        name: `${p.prenom || ''} ${p.nom || ''}`.trim(),
+        role: p.fonction || 'Conseiller',
+        email: p.email,
+        phone: p.tel,
+        photo: p.photo_url, // null si pas de photo
+      };
+    }
+  }
+  
+  // Enrichir l'objet conseiller avec ses initiales
+  const conseillerEnriched = conseiller ? {
+    ...conseiller,
+    initiales: `${(conseiller.prenom || '').charAt(0)}${(conseiller.nom || '').charAt(0)}`.toUpperCase(),
+  } : null;
+  
+  pdfElement = React.createElement(PlaquetteAcheteur, {
+    mandat,
+    conseiller: conseillerEnriched,
+    logoUrl,
+    teamMembers,
+  });
       filename = `Plaquette_${slugify(mandat.nom)}.pdf`;
     } else if (template === 'rapport') {
       if (!startStr || !endStr) {
