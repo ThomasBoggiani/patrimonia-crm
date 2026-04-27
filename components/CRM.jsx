@@ -218,8 +218,6 @@ export default function CRM() {
               />
             </div>
           </div>
-            </div>
-          </div>
           <nav className="flex-1 p-3 overflow-y-auto scrollbar-thin">
             {/* Bouton Import intelligent - accessible partout */}
             <button 
