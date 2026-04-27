@@ -391,7 +391,6 @@ function Dashboard({ mandats, clients, deals, todos }) {
           <div className="text-4xl font-display font-semibold text-stone-900 mb-1">
             {formatPrixCompact(stats.caTotal)}
           </div>
-          </div>
           <p className="text-sm text-stone-500 mb-6">Valeur totale des biens en commercialisation</p>
           <div className="space-y-3">
             <CommRow label="Mandats exclusifs" value={stats.exclusifs} color="bg-emerald-500" />
