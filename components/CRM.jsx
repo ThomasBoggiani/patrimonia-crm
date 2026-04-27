@@ -1328,13 +1328,8 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           </div>
         </div>
 
-        {/* Avatar owner */}
-        <div className="flex flex-col items-center">
-          <div className="text-[10px] uppercase text-stone-500 tracking-wide mb-1">Resp.</div>
-          <div className="w-10 h-10 rounded-full gradient-sage-dark flex items-center justify-center text-white font-medium text-sm shadow-luxe" title={`Responsable : ${mandat.owner || '—'}`}>
-            {ownerInitials}
-          </div>
-        </div>
+        {/* Avatar owner avec dropdown de réassignement */}
+        <OwnerSelector mandat={mandat} reload={reload} />
       </div>
 
       <div className="grid grid-cols-3 gap-6">
