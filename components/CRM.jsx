@@ -661,44 +661,62 @@ function MandatsTab({ mandats, reload, clients, deals }) {
         <table className="w-full">
           <thead className="bg-stone-50 border-b border-cream-dark">
             <tr>
-              <th className="text-left px-5 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Commercialisation</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Bien</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Type</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Prix</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Rdt</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Statut</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Deals</th>
-              <th className="w-24"></th>
+              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide w-24">Photo</th>
+              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Bien</th>
+              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Type</th>
+              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Prix</th>
+              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Rdt</th>
+              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Potentiel</th>
+              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">État</th>
+              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Situation</th>
+              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Mandat</th>
+              <th className="w-20"></th>
             </tr>
           </thead>
           <tbody>
             {filtered.map(m => {
-              const nbDeals = deals.filter(d => d.mandatId === m.id).length;
+              const photoUrl = (m.photos && m.photos[0]) ? (m.photos[0].url || m.photos[0]) : null;
               return (
-                <tr key={m.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer" onClick={() => setSelectedMandat(m)}>
-                  <td className="px-5 py-4">
-                    <CommerceBadge comm={m.commercialisation} dateSignature={m.dateSignature} />
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="font-medium text-stone-900">{m.nom}</div>
-                    <div className="text-xs text-stone-500 flex items-center gap-1 mt-0.5">
-                      <MapPin className="w-3 h-3" />{m.adresse}
+                <tr key={m.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer group" onClick={() => setSelectedMandat(m)}>
+                  <td className="px-3 py-3">
+                    <div className="w-16 h-16 rounded-lg overflow-hidden bg-cream-100 flex-shrink-0">
+                      {photoUrl ? (
+                        <img src={photoUrl} alt={m.nom} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-cream-100 to-cream-200">
+                          <Building2 className="w-5 h-5 text-stone-400" />
+                        </div>
+                      )}
                     </div>
                   </td>
-                  <td className="px-5 py-4 text-sm text-stone-700">{m.type}</td>
-                  <td className="px-5 py-4">
-                    <div className="font-medium text-stone-900">{formatPrix(m.prix)}</div>
-                    <div className="text-xs text-stone-500">{parseFloat(m.prixM2 || 0).toLocaleString('fr')}€/m²</div>
+                  <td className="px-3 py-3 max-w-xs">
+                    <div className="font-medium text-stone-900 text-sm truncate">{m.nom}</div>
+                    <div className="text-xs text-stone-500 flex items-center gap-1 mt-0.5 truncate">
+                      <MapPin className="w-3 h-3 flex-shrink-0" /><span className="truncate">{m.adresse}</span>
+                    </div>
                   </td>
-                  <td className="px-5 py-4">
-                    <span className="font-medium text-emerald-700">{m.rendement}%</span>
+                  <td className="px-3 py-3 text-sm text-stone-700">{m.type}</td>
+                  <td className="px-3 py-3">
+                    <div className="font-medium text-stone-900 text-sm">{formatPrix(m.prix)}</div>
+                    {m.prixM2 && parseFloat(m.prixM2) > 0 && (
+                      <div className="text-xs text-stone-500">{parseFloat(m.prixM2).toLocaleString('fr')} €/m²</div>
+                    )}
                   </td>
-                  <td className="px-5 py-4"><StatutBadge statut={m.statut} /></td>
-                  <td className="px-5 py-4">
-                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-sage-50 text-sage-dark text-xs font-medium">{nbDeals}</span>
+                  <td className="px-3 py-3">
+                    {parseFloat(m.rendement) > 0 ? (
+                      <span className="font-medium text-emerald-700 text-sm">{m.rendement}%</span>
+                    ) : (
+                      <span className="text-stone-400 text-sm">—</span>
+                    )}
                   </td>
-                  <td className="px-5 py-4">
-                    <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                  <td className="px-3 py-3 text-sm text-stone-400">—</td>
+                  <td className="px-3 py-3 text-sm text-stone-400">—</td>
+                  <td className="px-3 py-3 text-sm text-stone-400">—</td>
+                  <td className="px-3 py-3">
+                    <CommerceBadge comm={m.commercialisation} dateSignature={m.dateSignature} />
+                  </td>
+                  <td className="px-3 py-3">
+                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
                       <button onClick={() => setEditingMandat(m)} className="p-1.5 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded"><Edit2 className="w-3.5 h-3.5" /></button>
                       <button onClick={() => handleDelete(m.id)} className="p-1.5 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
