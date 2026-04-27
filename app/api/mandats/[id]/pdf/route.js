@@ -114,6 +114,10 @@ function getLogoUrl(request, isOffMarket) {
   const host = request.headers.get('host') || 'patrimonia-crm.vercel.app';
   const protocol = host.includes('localhost') ? 'http' : 'https';
   const baseUrl = `${protocol}://${host}`;
+  // Le nouveau logo épuré sage est utilisé pour les 2 modes
+  // (le mode off-market sera ajusté visuellement par le palette noir/or)
+  return `${baseUrl}/logo-ip-sage.png`;
+}
 
   return isOffMarket
     ? `${baseUrl}/logos/logo-ip-offmarket.png`
