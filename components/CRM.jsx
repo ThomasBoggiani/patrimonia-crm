@@ -24,7 +24,30 @@ import IntegrationsTab from './IntegrationsTab';
 import ClientEmails from './ClientEmails';
 import ContactsImportModal from './ContactsImportModal';
 import PdfExportButtons from '@/components/PdfExportButtons';
+// ═══ HELPERS PRIX ═══
+const eurFormatter = new Intl.NumberFormat('fr-FR', {
+  style: 'currency',
+  currency: 'EUR',
+  maximumFractionDigits: 0,
+});
 
+function formatPrix(n) {
+  const num = parseFloat(n);
+  if (!Number.isFinite(num) || num === 0) return '—';
+  return eurFormatter.format(num);
+}
+
+function formatPrixCompact(n) {
+  const num = parseFloat(n);
+  if (!Number.isFinite(num) || num === 0) return '—';
+  if (num >= 1_000_000) {
+    return (num / 1_000_000).toFixed(1).replace('.', ',') + ' M€';
+  }
+  if (num >= 1_000) {
+    return Math.round(num / 1_000) + ' k€';
+  }
+  return eurFormatter.format(num);
+}
 // === CONSTANTES ===
 const STATUTS_MANDAT = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisation', 'Offre', 'Promesse', 'Acte', 'Perdu'];
 const STATUTS_DEAL = ['À proposer', 'Envoyé', 'En étude', 'Visite', 'Offre', 'Refusé', 'Gagné', 'Perdu'];
@@ -368,7 +391,8 @@ function Dashboard({ mandats, clients, deals, todos }) {
         <div className="col-span-2 bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
           <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Portefeuille sous mandat</h2>
           <div className="text-4xl font-display font-semibold text-stone-900 mb-1">
-            {(stats.caTotal / 1000000).toFixed(1)}M€
+            {formatPrixCompact(stats.caTotal)}
+          </div>
           </div>
           <p className="text-sm text-stone-500 mb-6">Valeur totale des biens en commercialisation</p>
           <div className="space-y-3">
@@ -611,7 +635,7 @@ function MandatsTab({ mandats, reload, clients, deals }) {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="font-display text-4xl font-semibold text-stone-900 mb-1">Mandats</h1>
-          <p className="text-stone-500">{filtered.length} bien{filtered.length > 1 ? 's' : ''} • Portefeuille {(mandats.reduce((s,m)=>s+(parseFloat(m.prix)||0),0)/1000000).toFixed(1)}M€</p>
+          <p className="text-stone-500">{filtered.length} bien{filtered.length > 1 ? 's' : ''} • Portefeuille {formatPrixCompact(mandats.reduce((s,m)=>s+(parseFloat(m.prix)||0),0))}</p>
         </div>
         <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-4 py-2.5 bg-ink-deep text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
           <Plus className="w-4 h-4" /> Nouveau mandat
@@ -666,7 +690,7 @@ function MandatsTab({ mandats, reload, clients, deals }) {
                   </td>
                   <td className="px-5 py-4 text-sm text-stone-700">{m.type}</td>
                   <td className="px-5 py-4">
-                    <div className="font-medium text-stone-900">{(parseFloat(m.prix) / 1000000).toFixed(2)}M€</div>
+                    <div className="font-medium text-stone-900">{formatPrix(m.prix)}</div>
                     <div className="text-xs text-stone-500">{parseFloat(m.prixM2 || 0).toLocaleString('fr')}€/m²</div>
                   </td>
                   <td className="px-5 py-4">
@@ -1239,7 +1263,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload }) {
           <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Analyse financière</h2>
             <div className="grid grid-cols-4 gap-4">
-              <DetailItem label="Prix net vendeur" value={`${(parseFloat(mandat.prix)/1000000).toFixed(2)}M€`} highlight />
+              <DetailItem label="Prix net vendeur" value={formatPrix(mandat.prix)} highlight />
               <DetailItem label="Prix au m²" value={`${parseFloat(mandat.prixM2 || 0).toLocaleString('fr')}€`} />
               <DetailItem label="Loyers annuels" value={`${parseFloat(mandat.loyersAnnuels || 0).toLocaleString('fr')}€`} />
               <DetailItem label="Rendement" value={`${mandat.rendement}%`} highlight />
@@ -1686,7 +1710,7 @@ function ClientDetail({ client, reload, interactions, onBack, onEdit, deals, man
               <DetailItem label="Typologie" value={client.typologie} />
               <DetailItem label="Maturité" value={<MaturiteBadge maturite={client.maturite} />} />
               <DetailItem label="Origine" value={client.origine} />
-              <DetailItem label="Budget" value={`${(parseFloat(client.budgetMin)/1000000).toFixed(1)} - ${(parseFloat(client.budgetMax)/1000000).toFixed(1)}M€`} highlight />
+              <DetailItem label="Budget" value={`${formatPrixCompact(client.budgetMin)} – ${formatPrixCompact(client.budgetMax)}`} highlight />
               <DetailItem label="Rendement min" value={`${client.rendementMin}%`} highlight />
               <DetailItem label="Statut" value={client.statut} />
             </div>
@@ -1883,7 +1907,7 @@ function DealsTab({ deals, reload, mandats, clients }) {
                 <tr key={d.id} className="border-b border-stone-100 hover:bg-cream-50">
                   <td className="px-5 py-4">
                     <div className="font-medium text-stone-900 text-sm">{d.mandat.nom}</div>
-                    <div className="text-xs text-stone-500">{(parseFloat(d.mandat.prix)/1000000).toFixed(2)}M€</div>
+                    <div className="text-xs text-stone-500">{formatPrix(d.mandat.prix)}</div>
                   </td>
                   <td className="px-5 py-4">
                     <div className="font-medium text-stone-900 text-sm">{d.client.prenom} {d.client.nom}</div>
@@ -1936,7 +1960,7 @@ function DealsKanbanView({ deals, onStatutChange }) {
                   <div className="font-medium text-sm text-stone-900 mb-1 line-clamp-1">{d.mandat.nom}</div>
                   <div className="text-xs text-stone-500 mb-2">{d.client.prenom} {d.client.nom} • {d.client.societe}</div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium text-emerald-700">{(parseFloat(d.mandat.prix)/1000000).toFixed(2)}M€</span>
+                    <span className="font-medium text-emerald-700">{formatPrix(d.mandat.prix)}</span>
                     {d.dateEnvoi && <span className="text-stone-500">{new Date(d.dateEnvoi).toLocaleDateString('fr-FR', {day:'2-digit', month:'short'})}</span>}
                   </div>
                 </div>
@@ -1990,7 +2014,7 @@ function MatchingTab({ mandats, clients, deals, reload }) {
         <label className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-2 block">Sélectionner un mandat</label>
         <select value={selectedMandatId || ''} onChange={e => setSelectedMandatId(e.target.value)} 
           className="w-full px-4 py-2.5 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
-          {mandats.map(m => <option key={m.id} value={m.id}>{m.nom} — {(parseFloat(m.prix)/1000000).toFixed(2)}M€ • Rdt {m.rendement}%</option>)}
+          {mandats.map(m => <option key={m.id} value={m.id}>{m.nom} — {formatPrix(m.prix)} • Rdt {m.rendement}%</option>)}
         </select>
       </div>
 
@@ -2014,7 +2038,7 @@ function MatchingTab({ mandats, clients, deals, reload }) {
                 <div className="text-sm text-stone-600 mb-2">{client.societe}</div>
                 <div className="flex flex-wrap gap-1.5">
                   <span className="text-xs px-2 py-0.5 bg-cream-100 text-ink rounded-full">{client.typologie}</span>
-                  <span className="text-xs px-2 py-0.5 bg-sage-50 text-sage-dark rounded-full">{(parseFloat(client.budgetMin)/1000000).toFixed(1)}-{(parseFloat(client.budgetMax)/1000000).toFixed(1)}M€</span>
+                  <span className="text-xs px-2 py-0.5 bg-sage-50 text-sage-dark rounded-full">{formatPrixCompact(client.budgetMin)} – {formatPrixCompact(client.budgetMax)}</span>
                   <MaturiteBadge maturite={client.maturite} />
                 </div>
               </div>
@@ -2317,7 +2341,7 @@ function AnnoncesTab({ annonces, reload, mandats }) {
               <button key={m.id} onClick={() => addAnnonce(m.id)}
                 className="text-left p-3 border border-stone-200 rounded-lg hover:border-stone-900 hover:bg-cream-50">
                 <div className="font-medium text-sm text-stone-900">{m.nom}</div>
-                <div className="text-xs text-stone-500 mt-0.5">{m.type} • {(parseFloat(m.prix)/1000000).toFixed(2)}M€</div>
+                <div className="text-xs text-stone-500 mt-0.5">{m.type} • {formatPrix(m.prix)}</div>
               </button>
             ))}
           </div>
