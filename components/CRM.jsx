@@ -274,7 +274,7 @@ export default function CRM() {
         <main className="flex-1 overflow-y-auto scrollbar-thin">
           <div className="fade-in" key={activeTab}>
             {activeTab === 'dashboard' && <Dashboard mandats={mandats} clients={clients} deals={deals} todos={todos} />}
-            {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} clients={clients} deals={deals} interactions={interactions} />}
+            {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} clients={clients} deals={deals} interactions={interactions} todos={todos} annonces={annonces} />}
             {activeTab === 'clients' && <ClientsTab clients={clients} reload={loadAll} mandats={mandats} deals={deals} interactions={interactions} />}
             {activeTab === 'deals' && <DealsTab deals={deals} reload={loadAll} mandats={mandats} clients={clients} />}
             {activeTab === 'matching' && <MatchingTab mandats={mandats} clients={clients} deals={deals} reload={loadAll} />}
@@ -559,7 +559,7 @@ function TypeInteractionBadge({ type }) {
 }
 
 // === MANDATS ===
-function MandatsTab({ mandats, reload, clients, deals }) {
+function MandatsTab({ mandats, reload, clients, deals, todos, annonces }) {
   const { user, profile } = useAuth();
   const [search, setSearch] = useState('');
   const [filterComm, setFilterComm] = useState('Tous');
@@ -624,7 +624,7 @@ function MandatsTab({ mandats, reload, clients, deals }) {
 
   if (selectedMandat) {
     const currentMandat = mandats.find(m => m.id === selectedMandat.id) || selectedMandat;
-    return <MandatDetail mandat={currentMandat} onBack={() => setSelectedMandat(null)} onEdit={() => { setEditingMandat(currentMandat); setSelectedMandat(null); }} deals={deals} clients={clients} reload={reload} />;
+    return <MandatDetail mandat={currentMandat} onBack={() => setSelectedMandat(null)} onEdit={() => { setEditingMandat(currentMandat); setSelectedMandat(null); }} deals={deals} clients={clients} reload={reload} todos={todos} annonces={annonces} />;
   }
 
   return (
@@ -1234,60 +1234,192 @@ function MandatForm({ mandat, onSave, onClose }) {
   );
 }
 
-function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload }) {
+function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, annonces }) {
   const mandatDeals = deals.filter(d => d.mandatId === mandat.id);
   const alerts = mandat.alerts || [];
   const highlights = mandat.highlights || [];
+  const mandatTodos = (todos || []).filter(t => t.lienType === 'mandat' && t.lienId === mandat.id);
+  const mandatAnnonce = (annonces || []).find(a => a.mandatId === mandat.id);
+  const isPublished = mandatAnnonce && Object.values(mandatAnnonce.portails || {}).some(p => p === 'En ligne');
+
+  // KPIs
+  const nbMatching = clients.filter(c => {
+    const prix = parseFloat(mandat.prix);
+    const minOk = prix >= parseFloat(c.budgetMin || 0);
+    const maxOk = prix <= parseFloat(c.budgetMax || Infinity);
+    return minOk && maxOk;
+  }).length;
+  const nbRapprochements = mandatDeals.length;
+  const nbOffres = mandatDeals.filter(d => d.statut === 'Offre' || d.statut === 'Promesse' || d.statut === 'Gagné').length;
+  const nbVisites = mandatDeals.filter(d => d.statut === 'Visite').length;
+
+  // Couleur badge mandat
+  const commColor = {
+    'Mandat exclusif': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    'Mandat simple': 'bg-blue-50 text-blue-700 border-blue-200',
+    'Off-market': 'bg-stone-100 text-stone-700 border-stone-200'
+  }[mandat.commercialisation] || 'bg-stone-100 text-stone-700 border-stone-200';
+
+  // Avatar owner
+  const ownerInitials = (mandat.owner || '?').toUpperCase().slice(0, 2);
 
   return (
-    <div className="p-8 max-w-5xl">
+    <div className="p-8 max-w-7xl">
       <button onClick={onBack} className="flex items-center gap-2 text-sm text-stone-600 hover:text-stone-900 mb-6">
         <ChevronRight className="w-4 h-4 rotate-180" /> Retour aux mandats
       </button>
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1 className="font-display text-4xl font-semibold text-stone-900 mb-2">{mandat.nom}</h1>
-          <p className="text-stone-500 flex items-center gap-2"><MapPin className="w-4 h-4" />{mandat.adresse}</p>
+
+      {/* ═══ EN-TÊTE ═══ */}
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex-1">
+          <h1 className="font-display text-3xl font-semibold text-stone-900 mb-1">{mandat.nom}</h1>
+          <p className="text-stone-500 flex items-center gap-2 text-sm mb-3">
+            <MapPin className="w-4 h-4" />{mandat.adresse}
+          </p>
+          {/* Highlights remontés en badges */}
+          {highlights.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {highlights.slice(0, 5).map((h, i) => (
+                <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium rounded-full">
+                  <Sparkles className="w-3 h-3 text-amber-600" />{h}
+                </span>
+              ))}
+              {highlights.length > 5 && (
+                <span className="inline-flex items-center px-2.5 py-1 bg-cream-100 text-stone-600 text-xs rounded-full">
+                  +{highlights.length - 5}
+                </span>
+              )}
+            </div>
+          )}
         </div>
-        <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
+        <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink flex-shrink-0">
           <Edit2 className="w-4 h-4" /> Modifier
         </button>
       </div>
 
-      {/* Boutons d'export PDF */}
-      <div className="mb-6 pb-6 border-b border-stone-200">
-        <h3 className="text-xs font-medium text-stone-500 uppercase tracking-wide mb-3">Export PDF</h3>
-        <PdfExportButtons mandatId={mandat.id} mandatNom={mandat.nom} isOffMarket={mandat.is_off_market} />
+      {/* ═══ BARRE D'ACTIONS ═══ */}
+      <div className="mb-6 pb-6 border-b border-stone-200 flex items-center gap-4 flex-wrap">
+        {/* Boutons PDF + actions */}
+        <div className="flex-1 min-w-0">
+          <h3 className="text-xs font-medium text-stone-500 uppercase tracking-wide mb-2">Dossier</h3>
+          <div className="flex flex-wrap gap-2 items-center">
+            <PdfExportButtons mandatId={mandat.id} mandatNom={mandat.nom} isOffMarket={mandat.is_off_market} />
+            <button onClick={() => alert('Photos — modal à venir')} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
+              <ImageIcon className="w-4 h-4" /> Photos
+            </button>
+            <button onClick={() => alert('Visite — modal à venir (codes, gardien, etc.)')} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
+              <Eye className="w-4 h-4" /> Visite
+            </button>
+            <button onClick={() => alert('Mandant — modal à venir (contact, coordonnées)')} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
+              <UserIcon className="w-4 h-4" /> Mandant
+            </button>
+          </div>
+        </div>
+
+        {/* Badge mandat avec lumière publié */}
+        <div className="flex items-center gap-2">
+          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium ${commColor}`}>
+            <span>{mandat.commercialisation}</span>
+            <div className="flex items-center gap-1" title={isPublished ? 'Publié sur les portails' : 'Non publié'}>
+              <div className={`w-2 h-2 rounded-full ${isPublished ? 'bg-emerald-500 animate-pulse' : 'bg-stone-300'}`} />
+            </div>
+          </div>
+        </div>
+
+        {/* Avatar owner */}
+        <div className="flex flex-col items-center">
+          <div className="text-[10px] uppercase text-stone-500 tracking-wide mb-1">Resp.</div>
+          <div className="w-10 h-10 rounded-full gradient-sage-dark flex items-center justify-center text-white font-medium text-sm shadow-luxe" title={`Responsable : ${mandat.owner || '—'}`}>
+            {ownerInitials}
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-6">
         <div className="col-span-2 space-y-4">
+          {/* ═══ ANALYSE FINANCIÈRE — REMONTÉE EN PREMIÈRE POSITION ═══ */}
           <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-display text-xl font-semibold text-stone-900">Commercialisation</h2>
-              <CommerceBadge comm={mandat.commercialisation} dateSignature={mandat.dateSignature} />
-            </div>
+            <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Analyse financière</h2>
             <div className="grid grid-cols-4 gap-4">
-              <DetailItem label="Statut" value={<StatutBadge statut={mandat.statut} />} />
-              <DetailItem label="Deals actifs" value={mandatDeals.filter(d => !['Perdu','Refusé'].includes(d.statut)).length} />
+              <DetailItem label="Prix net vendeur" value={formatPrix(mandat.prix)} highlight />
+              <DetailItem label="Prix au m²" value={mandat.prixM2 ? `${parseFloat(mandat.prixM2).toLocaleString('fr')}€` : '—'} />
+              <DetailItem label="Loyers annuels" value={mandat.loyersAnnuels ? `${parseFloat(mandat.loyersAnnuels).toLocaleString('fr')}€` : '—'} />
+              <DetailItem label="Rendement" value={parseFloat(mandat.rendement) > 0 ? `${mandat.rendement}%` : '—'} highlight />
+            </div>
+            <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t border-cream">
+              <DetailItem label="Surface" value={mandat.surface ? `${mandat.surface} m²` : '—'} />
+              <DetailItem label="Type" value={mandat.type} />
               <DetailItem label="Owner" value={mandat.owner} />
               <DetailItem label="Créé le" value={mandat.createdAt ? new Date(mandat.createdAt).toLocaleDateString('fr-FR') : '—'} />
             </div>
           </div>
 
+          {/* ═══ STATISTIQUES DU DOSSIER ═══ */}
           <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-            <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Analyse financière</h2>
-            <div className="grid grid-cols-4 gap-4">
-              <DetailItem label="Prix net vendeur" value={formatPrix(mandat.prix)} highlight />
-              <DetailItem label="Prix au m²" value={`${parseFloat(mandat.prixM2 || 0).toLocaleString('fr')}€`} />
-              <DetailItem label="Loyers annuels" value={`${parseFloat(mandat.loyersAnnuels || 0).toLocaleString('fr')}€`} />
-              <DetailItem label="Rendement" value={`${mandat.rendement}%`} highlight />
+            <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-sage-dark" />Statistiques du dossier
+            </h2>
+            <div className="grid grid-cols-4 gap-3">
+              <KpiBox label="Rapprochements" value={nbRapprochements} icon={Handshake} />
+              <KpiBox label="Clients potentiels" value={nbMatching} icon={Users} sublabel="(matching)" />
+              <KpiBox label="Offres" value={nbOffres} icon={CheckCircle2} />
+              <KpiBox label="Visites" value={nbVisites} icon={Eye} />
             </div>
           </div>
 
+          {/* ═══ TÂCHES LIÉES AU MANDAT ═══ */}
+          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
+            <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
+              <CheckSquare className="w-5 h-5 text-sage-dark" />Tâches liées au mandat
+              {mandatTodos.length > 0 && (
+                <span className="text-sm text-stone-500 font-normal">({mandatTodos.filter(t => t.statut !== 'Terminé').length} en cours)</span>
+              )}
+            </h2>
+            {mandatTodos.length === 0 ? (
+              <p className="text-sm text-stone-500 italic">Aucune tâche liée à ce mandat</p>
+            ) : (
+              <div className="space-y-2">
+                {mandatTodos.slice(0, 8).map(t => {
+                  const enRetard = t.echeance && new Date(t.echeance) < new Date() && t.statut !== 'Terminé';
+                  return (
+                    <div key={t.id} className={`flex items-start gap-3 p-3 rounded-lg ${
+                      t.statut === 'Terminé' ? 'bg-stone-50 opacity-60' : 'bg-cream-50/50 hover:bg-cream-50'
+                    }`}>
+                      <div className={`w-4 h-4 rounded border-2 flex-shrink-0 mt-0.5 ${
+                        t.statut === 'Terminé' ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'
+                      }`}>
+                        {t.statut === 'Terminé' && <Check className="w-2.5 h-2.5 text-white mx-auto" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-sm font-medium ${t.statut === 'Terminé' ? 'line-through text-stone-500' : 'text-stone-900'}`}>{t.titre}</div>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                            t.priorite === 'Haute' ? 'bg-red-50 text-red-700' : t.priorite === 'Moyenne' ? 'bg-sage-50 text-sage-dark' : 'bg-cream-100 text-ink/80'
+                          }`}>{t.priorite}</span>
+                          {t.echeance && (
+                            <span className={`text-xs flex items-center gap-1 ${enRetard ? 'text-red-600 font-medium' : 'text-stone-500'}`}>
+                              <Calendar className="w-3 h-3" />{new Date(t.echeance).toLocaleDateString('fr-FR')}
+                            </span>
+                          )}
+                          {t.assignee && <span className="text-xs text-stone-500">· {t.assignee}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {mandatTodos.length > 8 && (
+                  <p className="text-xs text-stone-500 text-center pt-2">... et {mandatTodos.length - 8} de plus</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ═══ ALERTES (si existantes) ═══ */}
           {alerts.length > 0 && (
             <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-              <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-sage-dark" />Points d'attention</h2>
+              <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-sage-dark" />Points d'attention
+              </h2>
               <div className="space-y-2">
                 {alerts.map((a, i) => {
                   const cfg = { critical: 'border-red-200 bg-red-50 text-red-800', warning: 'border-sage-light bg-sage-50 text-sage-darker', info: 'border-blue-200 bg-blue-50 text-blue-800' }[a.type] || 'border-stone-200 bg-stone-50 text-stone-800';
@@ -1302,63 +1434,24 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload }) {
             </div>
           )}
 
-          {highlights.length > 0 && (
-            <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-              <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2"><Sparkles className="w-5 h-5 text-sage-dark" />Atouts commerciaux</h2>
-              <ul className="space-y-1.5">
-                {highlights.map((h, i) => (
-                  <li key={i} className="text-sm text-stone-700 flex items-start gap-2"><Check className="w-4 h-4 mt-0.5 flex-shrink-0 text-emerald-600" /><span>{h}</span></li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Section Photos du bien */}
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-            <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
-              <ImageIcon className="w-5 h-5 text-sage-dark" />Photos du bien
-            </h2>
-            <PhotoUploader 
-              mandatId={mandat.id}
-              photos={mandat.photos || []}
-              onChange={async (newPhotos) => {
-                await supabase.from('mandats').update({ photos: newPhotos }).eq('id', mandat.id);
-                if (typeof reload === 'function') reload();
-              }}
-              storage="supabase"
-            />
-          </div>
-
+          {/* ═══ DESCRIPTION ═══ */}
           {mandat.description && (
             <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
               <h2 className="font-display text-xl font-semibold text-stone-900 mb-3">Description</h2>
-              <p className="text-stone-700 text-sm leading-relaxed">{mandat.description}</p>
+              <p className="text-stone-700 text-sm leading-relaxed whitespace-pre-line">{mandat.description}</p>
             </div>
           )}
         </div>
 
+        {/* ═══ COLONNE DROITE — RÉSERVÉE ASSISTANT IA ═══ */}
         <div className="space-y-4">
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-            <h3 className="font-display text-lg font-semibold text-stone-900 mb-3">Contact</h3>
-            <div className="space-y-2 text-sm">
-              <div>
-                <div className="text-xs text-stone-500 uppercase">Propriétaire</div>
-                <div className="font-medium text-stone-900">{mandat.contact || '—'}</div>
-              </div>
-              {mandat.tel && <div className="flex items-center gap-2 text-stone-700"><Phone className="w-3.5 h-3.5" />{mandat.tel}</div>}
+          <div className="bg-gradient-to-br from-sage-50 to-cream-50 rounded-xl p-6 border-2 border-dashed border-sage-light min-h-[400px] flex flex-col items-center justify-center text-center">
+            <div className="w-14 h-14 rounded-full gradient-sage-dark flex items-center justify-center mb-3">
+              <Sparkles className="w-7 h-7 text-white" />
             </div>
-          </div>
-
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-            <h3 className="font-display text-lg font-semibold text-stone-900 mb-3">Documents</h3>
-            <div className="space-y-1.5">
-              {mandat.docs && mandat.docs.length > 0 ? mandat.docs.map((doc, i) => (
-                <div key={i} className="flex items-center gap-2 p-2 rounded-lg hover:bg-stone-50 text-sm text-stone-700">
-                  <FileText className="w-4 h-4 text-stone-400" />
-                  <span className="truncate">{doc}</span>
-                </div>
-              )) : <p className="text-sm text-stone-500 italic">Aucun document</p>}
-            </div>
+            <h3 className="font-display text-lg font-semibold text-stone-900 mb-2">Assistant IA</h3>
+            <p className="text-xs text-stone-600 mb-4 max-w-[200px]">Stratégie, angle commercial, cible acquéreur, points forts, objections...</p>
+            <div className="text-[10px] uppercase tracking-wider text-sage-dark font-medium">Bientôt disponible</div>
           </div>
         </div>
       </div>
@@ -1366,6 +1459,19 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload }) {
   );
 }
 
+// Composant KPI réutilisable
+function KpiBox({ label, value, icon: Icon, sublabel }) {
+  return (
+    <div className="bg-cream-50 rounded-lg p-4 border border-cream-dark">
+      <div className="flex items-start justify-between mb-2">
+        <Icon className="w-4 h-4 text-sage-dark" />
+        <div className="font-display text-2xl font-semibold text-stone-900 leading-none">{value}</div>
+      </div>
+      <div className="text-xs text-stone-700 font-medium">{label}</div>
+      {sublabel && <div className="text-[10px] text-stone-500 mt-0.5">{sublabel}</div>}
+    </div>
+  );
+}
 // === CLIENTS ===
 function ClientsTab({ clients, reload, mandats, deals, interactions }) {
   const { user } = useAuth();
