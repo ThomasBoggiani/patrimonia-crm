@@ -1262,8 +1262,8 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
     'Off-market': 'bg-stone-100 text-stone-700 border-stone-200'
   }[mandat.commercialisation] || 'bg-stone-100 text-stone-700 border-stone-200';
 
-  // Avatar owner
-  const ownerInitials = (mandat.owner || '?').toUpperCase().slice(0, 2);
+  {/* Avatar owner avec dropdown de réassignement */}
+        <OwnerSelector mandat={mandat} reload={reload} />
 
   return (
     <div className="p-8 max-w-7xl">
@@ -1472,6 +1472,86 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
   );
 }
 
+// Composant : sélecteur de responsable (dropdown réassignable)
+function OwnerSelector({ mandat, reload }) {
+  const [open, setOpen] = useState(false);
+  const [profiles, setProfiles] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const ownerInitials = (mandat.owner || '?').toUpperCase().slice(0, 2);
+
+  useEffect(() => {
+    supabase.from('profiles').select('id, prenom, nom').eq('actif', true)
+      .then(({ data }) => setProfiles(data || []));
+  }, []);
+
+  // Fermer au clic extérieur
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (!e.target.closest('.owner-selector')) setOpen(false);
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [open]);
+
+  const reassign = async (newInitials) => {
+    if (newInitials === mandat.owner) {
+      setOpen(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await supabase.from('mandats').update({ owner: newInitials }).eq('id', mandat.id);
+      if (reload) reload();
+      setOpen(false);
+    } catch (e) {
+      console.error('Erreur réassignement:', e);
+      alert('Erreur lors du réassignement');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const getInitials = (p) => `${(p.prenom || '').charAt(0)}${(p.nom || '').charAt(0)}`.toUpperCase() || '??';
+
+  return (
+    <div className="flex flex-col items-center owner-selector relative">
+      <div className="text-[10px] uppercase text-stone-500 tracking-wide mb-1">Resp.</div>
+      <button onClick={() => setOpen(!open)} disabled={saving}
+        className="w-10 h-10 rounded-full gradient-sage-dark flex items-center justify-center text-white font-medium text-sm shadow-luxe hover:opacity-90 disabled:opacity-50 cursor-pointer relative"
+        title={`Responsable : ${mandat.owner || '—'} — clic pour réassigner`}>
+        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : ownerInitials}
+        <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-white rounded-full flex items-center justify-center shadow border border-cream-dark">
+          <ChevronRight className="w-2.5 h-2.5 text-stone-600 rotate-90" />
+        </div>
+      </button>
+      {open && (
+        <div className="absolute top-full mt-2 right-0 bg-white rounded-lg shadow-luxe-hover border border-cream-dark py-1 z-30 min-w-[180px]">
+          <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-stone-500 border-b border-cream-dark">
+            Réassigner à
+          </div>
+          {profiles.map(p => {
+            const initials = getInitials(p);
+            const isCurrent = initials === mandat.owner;
+            return (
+              <button key={p.id} onClick={() => reassign(initials)}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-cream-50 ${isCurrent ? 'bg-sage-50' : ''}`}>
+                <div className="w-7 h-7 rounded-full gradient-sage-dark flex items-center justify-center text-white text-[10px] font-medium flex-shrink-0">
+                  {initials}
+                </div>
+                <span className="flex-1 text-stone-800">{p.prenom} {p.nom}</span>
+                {isCurrent && <Check className="w-3.5 h-3.5 text-sage-dark" />}
+              </button>
+            );
+          })}
+          {profiles.length === 0 && (
+            <div className="px-3 py-2 text-xs text-stone-500 italic">Aucun commercial actif</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 // Composant KPI réutilisable
 function KpiBox({ label, value, icon: Icon, sublabel }) {
   return (
