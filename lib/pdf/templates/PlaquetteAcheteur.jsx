@@ -63,8 +63,10 @@ function buildTeamForPlaquette({ mandat, sender, allMembers }) {
   return team;
 }
 
-function TeamCard({ member, palette, size = 100 }) {
-  const photoSize = size;
+function TeamCard({ member, palette, size = 100, compact = false }) {
+  const photoSize = compact ? 80 : size;
+  const marginBottomCard = compact ? 6 : 12;
+  const marginBottomPhoto = compact ? 6 : 10;
   const initials = (member?.name || '?')
     .split(' ')
     .map(s => s[0])
@@ -74,7 +76,7 @@ function TeamCard({ member, palette, size = 100 }) {
     .toUpperCase();
 
   return (
-    <View style={{ alignItems: 'center', maxWidth: 180, marginHorizontal: 10, marginBottom: 12 }}>
+    <View style={{ alignItems: 'center', maxWidth: 180, marginHorizontal: 10, marginBottom: marginBottomCard }}>
       {member.photo ? (
         <Image
           src={member.photo}
@@ -83,7 +85,7 @@ function TeamCard({ member, palette, size = 100 }) {
             height: photoSize,
             borderRadius: photoSize / 2,
             objectFit: 'cover',
-            marginBottom: 10,
+            marginBottom: marginBottomPhoto,
           }}
         />
       ) : (
@@ -94,7 +96,7 @@ function TeamCard({ member, palette, size = 100 }) {
           backgroundColor: palette.accent || '#9CAF88',
           alignItems: 'center',
           justifyContent: 'center',
-          marginBottom: 10,
+          marginBottom: marginBottomPhoto,
         }}>
           <Text style={{
             color: '#FFFFFF',
@@ -147,7 +149,7 @@ export default function PlaquetteAcheteur({
   const palette = isOffMarket ? COLORS.offmarket : COLORS.standard;
 
   const photos = normalizePhotos(mandat?.photos);
-  const photoChunks = chunkPhotos(photos, 6);
+  const photoChunks = chunkPhotos(photos, 9); // 9 photos par page (3×3)
 
   const hasMapImage = !!mandat?.map_image_url;
   const hasAerialImage = !!mandat?.aerial_image_url;
@@ -441,16 +443,16 @@ export default function PlaquetteAcheteur({
         <SectionTitle title="NOTRE ÉQUIPE" isOffMarket={isOffMarket} />
 
         {team.length > 0 && (
-          <View style={{ marginTop: 20, paddingHorizontal: 20 }}>
+          <View style={{ marginTop: 12, paddingHorizontal: 20 }}>
             {dossier.length > 0 && (
-              <View style={{ marginBottom: 20 }}>
+              <View style={{ marginBottom: 12 }}>
                 <Text style={{
-                  fontSize: 11,
+                  fontSize: 10,
                   fontFamily: 'Helvetica-Bold',
                   color: palette.accent || '#9CAF88',
                   textTransform: 'uppercase',
                   letterSpacing: 1.5,
-                  marginBottom: 16,
+                  marginBottom: 10,
                   textAlign: 'center',
                 }}>
                   Pour ce dossier
@@ -461,11 +463,69 @@ export default function PlaquetteAcheteur({
                   flexWrap: 'wrap',
                 }}>
                   {dossier.map((member, i) => (
-                    <TeamCard key={`d-${i}`} member={member} palette={palette} />
+                    <TeamCard key={`d-${i}`} member={member} palette={palette} compact />
                   ))}
                 </View>
               </View>
             )}
+
+            {dossier.length > 0 && autres.length > 0 && (
+              <View style={{
+                borderBottomWidth: 0.5,
+                borderBottomColor: palette.muted || '#999',
+                marginVertical: 8,
+                marginHorizontal: 60,
+              }} />
+            )}
+
+            {autres.length > 0 && (() => {
+              const isBossInAutres = (m) => {
+                const initials = (m?.name || '').split(' ').map(s => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+                return initials === 'TE';
+              };
+              const bossEntry = autres.find(isBossInAutres);
+              const autresSansBoss = autres.filter(m => !isBossInAutres(m));
+
+              return (
+                <View style={{ marginTop: 8 }}>
+                  <Text style={{
+                    fontSize: 10,
+                    fontFamily: 'Helvetica-Bold',
+                    color: palette.accent || '#9CAF88',
+                    textTransform: 'uppercase',
+                    letterSpacing: 1.5,
+                    marginBottom: 10,
+                    textAlign: 'center',
+                  }}>
+                    À votre service
+                  </Text>
+
+                  {bossEntry && (
+                    <View style={{
+                      flexDirection: 'row',
+                      justifyContent: 'center',
+                      marginBottom: autresSansBoss.length > 0 ? 8 : 0,
+                    }}>
+                      <TeamCard member={bossEntry} palette={palette} compact />
+                    </View>
+                  )}
+
+                  {autresSansBoss.length > 0 && (
+                    <View style={{
+                      flexDirection: 'row',
+                      justifyContent: 'center',
+                      flexWrap: 'wrap',
+                    }}>
+                      {autresSansBoss.map((member, i) => (
+                        <TeamCard key={`a-${i}`} member={member} palette={palette} compact />
+                      ))}
+                    </View>
+                  )}
+                </View>
+              );
+            })()}
+          </View>
+        )}
 
             {dossier.length > 0 && autres.length > 0 && (
               <View style={{
