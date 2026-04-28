@@ -14,6 +14,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
 import VoiceNoteModal from './VoiceNoteModal';
+import MandatAIAssistant from './MandatAIAssistant';
 import SmartImportModal from './SmartImportModal';
 import GlobalVoiceModal from './GlobalVoiceModal';
 import AgendaTab from './AgendaTab';
@@ -1463,6 +1464,11 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
       {openModal === 'mandant' && (
         <MandantModal mandat={mandat} onClose={() => setOpenModal(null)} onUpdate={reload} />
       )}
+    {/* Quelque chose */}
+
+      {/* Assistant IA — sidebar fixe en bas à droite */}
+      <MandatAIAssistant mandat={mandat} />
+
     </div>
   );
 }
