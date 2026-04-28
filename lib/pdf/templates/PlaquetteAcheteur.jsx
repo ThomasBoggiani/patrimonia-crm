@@ -41,6 +41,7 @@ import {
   chunkPhotos,
   ensureAbsoluteUrl,
 } from '../helpers';
+import { LOGO_IP_BASE64 } from '../logo-base64';
 
 // ─────────────────────────────────────────────────────────────────
 // Construction de l'équipe affichée — DYNAMIQUE
@@ -219,7 +220,7 @@ export default function PlaquetteAcheteur({
       {/* PAGE 1 : COUVERTURE                     */}
       {/* ═══════════════════════════════════════ */}
       <Page size="A4" style={styles.coverPage}>
-        {logoUrl && <Image src={logoUrl} style={styles.coverLogoLarge} />}
+        <Image src={LOGO_IP_BASE64} style={styles.coverLogoLarge} />
         
         {photos[0] ? (
           <Image src={photos[0]} style={styles.coverPhoto} />
