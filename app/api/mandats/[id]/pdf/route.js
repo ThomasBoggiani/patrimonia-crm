@@ -1,9 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════
-// app/api/mandats/[id]/pdf/route.js — VERSION FINALE v12.2.2
-// 
+// app/api/mandats/[id]/pdf/route.js — VERSION v13.1
+//
 // Auth par token Supabase passé dans l'URL (param ?token=...)
-// Le token est récupéré côté client via supabase.auth.getSession()
-// 
+//
 // Usage :
 //   GET /api/mandats/{uuid}/pdf?template=plaquette&token=eyJhbG...
 //   GET /api/mandats/{uuid}/pdf?template=rapport&start=...&end=...&token=...
@@ -31,98 +30,14 @@ const supabaseAdmin = createClient(
 
 async function verifyToken(token) {
   if (!token) return null;
-  
-  // On utilise le client admin pour vérifier le token
-  // (Supabase admin peut décoder n'importe quel JWT signé par le projet)
   const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-  
   if (error || !user) {
     console.warn('[/api/mandats/[id]/pdf] Token invalide:', error?.message);
     return null;
   }
-  
   return user;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// BUILD TEAM POUR PAGE ÉQUIPE PLAQUETTE
-// Retourne un array [{ name, role, email, phone, photo, isBoss, position }]
-// - Boss (Thomas Ezquerra) → toujours au centre
-// - Détenteur du mandat → à gauche (position: 'left')
-// - Expéditeur (conseiller connecté) → à droite (position: 'right')
-// - Dédoublonne si 2 rôles tombent sur la même personne
-// ─────────────────────────────────────────────────────────────────
-
-async function buildTeamForPlaquette({ mandatProfileId, senderUserId }) {
-  // 1. Charger tous les profils actifs
-  const { data: profiles } = await supabaseAdmin
-    .from('profiles')
-    .select('id, prenom, nom, email, tel, fonction, photo_url')
-    .eq('actif', true);
-
-  if (!profiles || profiles.length === 0) {
-    console.warn('[buildTeamForPlaquette] Aucun profil actif trouvé');
-    return [];
-  }
-
-  // Helper pour transformer un profil en objet team member
-  const toMember = (p, extra = {}) => ({
-    name: `${p.prenom || ''} ${p.nom || ''}`.trim() || 'Conseiller',
-    role: p.fonction || 'Conseiller',
-    email: p.email || null,
-    phone: p.tel || null,
-    photo: p.photo_url || null,
-    profileId: p.id,
-    ...extra,
-  });
-
-  // 2. Trouver le boss : Thomas Ezquerra
-  const boss = profiles.find(p =>
-    (p.prenom || '').toLowerCase() === 'thomas' &&
-    (p.nom || '').toLowerCase() === 'ezquerra'
-  );
-
-  // 3. Trouver le détenteur du mandat
-  const owner = mandatProfileId
-    ? profiles.find(p => p.id === mandatProfileId)
-    : null;
-
-  // 4. Trouver l'expéditeur (conseiller connecté)
-  const sender = senderUserId
-    ? profiles.find(p => p.id === senderUserId)
-    : null;
-
-  // 5. Construire l'équipe en dédoublonnant
-  const team = [];
-  const usedIds = new Set();
-
-  // Boss au centre (priorité absolue)
-  if (boss) {
-    team.push(toMember(boss, { isBoss: true, position: 'center' }));
-    usedIds.add(boss.id);
-  }
-
-  // Détenteur à gauche (sauf si c'est déjà le boss)
-  if (owner && !usedIds.has(owner.id)) {
-    team.push(toMember(owner, { isBoss: false, position: 'left' }));
-    usedIds.add(owner.id);
-  }
-
-  // Expéditeur à droite (sauf si c'est déjà boss ou détenteur)
-  if (sender && !usedIds.has(sender.id)) {
-    team.push(toMember(sender, { isBoss: false, position: 'right' }));
-    usedIds.add(sender.id);
-  }
-
-  console.log('[buildTeamForPlaquette] Équipe construite :', JSON.stringify(team.map(m => ({
-    name: m.name,
-    isBoss: m.isBoss,
-    position: m.position,
-    hasPhoto: !!m.photo,
-  })), null, 2));
-
-  return team;
-}
 // ─────────────────────────────────────────────────────────────────
 // LOAD MANDAT + CONSEILLER
 // ─────────────────────────────────────────────────────────────────
@@ -145,7 +60,7 @@ async function loadMandatData(mandatId) {
       .select('id, email, prenom, nom, tel')
       .eq('id', mandat.profile_id)
       .maybeSingle();
-    
+
     if (profile) {
       conseiller = {
         ...profile,
@@ -173,7 +88,6 @@ async function loadVendeurStats(mandatId, period) {
   if (!period?.start || !period?.end) {
     return { stats: {}, events: [] };
   }
-  // À enrichir plus tard avec les vraies tables (visites, deals…)
   return {
     stats: {
       nb_visites: 0,
@@ -193,10 +107,9 @@ function getLogoUrl(request, isOffMarket) {
   const host = request.headers.get('host') || 'patrimonia-crm.vercel.app';
   const protocol = host.includes('localhost') ? 'http' : 'https';
   const baseUrl = `${protocol}://${host}`;
-  // Le nouveau logo épuré sage est utilisé pour les 2 modes
-  // (le mode off-market sera ajusté visuellement par le palette noir/or)
   return `${baseUrl}/logo-ip-sage.png`;
 }
+
 // ─────────────────────────────────────────────────────────────────
 // HANDLER GET
 // ─────────────────────────────────────────────────────────────────
@@ -244,17 +157,58 @@ export async function GET(request, { params }) {
     let filename;
 
     if (template === 'plaquette') {
-      // Construction de l'array team pour la page équipe
-      const team = await buildTeamForPlaquette({
-        mandatProfileId: mandat.profile_id,
-        senderUserId: user.id,
-      });
+      // Construction du dictionnaire des membres pour la page équipe
+      const { data: profiles, error: pErr } = await supabaseAdmin
+        .from('profiles')
+        .select('id, prenom, nom, email, tel, fonction, photo_url')
+        .eq('actif', true);
+
+      console.log('[PDF Plaquette] profiles count =', profiles?.length || 0);
+      if (pErr) console.error('[PDF Plaquette] Erreur profiles query:', pErr.message);
+
+      const teamMembers = {};
+      let ownerProfile = null;
+
+      for (const p of (profiles || [])) {
+        const initials = `${(p.prenom || '').charAt(0)}${(p.nom || '').charAt(0)}`.toUpperCase();
+        if (initials) {
+          teamMembers[initials] = {
+            name: `${p.prenom || ''} ${p.nom || ''}`.trim(),
+            role: p.fonction || 'Conseiller',
+            email: p.email,
+            phone: p.tel,
+            photo: p.photo_url, // null si pas de photo
+          };
+        }
+        // Identifier le détenteur du mandat par profile_id
+        if (mandat.profile_id && p.id === mandat.profile_id) {
+          ownerProfile = p;
+        }
+      }
+
+      // Calculer les initiales du détenteur du mandat
+      const ownerInitials = ownerProfile
+        ? `${(ownerProfile.prenom || '').charAt(0)}${(ownerProfile.nom || '').charAt(0)}`.toUpperCase()
+        : '';
+      const mandatEnriched = { ...mandat, ownerInitials };
+
+      // Enrichir l'objet conseiller avec ses initiales
+      const conseillerEnriched = conseiller ? {
+        ...conseiller,
+        initiales: `${(conseiller.prenom || '').charAt(0)}${(conseiller.nom || '').charAt(0)}`.toUpperCase(),
+      } : null;
+
+      // Logs de debug
+      console.log('[PDF Plaquette] mandat.profile_id =', mandat.profile_id);
+      console.log('[PDF Plaquette] ownerInitials =', ownerInitials);
+      console.log('[PDF Plaquette] conseiller.initiales =', conseillerEnriched?.initiales);
+      console.log('[PDF Plaquette] teamMembers keys =', Object.keys(teamMembers));
 
       pdfElement = React.createElement(PlaquetteAcheteur, {
-        mandat,
-        conseiller,
+        mandat: mandatEnriched,
+        conseiller: conseillerEnriched,
         logoUrl,
-        team,
+        teamMembers,
       });
 
       filename = `Plaquette_${slugify(mandat.nom)}.pdf`;
