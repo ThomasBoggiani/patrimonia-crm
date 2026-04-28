@@ -127,7 +127,7 @@ export async function GET(request, { params }) {
     if (template === 'plaquette') {
       const { data: profiles, error: pErr } = await supabaseAdmin
         .from('profiles')
-        .select('id, prenom, nom, email, fonction, photo_url')
+        .select(.select('id, prenom, nom, email, fonction, telephone, photo_url'))
         .eq('actif', true);
 
       if (pErr) console.error('[PDF Plaquette] Profiles query error:', pErr.message);
@@ -143,7 +143,7 @@ export async function GET(request, { params }) {
             name: `${p.prenom || ''} ${p.nom || ''}`.trim(),
             role: p.fonction || 'Conseiller',
             email: p.email,
-            phone: null,
+            phone: p.telephone || null,
             photo: ensureAbsoluteUrl(p.photo_url, request),
           };
         }
@@ -168,10 +168,14 @@ export async function GET(request, { params }) {
         prenom: senderProfile.prenom,
         nom: senderProfile.nom,
         email: senderProfile.email,
+        telephone: senderProfile.telephone,
+        fonction: senderProfile.fonction || 'Conseiller',
+        photo: ensureAbsoluteUrl(senderProfile.photo_url, request),
         full_name: `${senderProfile.prenom || ''} ${senderProfile.nom || ''}`.trim() || 'Conseiller',
         initiales: `${(senderProfile.prenom || '').charAt(0)}${(senderProfile.nom || '').charAt(0)}`.toUpperCase(),
       } : (conseiller ? {
         ...conseiller,
+        photo: ensureAbsoluteUrl(conseiller.photo_url, request),
         initiales: `${(conseiller.prenom || '').charAt(0)}${(conseiller.nom || '').charAt(0)}`.toUpperCase(),
       } : null);
 
