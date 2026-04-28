@@ -1,11 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════
-// lib/pdf/templates/PlaquetteAcheteur.jsx — REFONTE Template I&P v13.1
+// lib/pdf/templates/PlaquetteAcheteur.jsx — v13.2
 //
-// FIX v13.1 : Page équipe robuste
-//   - Layout unifié (plus de conditions length === 1/2/3 qui plantent)
-//   - Bandeau jaune de debug si team est vide
-//   - Fallback : affiche les 3 premiers profils si rien ne match
-//   - Tous les styles inline (pas de dépendance à styles.team*)
+// FIX v13.2 : Page équipe en 2 sections
+//   Section 1 "Pour ce dossier" : titulaire + commercial qui envoie
+//   Section 2 "À votre service" : reste de l'équipe (Thomas E. + autres)
+//   Toutes les photos à la même taille (100×100)
 // ═══════════════════════════════════════════════════════════════════
 
 import React from 'react';
@@ -33,12 +32,8 @@ import {
 } from '../helpers';
 import { LOGO_IP_BASE64 } from '../logo-base64';
 
-// ─────────────────────────────────────────────────────────────────
-// Construction de l'équipe affichée — DYNAMIQUE
-// Retourne { team: [...], debug: {...} }
-// ─────────────────────────────────────────────────────────────────
 function buildTeamForPlaquette({ mandat, sender, allMembers }) {
-  const BOSS_INITIALS = 'TE'; // Thomas Ezquerra
+  const BOSS_INITIALS = 'TE';
   const ownerInitials = (mandat?.ownerInitials || '').toUpperCase();
   const senderInitials = (sender?.initiales || sender?.initials || '').toUpperCase();
 
@@ -73,7 +68,6 @@ function buildTeamForPlaquette({ mandat, sender, allMembers }) {
     seen.add(senderInitials);
   }
 
-  // FALLBACK : si toujours rien, prendre les 3 premiers profils dispo
   if (team.length === 0 && allKeys.length > 0) {
     for (let i = 0; i < Math.min(3, allKeys.length); i++) {
       const k = allKeys[i];
@@ -84,12 +78,8 @@ function buildTeamForPlaquette({ mandat, sender, allMembers }) {
   return { team, debug };
 }
 
-// ─────────────────────────────────────────────────────────────────
-// TeamMember inline — version simplifiée et robuste
-// (on n'utilise PAS le composant externe pour éviter les bugs de styles)
-// ─────────────────────────────────────────────────────────────────
-function TeamCard({ member, large, palette }) {
-  const photoSize = large ? 130 : 100;
+function TeamCard({ member, palette }) {
+  const photoSize = 100;
   const initials = (member?.name || '?')
     .split(' ')
     .map(s => s[0])
@@ -99,7 +89,7 @@ function TeamCard({ member, large, palette }) {
     .toUpperCase();
 
   return (
-    <View style={{ alignItems: 'center', maxWidth: 180, marginHorizontal: 6 }}>
+    <View style={{ alignItems: 'center', maxWidth: 160, marginHorizontal: 10, marginBottom: 12 }}>
       {member.photo ? (
         <Image
           src={member.photo}
@@ -108,7 +98,7 @@ function TeamCard({ member, large, palette }) {
             height: photoSize,
             borderRadius: photoSize / 2,
             objectFit: 'cover',
-            marginBottom: 12,
+            marginBottom: 10,
           }}
         />
       ) : (
@@ -119,11 +109,11 @@ function TeamCard({ member, large, palette }) {
           backgroundColor: palette.accent || '#9CAF88',
           alignItems: 'center',
           justifyContent: 'center',
-          marginBottom: 12,
+          marginBottom: 10,
         }}>
           <Text style={{
             color: '#FFFFFF',
-            fontSize: large ? 36 : 28,
+            fontSize: 28,
             fontFamily: 'Helvetica-Bold',
           }}>
             {initials}
@@ -131,7 +121,7 @@ function TeamCard({ member, large, palette }) {
         </View>
       )}
       <Text style={{
-        fontSize: large ? 13 : 11,
+        fontSize: 11,
         fontFamily: 'Helvetica-Bold',
         textAlign: 'center',
         marginBottom: 2,
@@ -143,8 +133,8 @@ function TeamCard({ member, large, palette }) {
         fontSize: 9,
         color: palette.muted || '#666',
         textAlign: 'center',
-        marginBottom: 6,
-        maxWidth: 160,
+        marginBottom: 4,
+        maxWidth: 150,
       }}>
         {member.role || ''}
       </Text>
@@ -153,18 +143,8 @@ function TeamCard({ member, large, palette }) {
           fontSize: 8,
           color: palette.text || '#333',
           textAlign: 'center',
-          marginBottom: 1,
         }}>
           {member.email}
-        </Text>
-      )}
-      {member.phone && (
-        <Text style={{
-          fontSize: 8,
-          color: palette.text || '#333',
-          textAlign: 'center',
-        }}>
-          {member.phone}
         </Text>
       )}
     </View>
@@ -191,7 +171,6 @@ export default function PlaquetteAcheteur({
   const hasPlans = mandat?.plans && Array.isArray(mandat.plans) && mandat.plans.length > 0;
   const hasPhotos = photos.length > 0;
 
-  // Sommaire dynamique
   const tocItems = [];
   let p = 3;
   tocItems.push({ label: 'LE BIEN', page: `P. ${p++}` });
@@ -210,7 +189,6 @@ export default function PlaquetteAcheteur({
   }
   tocItems.push({ label: 'NOTRE EQUIPE', page: `P. ${p++}` });
 
-  // Construction de l'équipe
   const teamResult = buildTeamForPlaquette({
     mandat,
     sender: conseiller,
@@ -219,7 +197,13 @@ export default function PlaquetteAcheteur({
   const team = teamResult.team;
   const teamDebug = teamResult.debug;
 
-  // Cards "Le bien"
+  const dossier = team.filter(m => m.position === 'left' || m.position === 'right' || m.position === 'fallback');
+  const dossierKeys = new Set(dossier.map(m => `${m.name}-${m.email}`));
+  const autres = Object.values(teamMembers || {}).filter(m => {
+    const key = `${m.name}-${m.email}`;
+    return !dossierKeys.has(key);
+  });
+
   const cards = [];
   if (mandat?.surface && parseFloat(mandat.surface) > 0) {
     cards.push({
@@ -248,7 +232,6 @@ export default function PlaquetteAcheteur({
     cards.push({ number: mandat.nb_lots, label: 'Lots' });
   }
 
-  // Données financières
   const honoraires = mandat?.honoraires_charge && mandat?.honoraires_montant
     ? mandat.honoraires_montant
     : null;
@@ -289,7 +272,6 @@ export default function PlaquetteAcheteur({
       author="Immeubles & Patrimoine"
       subject="Plaquette de présentation"
     >
-      {/* PAGE 1 : COUVERTURE */}
       <Page size="A4" style={styles.coverPage}>
         <Image src={LOGO_IP_BASE64} style={styles.coverLogoLarge} />
         {photos[0] ? (
@@ -319,7 +301,6 @@ export default function PlaquetteAcheteur({
         <Text style={styles.coverWebsite}>www.immeubles-patrimoine.fr</Text>
       </Page>
 
-      {/* PAGE 2 : SOMMAIRE */}
       <Page size="A4" style={styles.page}>
         <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
         <SectionTitle title="SOMMAIRE" isOffMarket={isOffMarket} />
@@ -329,7 +310,6 @@ export default function PlaquetteAcheteur({
         <PageFooter pageNumber={2} isOffMarket={isOffMarket} />
       </Page>
 
-      {/* PAGE 3 : LE BIEN */}
       <Page size="A4" style={styles.page}>
         <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
         <SectionTitle title="LE BIEN" isOffMarket={isOffMarket} />
@@ -348,7 +328,6 @@ export default function PlaquetteAcheteur({
         <PageFooter pageNumber={3} isOffMarket={isOffMarket} />
       </Page>
 
-      {/* PAGE SITUATION & TRANSPORTS */}
       {hasMapImage && (
         <Page size="A4" style={styles.page}>
           <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
@@ -367,7 +346,6 @@ export default function PlaquetteAcheteur({
         </Page>
       )}
 
-      {/* PAGE VUE AÉRIENNE */}
       {hasAerialImage && (
         <Page size="A4" style={styles.page}>
           <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
@@ -388,7 +366,6 @@ export default function PlaquetteAcheteur({
         </Page>
       )}
 
-      {/* PAGE CADASTRE */}
       {hasCadastreImage && (
         <Page size="A4" style={styles.page}>
           <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
@@ -403,7 +380,6 @@ export default function PlaquetteAcheteur({
         </Page>
       )}
 
-      {/* PAGE ÉTAT LOCATIF */}
       {hasEtatLocatif && (
         <Page size="A4" style={styles.page}>
           <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
@@ -435,7 +411,6 @@ export default function PlaquetteAcheteur({
         </Page>
       )}
 
-      {/* PAGE INFORMATIONS FINANCIÈRES */}
       <Page size="A4" style={styles.page}>
         <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
         <SectionTitle
@@ -447,7 +422,6 @@ export default function PlaquetteAcheteur({
         <PageFooter isOffMarket={isOffMarket} />
       </Page>
 
-      {/* PAGES PHOTOS */}
       {photoChunks.map((chunk, pageIndex) => (
         <Page key={`photos-${pageIndex}`} size="A4" style={styles.page}>
           <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
@@ -462,7 +436,6 @@ export default function PlaquetteAcheteur({
         </Page>
       ))}
 
-      {/* PAGES PLANS */}
       {hasPlans && mandat.plans.map((plan, i) => (
         <Page key={`plan-${i}`} size="A4" style={styles.page}>
           <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
@@ -480,14 +453,10 @@ export default function PlaquetteAcheteur({
         </Page>
       ))}
 
-      {/* ═══════════════════════════════════════ */}
-      {/* PAGE NOTRE ÉQUIPE — version unifiée    */}
-      {/* ═══════════════════════════════════════ */}
       <Page size="A4" style={styles.page}>
         <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
         <SectionTitle title="NOTRE ÉQUIPE" isOffMarket={isOffMarket} />
 
-        {/* Bandeau de debug si team est vide */}
         {team.length === 0 && (
           <View style={{
             margin: 30,
@@ -510,35 +479,71 @@ export default function PlaquetteAcheteur({
               Sender key : "{teamDebug.senderKey}" — trouvé : {teamDebug.senderFound ? 'OUI' : 'NON'}
             </Text>
             <Text style={{ fontSize: 9 }}>
-              Clés disponibles dans teamMembers : {teamDebug.allKeys.join(', ') || '(VIDE — pas de profils chargés)'}
+              Clés disponibles dans teamMembers : {teamDebug.allKeys.join(', ') || '(VIDE)'}
             </Text>
           </View>
         )}
 
-        {/* Layout unifié pour 1, 2 ou 3 personnes */}
         {team.length > 0 && (
-          <View style={{
-            flexDirection: 'row',
-            justifyContent: 'center',
-            alignItems: 'flex-start',
-            marginTop: 40,
-            paddingHorizontal: 20,
-            flexWrap: 'wrap',
-          }}>
-            {/* Ordre d'affichage : left → center → right */}
-            {[
-              team.find(m => m.position === 'left'),
-              team.find(m => m.position === 'center' || m.isBoss),
-              team.find(m => m.position === 'right'),
-              ...(team.filter(m => m.position === 'fallback')),
-            ].filter(Boolean).map((member, i) => (
-              <TeamCard
-                key={i}
-                member={member}
-                large={member.isBoss}
-                palette={palette}
-              />
-            ))}
+          <View style={{ marginTop: 20, paddingHorizontal: 20 }}>
+            {dossier.length > 0 && (
+              <View style={{ marginBottom: 20 }}>
+                <Text style={{
+                  fontSize: 11,
+                  fontFamily: 'Helvetica-Bold',
+                  color: palette.accent || '#9CAF88',
+                  textTransform: 'uppercase',
+                  letterSpacing: 1.5,
+                  marginBottom: 16,
+                  textAlign: 'center',
+                }}>
+                  Pour ce dossier
+                </Text>
+                <View style={{
+                  flexDirection: 'row',
+                  justifyContent: 'center',
+                  flexWrap: 'wrap',
+                }}>
+                  {dossier.map((member, i) => (
+                    <TeamCard key={`d-${i}`} member={member} palette={palette} />
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {dossier.length > 0 && autres.length > 0 && (
+              <View style={{
+                borderBottomWidth: 0.5,
+                borderBottomColor: palette.muted || '#999',
+                marginVertical: 16,
+                marginHorizontal: 60,
+              }} />
+            )}
+
+            {autres.length > 0 && (
+              <View style={{ marginTop: 16 }}>
+                <Text style={{
+                  fontSize: 11,
+                  fontFamily: 'Helvetica-Bold',
+                  color: palette.accent || '#9CAF88',
+                  textTransform: 'uppercase',
+                  letterSpacing: 1.5,
+                  marginBottom: 16,
+                  textAlign: 'center',
+                }}>
+                  À votre service
+                </Text>
+                <View style={{
+                  flexDirection: 'row',
+                  justifyContent: 'center',
+                  flexWrap: 'wrap',
+                }}>
+                  {autres.map((member, i) => (
+                    <TeamCard key={`a-${i}`} member={member} palette={palette} />
+                  ))}
+                </View>
+              </View>
+            )}
           </View>
         )}
 
