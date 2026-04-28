@@ -1330,7 +1330,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
         <OwnerSelector mandat={mandat} reload={reload} />
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="space-y-4">
         <div className="col-span-2 space-y-4">
           {/* ═══ ANALYSE FINANCIÈRE — REMONTÉE EN PREMIÈRE POSITION ═══ */}
           <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
