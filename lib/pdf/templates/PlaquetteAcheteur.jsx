@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════
-// lib/pdf/templates/PlaquetteAcheteur.jsx — v13.3 (clean)
+// lib/pdf/templates/PlaquetteAcheteur.jsx — v13.4
+// Photos 3x3 (9/page) + Page équipe compacte (single page)
 // ═══════════════════════════════════════════════════════════════════
 
 import React from 'react';
@@ -100,7 +101,7 @@ function TeamCard({ member, palette, size = 100, compact = false }) {
         }}>
           <Text style={{
             color: '#FFFFFF',
-            fontSize: size > 110 ? 36 : 28,
+            fontSize: photoSize > 110 ? 36 : (photoSize > 90 ? 28 : 22),
             fontFamily: 'Helvetica-Bold',
           }}>
             {initials}
@@ -108,7 +109,7 @@ function TeamCard({ member, palette, size = 100, compact = false }) {
         </View>
       )}
       <Text style={{
-        fontSize: size > 110 ? 13 : 11,
+        fontSize: compact ? 10 : 11,
         fontFamily: 'Helvetica-Bold',
         textAlign: 'center',
         marginBottom: 2,
@@ -117,17 +118,17 @@ function TeamCard({ member, palette, size = 100, compact = false }) {
         {member.name || '—'}
       </Text>
       <Text style={{
-        fontSize: 9,
+        fontSize: compact ? 8 : 9,
         color: palette.muted || '#666',
         textAlign: 'center',
-        marginBottom: 4,
+        marginBottom: compact ? 2 : 4,
         maxWidth: 160,
       }}>
         {member.role || ''}
       </Text>
       {member.email && (
         <Text style={{
-          fontSize: 8,
+          fontSize: compact ? 7 : 8,
           color: palette.text || '#333',
           textAlign: 'center',
         }}>
@@ -518,64 +519,6 @@ export default function PlaquetteAcheteur({
                     }}>
                       {autresSansBoss.map((member, i) => (
                         <TeamCard key={`a-${i}`} member={member} palette={palette} compact />
-                      ))}
-                    </View>
-                  )}
-                </View>
-              );
-            })()}
-          </View>
-        )}
-
-            {dossier.length > 0 && autres.length > 0 && (
-              <View style={{
-                borderBottomWidth: 0.5,
-                borderBottomColor: palette.muted || '#999',
-                marginVertical: 16,
-                marginHorizontal: 60,
-              }} />
-            )}
-
-            {autres.length > 0 && (() => {
-              const isBossInAutres = (m) => {
-                const initials = (m?.name || '').split(' ').map(s => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
-                return initials === 'TE';
-              };
-              const bossEntry = autres.find(isBossInAutres);
-              const autresSansBoss = autres.filter(m => !isBossInAutres(m));
-
-              return (
-                <View style={{ marginTop: 16 }}>
-                  <Text style={{
-                    fontSize: 11,
-                    fontFamily: 'Helvetica-Bold',
-                    color: palette.accent || '#9CAF88',
-                    textTransform: 'uppercase',
-                    letterSpacing: 1.5,
-                    marginBottom: 16,
-                    textAlign: 'center',
-                  }}>
-                    À votre service
-                  </Text>
-
-                  {bossEntry && (
-                    <View style={{
-                      flexDirection: 'row',
-                      justifyContent: 'center',
-                      marginBottom: autresSansBoss.length > 0 ? 20 : 0,
-                    }}>
-                      <TeamCard member={bossEntry} palette={palette} />
-                    </View>
-                  )}
-
-                  {autresSansBoss.length > 0 && (
-                    <View style={{
-                      flexDirection: 'row',
-                      justifyContent: 'center',
-                      flexWrap: 'wrap',
-                    }}>
-                      {autresSansBoss.map((member, i) => (
-                        <TeamCard key={`a-${i}`} member={member} palette={palette} />
                       ))}
                     </View>
                   )}
