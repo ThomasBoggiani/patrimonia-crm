@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════
-// app/api/mandats/[id]/pdf/route.js — VERSION v13.3 (clean)
+// app/api/mandats/[id]/pdf/route.js — VERSION v13.6 (avec logs debug)
 // ═══════════════════════════════════════════════════════════════════
 
 import { renderToStream } from '@react-pdf/renderer';
@@ -41,7 +41,7 @@ async function loadMandatData(mandatId) {
   if (mandat.profile_id) {
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('id, email, prenom, nom')
+      .select('id, email, prenom, nom, telephone, photo_url, fonction')
       .eq('id', mandat.profile_id)
       .maybeSingle();
 
@@ -121,20 +121,66 @@ export async function GET(request, { params }) {
 
     const logoUrl = getLogoUrl(request, mandat.is_off_market === true);
 
+    // Charger TOUS les profils actifs (utilisé pour plaquette ET rapport)
+    const { data: profiles, error: pErr } = await supabaseAdmin
+      .from('profiles')
+      .select('id, prenom, nom, email, fonction, telephone, photo_url')
+      .eq('actif', true);
+
+    if (pErr) console.error('[PDF] Profiles query error:', pErr.message);
+
+    // Construire le sender enrichi (l'utilisateur connecté)
+    let senderProfile = null;
+    if (user?.id && profiles) {
+      senderProfile = profiles.find(p => p.id === user.id) || null;
+    }
+
+    // ═══ LOGS DEBUG ═══
+    console.log('[PDF DEBUG] template =', template);
+    console.log('[PDF DEBUG] user.id =', user?.id);
+    console.log('[PDF DEBUG] user.email =', user?.email);
+    console.log('[PDF DEBUG] profiles count =', profiles?.length || 0);
+    console.log('[PDF DEBUG] senderProfile =',
+      senderProfile
+        ? `${senderProfile.prenom} ${senderProfile.nom} (email: ${senderProfile.email}, tel: ${senderProfile.telephone}, photo: ${senderProfile.photo_url})`
+        : 'NULL'
+    );
+    // ════════════════
+
+    const conseillerEnriched = senderProfile ? {
+      id: senderProfile.id,
+      prenom: senderProfile.prenom,
+      nom: senderProfile.nom,
+      email: senderProfile.email,
+      telephone: senderProfile.telephone,
+      fonction: senderProfile.fonction || 'Conseiller',
+      photo: ensureAbsoluteUrl(senderProfile.photo_url, request),
+      full_name: `${senderProfile.prenom || ''} ${senderProfile.nom || ''}`.trim() || 'Conseiller',
+      initiales: `${(senderProfile.prenom || '').charAt(0)}${(senderProfile.nom || '').charAt(0)}`.toUpperCase(),
+    } : (conseiller ? {
+      ...conseiller,
+      photo: ensureAbsoluteUrl(conseiller.photo_url, request),
+      initiales: `${(conseiller.prenom || '').charAt(0)}${(conseiller.nom || '').charAt(0)}`.toUpperCase(),
+    } : null);
+
+    console.log('[PDF DEBUG] conseillerEnriched =',
+      conseillerEnriched
+        ? JSON.stringify({
+            full_name: conseillerEnriched.full_name,
+            email: conseillerEnriched.email,
+            telephone: conseillerEnriched.telephone,
+            fonction: conseillerEnriched.fonction,
+            hasPhoto: !!conseillerEnriched.photo,
+          })
+        : 'NULL'
+    );
+
     let pdfElement;
     let filename;
 
     if (template === 'plaquette') {
-      const { data: profiles, error: pErr } = await supabaseAdmin
-        .from('profiles')
-        .select('id, prenom, nom, email, fonction, telephone, photo_url')
-        .eq('actif', true);
-
-      if (pErr) console.error('[PDF Plaquette] Profiles query error:', pErr.message);
-
       const teamMembers = {};
       let ownerProfile = null;
-      let senderProfile = null;
 
       for (const p of (profiles || [])) {
         const initials = `${(p.prenom || '').charAt(0)}${(p.nom || '').charAt(0)}`.toUpperCase();
@@ -150,9 +196,6 @@ export async function GET(request, { params }) {
         if (mandat.profile_id && p.id === mandat.profile_id) {
           ownerProfile = p;
         }
-        if (user?.id && p.id === user.id) {
-          senderProfile = p;
-        }
       }
 
       let ownerInitials = '';
@@ -162,22 +205,6 @@ export async function GET(request, { params }) {
         ownerInitials = mandat.owner.toUpperCase();
       }
       const mandatEnriched = { ...mandat, ownerInitials };
-
-      const conseillerEnriched = senderProfile ? {
-        id: senderProfile.id,
-        prenom: senderProfile.prenom,
-        nom: senderProfile.nom,
-        email: senderProfile.email,
-        telephone: senderProfile.telephone,
-        fonction: senderProfile.fonction || 'Conseiller',
-        photo: ensureAbsoluteUrl(senderProfile.photo_url, request),
-        full_name: `${senderProfile.prenom || ''} ${senderProfile.nom || ''}`.trim() || 'Conseiller',
-        initiales: `${(senderProfile.prenom || '').charAt(0)}${(senderProfile.nom || '').charAt(0)}`.toUpperCase(),
-      } : (conseiller ? {
-        ...conseiller,
-        photo: ensureAbsoluteUrl(conseiller.photo_url, request),
-        initiales: `${(conseiller.prenom || '').charAt(0)}${(conseiller.nom || '').charAt(0)}`.toUpperCase(),
-      } : null);
 
       pdfElement = React.createElement(PlaquetteAcheteur, {
         mandat: mandatEnriched,
@@ -203,7 +230,7 @@ export async function GET(request, { params }) {
 
       pdfElement = React.createElement(RapportVendeur, {
         mandat,
-        conseiller,
+        conseiller: conseillerEnriched,
         logoUrl,
         period,
         stats,
@@ -213,7 +240,7 @@ export async function GET(request, { params }) {
     } else if (template === 'interne') {
       pdfElement = React.createElement(FicheInterne, {
         mandat,
-        conseiller,
+        conseiller: conseillerEnriched,
         logoUrl,
       });
       filename = `Fiche_interne_${slugify(mandat.nom)}.pdf`;
