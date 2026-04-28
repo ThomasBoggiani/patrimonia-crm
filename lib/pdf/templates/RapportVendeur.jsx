@@ -194,7 +194,7 @@ export default function RapportVendeur({
           </View>
         )}
 
-        <View style={[styles.coverTitleBlock, { marginTop: 0 }]}>
+        <View style={[styles.coverTitleBlock, { marginTop: 12, paddingHorizontal: 30 }]}>
           <Text style={[styles.coverTitle, { fontSize: 22 }]}>
             RAPPORT D'ACTIVITÉ
           </Text>
@@ -208,7 +208,9 @@ export default function RapportVendeur({
           </Text>
         </View>
 
-        <Text style={styles.coverWebsite}>www.immeubles-patrimoine.fr</Text>
+        <Text style={[styles.coverWebsite, { position: 'absolute', bottom: 30, left: 0, right: 0, textAlign: 'center' }]}>
+          www.immeubles-patrimoine.fr
+        </Text>
       </Page>
 
       {/* PAGE 2 : SYNTHÈSE */}
