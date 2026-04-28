@@ -45,6 +45,85 @@ async function verifyToken(token) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// BUILD TEAM POUR PAGE ÉQUIPE PLAQUETTE
+// Retourne un array [{ name, role, email, phone, photo, isBoss, position }]
+// - Boss (Thomas Ezquerra) → toujours au centre
+// - Détenteur du mandat → à gauche (position: 'left')
+// - Expéditeur (conseiller connecté) → à droite (position: 'right')
+// - Dédoublonne si 2 rôles tombent sur la même personne
+// ─────────────────────────────────────────────────────────────────
+
+async function buildTeamForPlaquette({ mandatProfileId, senderUserId }) {
+  // 1. Charger tous les profils actifs
+  const { data: profiles } = await supabaseAdmin
+    .from('profiles')
+    .select('id, prenom, nom, email, tel, fonction, photo_url')
+    .eq('actif', true);
+
+  if (!profiles || profiles.length === 0) {
+    console.warn('[buildTeamForPlaquette] Aucun profil actif trouvé');
+    return [];
+  }
+
+  // Helper pour transformer un profil en objet team member
+  const toMember = (p, extra = {}) => ({
+    name: `${p.prenom || ''} ${p.nom || ''}`.trim() || 'Conseiller',
+    role: p.fonction || 'Conseiller',
+    email: p.email || null,
+    phone: p.tel || null,
+    photo: p.photo_url || null,
+    profileId: p.id,
+    ...extra,
+  });
+
+  // 2. Trouver le boss : Thomas Ezquerra
+  const boss = profiles.find(p =>
+    (p.prenom || '').toLowerCase() === 'thomas' &&
+    (p.nom || '').toLowerCase() === 'ezquerra'
+  );
+
+  // 3. Trouver le détenteur du mandat
+  const owner = mandatProfileId
+    ? profiles.find(p => p.id === mandatProfileId)
+    : null;
+
+  // 4. Trouver l'expéditeur (conseiller connecté)
+  const sender = senderUserId
+    ? profiles.find(p => p.id === senderUserId)
+    : null;
+
+  // 5. Construire l'équipe en dédoublonnant
+  const team = [];
+  const usedIds = new Set();
+
+  // Boss au centre (priorité absolue)
+  if (boss) {
+    team.push(toMember(boss, { isBoss: true, position: 'center' }));
+    usedIds.add(boss.id);
+  }
+
+  // Détenteur à gauche (sauf si c'est déjà le boss)
+  if (owner && !usedIds.has(owner.id)) {
+    team.push(toMember(owner, { isBoss: false, position: 'left' }));
+    usedIds.add(owner.id);
+  }
+
+  // Expéditeur à droite (sauf si c'est déjà boss ou détenteur)
+  if (sender && !usedIds.has(sender.id)) {
+    team.push(toMember(sender, { isBoss: false, position: 'right' }));
+    usedIds.add(sender.id);
+  }
+
+  console.log('[buildTeamForPlaquette] Équipe construite :', JSON.stringify(team.map(m => ({
+    name: m.name,
+    isBoss: m.isBoss,
+    position: m.position,
+    hasPhoto: !!m.photo,
+  })), null, 2));
+
+  return team;
+}
+// ─────────────────────────────────────────────────────────────────
 // LOAD MANDAT + CONSEILLER
 // ─────────────────────────────────────────────────────────────────
 
@@ -165,38 +244,19 @@ export async function GET(request, { params }) {
     let filename;
 
     if (template === 'plaquette') {
-  // Construction du dictionnaire des membres pour la page équipe
-  const { data: profiles } = await supabaseAdmin
-    .from('profiles')
-    .select('id, prenom, nom, email, tel, fonction, photo_url')
-    .eq('actif', true);
-  
-  const teamMembers = {};
-  for (const p of (profiles || [])) {
-    const initials = `${(p.prenom || '').charAt(0)}${(p.nom || '').charAt(0)}`.toUpperCase();
-    if (initials) {
-      teamMembers[initials] = {
-        name: `${p.prenom || ''} ${p.nom || ''}`.trim(),
-        role: p.fonction || 'Conseiller',
-        email: p.email,
-        phone: p.tel,
-        photo: p.photo_url, // null si pas de photo
-      };
-    }
-  }
-  
-  // Enrichir l'objet conseiller avec ses initiales
-  const conseillerEnriched = conseiller ? {
-    ...conseiller,
-    initiales: `${(conseiller.prenom || '').charAt(0)}${(conseiller.nom || '').charAt(0)}`.toUpperCase(),
-  } : null;
-  
-  pdfElement = React.createElement(PlaquetteAcheteur, {
-    mandat,
-    conseiller: conseillerEnriched,
-    logoUrl,
-    teamMembers,
-  });
+      // Construction de l'array team pour la page équipe
+      const team = await buildTeamForPlaquette({
+        mandatProfileId: mandat.profile_id,
+        senderUserId: user.id,
+      });
+
+      pdfElement = React.createElement(PlaquetteAcheteur, {
+        mandat,
+        conseiller,
+        logoUrl,
+        team,
+      });
+
       filename = `Plaquette_${slugify(mandat.nom)}.pdf`;
     } else if (template === 'rapport') {
       if (!startStr || !endStr) {
