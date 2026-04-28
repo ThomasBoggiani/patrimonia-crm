@@ -351,4 +351,38 @@ export default function RapportVendeur({
               Points de vigilance
             </Text>
             <Text style={{ fontSize: 9, color: palette.text || '#444', lineHeight: 1.5 }}>
-              Synthèse des objections rencontrées
+              Synthèse des objections rencontrées ou questions récurrentes
+              (à compléter par votre conseiller).
+            </Text>
+          </View>
+        </View>
+
+        <PageFooter isOffMarket={isOffMarket} />
+      </Page>
+
+      {/* PAGE 5 : CONCLUSION & SIGNATURE */}
+      <Page size="A4" style={styles.page}>
+        <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
+        <SectionTitle title="NOS PROCHAINES ÉTAPES" isOffMarket={isOffMarket} />
+
+        <View style={[styles.descriptionBlock, { marginTop: 8 }]}>
+          <Text style={styles.descriptionText}>
+            Sur la période à venir, nous poursuivrons activement la commercialisation
+            de votre bien en orientant nos efforts sur :{'\n\n'}
+            •  La diffusion ciblée auprès de notre fichier qualifié de prospects
+            patrimoniaux.{'\n'}
+            •  L'organisation de visites avec les acheteurs pré-qualifiés.{'\n'}
+            •  Le retour régulier d'informations vous concernant l'évolution du dossier.
+            {'\n\n'}
+            Nous restons à votre entière disposition pour échanger sur ce rapport
+            et préciser toute information complémentaire.
+          </Text>
+        </View>
+
+        <SignatureBlock conseiller={conseiller} palette={palette} />
+
+        <PageFooter isOffMarket={isOffMarket} />
+      </Page>
+    </Document>
+  );
+}
