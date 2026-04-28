@@ -127,7 +127,7 @@ export async function GET(request, { params }) {
     if (template === 'plaquette') {
       const { data: profiles, error: pErr } = await supabaseAdmin
         .from('profiles')
-        .select('id, prenom, nom, email, fonction, telephone, photo_url'))
+        .select('id, prenom, nom, email, fonction, telephone, photo_url')
         .eq('actif', true);
 
       if (pErr) console.error('[PDF Plaquette] Profiles query error:', pErr.message);
