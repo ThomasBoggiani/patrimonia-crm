@@ -176,6 +176,7 @@ export async function GET(request, { params }) {
 
       const teamMembers = {};
       let ownerProfile = null;
+      let senderProfile = null;
 
       for (const p of (profiles || [])) {
         const initials = `${(p.prenom || '').charAt(0)}${(p.nom || '').charAt(0)}`.toUpperCase();
@@ -192,24 +193,40 @@ export async function GET(request, { params }) {
         if (mandat.profile_id && p.id === mandat.profile_id) {
           ownerProfile = p;
         }
+        // Identifier l'expéditeur (utilisateur connecté)
+        if (user?.id && p.id === user.id) {
+          senderProfile = p;
+        }
       }
 
-      // Calculer les initiales du détenteur du mandat
-      const ownerInitials = ownerProfile
-        ? `${(ownerProfile.prenom || '').charAt(0)}${(ownerProfile.nom || '').charAt(0)}`.toUpperCase()
-        : '';
+      // Calculer les initiales du détenteur
+      // Stratégie : 1) profile_id si présent, 2) mandat.owner si court (≤3 chars = probablement initiales)
+      let ownerInitials = '';
+      if (ownerProfile) {
+        ownerInitials = `${(ownerProfile.prenom || '').charAt(0)}${(ownerProfile.nom || '').charAt(0)}`.toUpperCase();
+      } else if (mandat.owner && mandat.owner.length <= 3) {
+        ownerInitials = mandat.owner.toUpperCase();
+      }
       const mandatEnriched = { ...mandat, ownerInitials };
 
-      // Enrichir l'objet conseiller avec ses initiales
-      const conseillerEnriched = conseiller ? {
+      // Calculer les infos du sender (utilisateur connecté = celui qui envoie le PDF)
+      const conseillerEnriched = senderProfile ? {
+        id: senderProfile.id,
+        prenom: senderProfile.prenom,
+        nom: senderProfile.nom,
+        email: senderProfile.email,
+        full_name: `${senderProfile.prenom || ''} ${senderProfile.nom || ''}`.trim() || 'Conseiller',
+        initiales: `${(senderProfile.prenom || '').charAt(0)}${(senderProfile.nom || '').charAt(0)}`.toUpperCase(),
+      } : (conseiller ? {
         ...conseiller,
         initiales: `${(conseiller.prenom || '').charAt(0)}${(conseiller.nom || '').charAt(0)}`.toUpperCase(),
-      } : null;
+      } : null);
 
       // Logs de debug
       console.log('[PDF Plaquette] mandat.profile_id =', mandat.profile_id);
-      console.log('[PDF Plaquette] ownerInitials =', ownerInitials);
-      console.log('[PDF Plaquette] conseiller.initiales =', conseillerEnriched?.initiales);
+      console.log('[PDF Plaquette] mandat.owner =', mandat.owner);
+      console.log('[PDF Plaquette] ownerInitials calculés =', ownerInitials);
+      console.log('[PDF Plaquette] sender = user.id', user?.id, '→ initiales =', conseillerEnriched?.initiales);
       console.log('[PDF Plaquette] teamMembers keys =', Object.keys(teamMembers));
 
       pdfElement = React.createElement(PlaquetteAcheteur, {
