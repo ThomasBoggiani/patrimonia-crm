@@ -1263,9 +1263,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
     'Off-market': 'bg-stone-100 text-stone-700 border-stone-200'
   }[mandat.commercialisation] || 'bg-stone-100 text-stone-700 border-stone-200';
 
-  {/* Avatar owner avec dropdown de réassignement */}
-        <OwnerSelector mandat={mandat} reload={reload} />
-
   return (
     <div className="p-8 max-w-7xl">
       <button onClick={onBack} className="flex items-center gap-2 text-sm text-stone-600 hover:text-stone-900 mb-6">
@@ -1440,6 +1437,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
             </div>
           )}
         </div>
+      </div>
 
       {/* ═══ MODALS ═══ */}
       {openModal === 'photos' && (
