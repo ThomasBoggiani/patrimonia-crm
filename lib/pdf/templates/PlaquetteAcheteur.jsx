@@ -544,7 +544,7 @@ export default function PlaquetteAcheteur({
                       justifyContent: 'center',
                       marginBottom: autresSansBoss.length > 0 ? 20 : 0,
                     }}>
-                      <TeamCard member={bossEntry} palette={palette} size={130} />
+                      <TeamCard member={bossEntry} palette={palette} />
                     </View>
                   )}
 
