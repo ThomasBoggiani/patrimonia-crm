@@ -160,7 +160,7 @@ export async function GET(request, { params }) {
       // Construction du dictionnaire des membres pour la page équipe
       const { data: profiles, error: pErr } = await supabaseAdmin
         .from('profiles')
-        .select('id, prenom, nom, email, tel, fonction, photo_url')
+        .select('id, prenom, nom, email, fonction, photo_url')
         .eq('actif', true);
 
       console.log('[PDF Plaquette] profiles count =', profiles?.length || 0);
@@ -176,7 +176,7 @@ export async function GET(request, { params }) {
             name: `${p.prenom || ''} ${p.nom || ''}`.trim(),
             role: p.fonction || 'Conseiller',
             email: p.email,
-            phone: p.tel,
+            phone: null,
             photo: p.photo_url, // null si pas de photo
           };
         }
