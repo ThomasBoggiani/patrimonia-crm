@@ -78,8 +78,8 @@ function buildTeamForPlaquette({ mandat, sender, allMembers }) {
   return { team, debug };
 }
 
-function TeamCard({ member, palette }) {
-  const photoSize = 100;
+function TeamCard({ member, palette, size = 100 }) {
+  const photoSize = size;
   const initials = (member?.name || '?')
     .split(' ')
     .map(s => s[0])
@@ -520,32 +520,55 @@ export default function PlaquetteAcheteur({
               }} />
             )}
 
-            {autres.length > 0 && (
-              <View style={{ marginTop: 16 }}>
-                <Text style={{
-                  fontSize: 11,
-                  fontFamily: 'Helvetica-Bold',
-                  color: palette.accent || '#9CAF88',
-                  textTransform: 'uppercase',
-                  letterSpacing: 1.5,
-                  marginBottom: 16,
-                  textAlign: 'center',
-                }}>
-                  À votre service
-                </Text>
-                <View style={{
-                  flexDirection: 'row',
-                  justifyContent: 'center',
-                  flexWrap: 'wrap',
-                }}>
-                  {autres.map((member, i) => (
-                    <TeamCard key={`a-${i}`} member={member} palette={palette} />
-                  ))}
+            {autres.length > 0 && (() => {
+              // Séparer le boss (Thomas Ezquerra) du reste de l'équipe
+              const isBossInAutres = (m) => {
+                const initials = (m?.name || '').split(' ').map(s => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+                return initials === 'TE';
+              };
+              const bossEntry = autres.find(isBossInAutres);
+              const autresSansBoss = autres.filter(m => !isBossInAutres(m));
+
+              return (
+                <View style={{ marginTop: 16 }}>
+                  <Text style={{
+                    fontSize: 11,
+                    fontFamily: 'Helvetica-Bold',
+                    color: palette.accent || '#9CAF88',
+                    textTransform: 'uppercase',
+                    letterSpacing: 1.5,
+                    marginBottom: 16,
+                    textAlign: 'center',
+                  }}>
+                    À votre service
+                  </Text>
+
+                  {/* Ligne 1 : le boss seul, plus grand */}
+                  {bossEntry && (
+                    <View style={{
+                      flexDirection: 'row',
+                      justifyContent: 'center',
+                      marginBottom: autresSansBoss.length > 0 ? 20 : 0,
+                    }}>
+                      <TeamCard member={bossEntry} palette={palette} size={130} />
+                    </View>
+                  )}
+
+                  {/* Ligne 2 : le reste de l'équipe (sans le boss) */}
+                  {autresSansBoss.length > 0 && (
+                    <View style={{
+                      flexDirection: 'row',
+                      justifyContent: 'center',
+                      flexWrap: 'wrap',
+                    }}>
+                      {autresSansBoss.map((member, i) => (
+                        <TeamCard key={`a-${i}`} member={member} palette={palette} />
+                      ))}
+                    </View>
+                  )}
                 </View>
-              </View>
-            )}
-          </View>
-        )}
+              );
+            })()}
 
         <PageFooter isOffMarket={isOffMarket} />
       </Page>
