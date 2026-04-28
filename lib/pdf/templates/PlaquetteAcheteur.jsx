@@ -1,6 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════
-// lib/pdf/templates/PlaquetteAcheteur.jsx — v13.3
-// Page équipe : "Pour ce dossier" + "À votre service" (boss en haut 130px)
+// lib/pdf/templates/PlaquetteAcheteur.jsx — v13.3 (clean)
 // ═══════════════════════════════════════════════════════════════════
 
 import React from 'react';
@@ -34,16 +33,6 @@ function buildTeamForPlaquette({ mandat, sender, allMembers }) {
   const senderInitials = (sender?.initiales || sender?.initials || '').toUpperCase();
 
   const allKeys = Object.keys(allMembers || {});
-  const debug = {
-    bossKey: BOSS_INITIALS,
-    ownerKey: ownerInitials,
-    senderKey: senderInitials,
-    allKeys,
-    bossFound: !!allMembers[BOSS_INITIALS],
-    ownerFound: !!allMembers[ownerInitials],
-    senderFound: !!allMembers[senderInitials],
-  };
-
   const boss = allMembers[BOSS_INITIALS];
   const owner = allMembers[ownerInitials];
   const sndr = allMembers[senderInitials];
@@ -71,7 +60,7 @@ function buildTeamForPlaquette({ mandat, sender, allMembers }) {
     }
   }
 
-  return { team, debug };
+  return team;
 }
 
 function TeamCard({ member, palette, size = 100 }) {
@@ -185,13 +174,11 @@ export default function PlaquetteAcheteur({
   }
   tocItems.push({ label: 'NOTRE EQUIPE', page: `P. ${p++}` });
 
-  const teamResult = buildTeamForPlaquette({
+  const team = buildTeamForPlaquette({
     mandat,
     sender: conseiller,
     allMembers: teamMembers || {},
   });
-  const team = teamResult.team;
-  const teamDebug = teamResult.debug;
 
   const dossier = team.filter(m => m.position === 'left' || m.position === 'right' || m.position === 'fallback');
   const dossierKeys = new Set(dossier.map(m => `${m.name}-${m.email}`));
@@ -452,33 +439,6 @@ export default function PlaquetteAcheteur({
       <Page size="A4" style={styles.page}>
         <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
         <SectionTitle title="NOTRE ÉQUIPE" isOffMarket={isOffMarket} />
-
-        {team.length === 0 && (
-          <View style={{
-            margin: 30,
-            padding: 16,
-            backgroundColor: '#fff3cd',
-            borderWidth: 2,
-            borderColor: '#856404',
-            borderStyle: 'solid',
-          }}>
-            <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', marginBottom: 8 }}>
-              ⚠️ DEBUG — Aucun membre d'équipe trouvé
-            </Text>
-            <Text style={{ fontSize: 9, marginBottom: 2 }}>
-              Boss key recherché : "{teamDebug.bossKey}" — trouvé : {teamDebug.bossFound ? 'OUI' : 'NON'}
-            </Text>
-            <Text style={{ fontSize: 9, marginBottom: 2 }}>
-              Owner key : "{teamDebug.ownerKey}" — trouvé : {teamDebug.ownerFound ? 'OUI' : 'NON'}
-            </Text>
-            <Text style={{ fontSize: 9, marginBottom: 2 }}>
-              Sender key : "{teamDebug.senderKey}" — trouvé : {teamDebug.senderFound ? 'OUI' : 'NON'}
-            </Text>
-            <Text style={{ fontSize: 9 }}>
-              Clés disponibles dans teamMembers : {teamDebug.allKeys.join(', ') || '(VIDE)'}
-            </Text>
-          </View>
-        )}
 
         {team.length > 0 && (
           <View style={{ marginTop: 20, paddingHorizontal: 20 }}>
