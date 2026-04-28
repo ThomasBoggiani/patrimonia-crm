@@ -103,6 +103,14 @@ async function loadVendeurStats(mandatId, period) {
 // CONSTRUCTION URL DES LOGOS
 // ─────────────────────────────────────────────────────────────────
 
+// Construit une URL absolue à partir d'un chemin relatif
+function ensureAbsoluteUrl(path, request) {
+  if (!path) return null;
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  const host = request.headers.get('host') || 'patrimonia-crm.vercel.app';
+  const protocol = host.includes('localhost') ? 'http' : 'https';
+  return `${protocol}://${host}${path.startsWith('/') ? '' : '/'}${path}`;
+}
 function getLogoUrl(request, isOffMarket) {
   const host = request.headers.get('host') || 'patrimonia-crm.vercel.app';
   const protocol = host.includes('localhost') ? 'http' : 'https';
@@ -177,7 +185,7 @@ export async function GET(request, { params }) {
             role: p.fonction || 'Conseiller',
             email: p.email,
             phone: null,
-            photo: p.photo_url, // null si pas de photo
+            photo: ensureAbsoluteUrl(p.photo_url, request),
           };
         }
         // Identifier le détenteur du mandat par profile_id
