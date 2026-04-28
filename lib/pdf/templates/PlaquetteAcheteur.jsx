@@ -1,10 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════
-// lib/pdf/templates/PlaquetteAcheteur.jsx — v13.2
-//
-// FIX v13.2 : Page équipe en 2 sections
-//   Section 1 "Pour ce dossier" : titulaire + commercial qui envoie
-//   Section 2 "À votre service" : reste de l'équipe (Thomas E. + autres)
-//   Toutes les photos à la même taille (100×100)
+// lib/pdf/templates/PlaquetteAcheteur.jsx — v13.3
+// Page équipe : "Pour ce dossier" + "À votre service" (boss en haut 130px)
 // ═══════════════════════════════════════════════════════════════════
 
 import React from 'react';
@@ -89,7 +85,7 @@ function TeamCard({ member, palette, size = 100 }) {
     .toUpperCase();
 
   return (
-    <View style={{ alignItems: 'center', maxWidth: 160, marginHorizontal: 10, marginBottom: 12 }}>
+    <View style={{ alignItems: 'center', maxWidth: 180, marginHorizontal: 10, marginBottom: 12 }}>
       {member.photo ? (
         <Image
           src={member.photo}
@@ -113,7 +109,7 @@ function TeamCard({ member, palette, size = 100 }) {
         }}>
           <Text style={{
             color: '#FFFFFF',
-            fontSize: 28,
+            fontSize: size > 110 ? 36 : 28,
             fontFamily: 'Helvetica-Bold',
           }}>
             {initials}
@@ -121,7 +117,7 @@ function TeamCard({ member, palette, size = 100 }) {
         </View>
       )}
       <Text style={{
-        fontSize: 11,
+        fontSize: size > 110 ? 13 : 11,
         fontFamily: 'Helvetica-Bold',
         textAlign: 'center',
         marginBottom: 2,
@@ -134,7 +130,7 @@ function TeamCard({ member, palette, size = 100 }) {
         color: palette.muted || '#666',
         textAlign: 'center',
         marginBottom: 4,
-        maxWidth: 150,
+        maxWidth: 160,
       }}>
         {member.role || ''}
       </Text>
@@ -521,7 +517,6 @@ export default function PlaquetteAcheteur({
             )}
 
             {autres.length > 0 && (() => {
-              // Séparer le boss (Thomas Ezquerra) du reste de l'équipe
               const isBossInAutres = (m) => {
                 const initials = (m?.name || '').split(' ').map(s => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
                 return initials === 'TE';
@@ -543,7 +538,6 @@ export default function PlaquetteAcheteur({
                     À votre service
                   </Text>
 
-                  {/* Ligne 1 : le boss seul, plus grand */}
                   {bossEntry && (
                     <View style={{
                       flexDirection: 'row',
@@ -554,7 +548,6 @@ export default function PlaquetteAcheteur({
                     </View>
                   )}
 
-                  {/* Ligne 2 : le reste de l'équipe (sans le boss) */}
                   {autresSansBoss.length > 0 && (
                     <View style={{
                       flexDirection: 'row',
@@ -569,6 +562,8 @@ export default function PlaquetteAcheteur({
                 </View>
               );
             })()}
+          </View>
+        )}
 
         <PageFooter isOffMarket={isOffMarket} />
       </Page>
