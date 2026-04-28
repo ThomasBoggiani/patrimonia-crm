@@ -1,15 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════
-// lib/pdf/templates/RapportVendeur.jsx — v1.0 Template I&P
-//
-// Rapport d'activité destiné au mandant (vendeur).
-// Période : configurable via props.period { start, end }
-//
-// Pages dynamiques :
-//   1. Couverture (toujours) — photo héro + titre + période
-//   2. Synthèse (toujours) — 4 KPIs : Contacts / Visites / Offres / Vues
-//   3. Actions réalisées (si events) — timeline chronologique
-//   4. Retours du marché (toujours) — texte qualitatif
-//   5. Conclusion (toujours) — message + signature commercial
+// lib/pdf/templates/RapportVendeur.jsx — v1.1
+// Template I&P + couverture resserrée + signature complète avec photo
 // ═══════════════════════════════════════════════════════════════════
 
 import React from 'react';
@@ -30,9 +21,6 @@ import {
 } from '../helpers';
 import { LOGO_IP_BASE64 } from '../logo-base64';
 
-// ─────────────────────────────────────────────────────────────────
-// Helper : formater une date en français court
-// ─────────────────────────────────────────────────────────────────
 function formatDateFR(dateStr) {
   if (!dateStr) return '';
   try {
@@ -61,13 +49,108 @@ function formatDateShort(dateStr) {
   }
 }
 
+function SignatureBlock({ conseiller, palette }) {
+  if (!conseiller) return null;
+
+  const name = conseiller.full_name || conseiller.name ||
+    `${conseiller.prenom || ''} ${conseiller.nom || ''}`.trim() ||
+    'Votre interlocuteur';
+  const fonction = conseiller.fonction || conseiller.role || 'Conseiller';
+  const email = conseiller.email || null;
+  const tel = conseiller.telephone || conseiller.phone || null;
+  const photo = conseiller.photo || null;
+
+  const initials = name
+    .split(' ')
+    .map(s => s[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
+  return (
+    <View style={{
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 40,
+      paddingHorizontal: 30,
+      paddingVertical: 16,
+      backgroundColor: palette.bgSoft || '#F5F2EC',
+      borderLeftWidth: 3,
+      borderLeftColor: palette.accent || '#9CAF88',
+    }}>
+      {photo ? (
+        <Image
+          src={photo}
+          style={{
+            width: 70,
+            height: 70,
+            borderRadius: 35,
+            objectFit: 'cover',
+            marginRight: 16,
+          }}
+        />
+      ) : (
+        <View style={{
+          width: 70,
+          height: 70,
+          borderRadius: 35,
+          backgroundColor: palette.accent || '#9CAF88',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginRight: 16,
+        }}>
+          <Text style={{ color: '#FFFFFF', fontSize: 22, fontFamily: 'Helvetica-Bold' }}>
+            {initials}
+          </Text>
+        </View>
+      )}
+
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: 9, color: palette.muted || '#666', marginBottom: 2 }}>
+          Bien cordialement,
+        </Text>
+        <Text style={{
+          fontSize: 13,
+          fontFamily: 'Helvetica-Bold',
+          color: palette.text || '#222',
+          marginBottom: 2,
+        }}>
+          {name}
+        </Text>
+        <Text style={{
+          fontSize: 10,
+          color: palette.accent || '#9CAF88',
+          fontFamily: 'Helvetica-Oblique',
+          marginBottom: 6,
+        }}>
+          {fonction}
+        </Text>
+        {email && (
+          <Text style={{ fontSize: 9, color: palette.text || '#444' }}>
+            {email}
+          </Text>
+        )}
+        {tel && (
+          <Text style={{ fontSize: 9, color: palette.text || '#444' }}>
+            {tel}
+          </Text>
+        )}
+        <Text style={{ fontSize: 8, color: palette.muted || '#666', marginTop: 4, fontStyle: 'italic' }}>
+          Immeubles & Patrimoine — 7 rue de Penthièvre 75008 Paris
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 export default function RapportVendeur({
   mandat,
   conseiller,
   logoUrl,
-  period,    // { start: 'YYYY-MM-DD', end: 'YYYY-MM-DD' }
-  stats,     // { nb_contacts, nb_visites, nb_offres, nb_vues }
-  events,    // [{ date, type, label, description }, ...]
+  period,
+  stats,
+  events,
 }) {
   const isOffMarket = mandat?.is_off_market === true;
   const styles = getStyles(isOffMarket);
@@ -82,7 +165,6 @@ export default function RapportVendeur({
     day: '2-digit', month: 'long', year: 'numeric'
   });
 
-  // KPIs — Contacts / Visites / Offres / Vues (dans cet ordre)
   const kpis = [
     { number: stats?.nb_contacts ?? 0, label: 'Contacts' },
     { number: stats?.nb_visites ?? 0, label: 'Visites' },
@@ -91,8 +173,6 @@ export default function RapportVendeur({
   ];
 
   const hasEvents = Array.isArray(events) && events.length > 0;
-  const conseillerName = conseiller?.full_name || conseiller?.name || 'Votre interlocuteur';
-  const conseillerEmail = conseiller?.email || null;
 
   return (
     <Document
@@ -100,9 +180,7 @@ export default function RapportVendeur({
       author="Immeubles & Patrimoine"
       subject="Rapport d'activité au mandant"
     >
-      {/* ═══════════════════════════════════════ */}
-      {/* PAGE 1 : COUVERTURE                     */}
-      {/* ═══════════════════════════════════════ */}
+      {/* PAGE 1 : COUVERTURE — resserrée */}
       <Page size="A4" style={styles.coverPage}>
         <Image src={LOGO_IP_BASE64} style={styles.coverLogoLarge} />
 
@@ -116,14 +194,14 @@ export default function RapportVendeur({
           </View>
         )}
 
-        <View style={styles.coverTitleBlock}>
-          <Text style={[styles.coverTitle, { fontSize: 26 }]}>
+        <View style={[styles.coverTitleBlock, { marginTop: 0 }]}>
+          <Text style={[styles.coverTitle, { fontSize: 22 }]}>
             RAPPORT D'ACTIVITÉ
           </Text>
-          <Text style={[styles.coverCity, { marginTop: 8 }]}>
+          <Text style={[styles.coverCity, { marginTop: 4 }]}>
             {safeText(mandat?.nom, 'BIEN').toUpperCase()}
           </Text>
-          <Text style={[styles.coverSubInfo, { marginTop: 12 }]}>
+          <Text style={[styles.coverSubInfo, { marginTop: 6 }]}>
             {periodStart && periodEnd
               ? `Période du ${periodStart} au ${periodEnd}`
               : `Édité le ${today}`}
@@ -133,9 +211,7 @@ export default function RapportVendeur({
         <Text style={styles.coverWebsite}>www.immeubles-patrimoine.fr</Text>
       </Page>
 
-      {/* ═══════════════════════════════════════ */}
-      {/* PAGE 2 : SYNTHÈSE DE L'ACTIVITÉ         */}
-      {/* ═══════════════════════════════════════ */}
+      {/* PAGE 2 : SYNTHÈSE */}
       <Page size="A4" style={styles.page}>
         <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
         <SectionTitle title="SYNTHÈSE DE L'ACTIVITÉ" isOffMarket={isOffMarket} />
@@ -168,9 +244,7 @@ export default function RapportVendeur({
         <PageFooter isOffMarket={isOffMarket} />
       </Page>
 
-      {/* ═══════════════════════════════════════ */}
-      {/* PAGE 3 : ACTIONS RÉALISÉES (si events)  */}
-      {/* ═══════════════════════════════════════ */}
+      {/* PAGE 3 : ACTIONS RÉALISÉES */}
       {hasEvents && (
         <Page size="A4" style={styles.page}>
           <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
@@ -217,9 +291,7 @@ export default function RapportVendeur({
         </Page>
       )}
 
-      {/* ═══════════════════════════════════════ */}
-      {/* PAGE 4 : RETOURS DU MARCHÉ              */}
-      {/* ═══════════════════════════════════════ */}
+      {/* PAGE 4 : RETOURS DU MARCHÉ */}
       <Page size="A4" style={styles.page}>
         <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
         <SectionTitle title="RETOURS DU MARCHÉ" isOffMarket={isOffMarket} />
@@ -235,7 +307,6 @@ export default function RapportVendeur({
           </Text>
         </View>
 
-        {/* Bloc structuré : Points positifs / Points de vigilance */}
         <View style={{ flexDirection: 'row', marginTop: 24, paddingHorizontal: 20 }}>
           <View style={{
             flex: 1,
@@ -280,64 +351,4 @@ export default function RapportVendeur({
               Points de vigilance
             </Text>
             <Text style={{ fontSize: 9, color: palette.text || '#444', lineHeight: 1.5 }}>
-              Synthèse des objections rencontrées ou questions récurrentes
-              (à compléter par votre conseiller).
-            </Text>
-          </View>
-        </View>
-
-        <PageFooter isOffMarket={isOffMarket} />
-      </Page>
-
-      {/* ═══════════════════════════════════════ */}
-      {/* PAGE 5 : CONCLUSION & SIGNATURE         */}
-      {/* ═══════════════════════════════════════ */}
-      <Page size="A4" style={styles.page}>
-        <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
-        <SectionTitle title="NOS PROCHAINES ÉTAPES" isOffMarket={isOffMarket} />
-
-        <View style={[styles.descriptionBlock, { marginTop: 8 }]}>
-          <Text style={styles.descriptionText}>
-            Sur la période à venir, nous poursuivrons activement la commercialisation
-            de votre bien en orientant nos efforts sur :{'\n\n'}
-            •  La diffusion ciblée auprès de notre fichier qualifié de prospects
-            patrimoniaux.{'\n'}
-            •  L'organisation de visites avec les acheteurs pré-qualifiés.{'\n'}
-            •  Le retour régulier d'informations vous concernant l'évolution du dossier.
-            {'\n\n'}
-            Nous restons à votre entière disposition pour échanger sur ce rapport
-            et préciser toute information complémentaire.
-          </Text>
-        </View>
-
-        {/* Signature */}
-        <View style={{
-          marginTop: 60,
-          paddingHorizontal: 40,
-          alignItems: 'flex-end',
-        }}>
-          <Text style={{ fontSize: 10, color: palette.muted || '#666', marginBottom: 4 }}>
-            Bien cordialement,
-          </Text>
-          <Text style={{
-            fontSize: 12,
-            fontFamily: 'Helvetica-Bold',
-            color: palette.text || '#222',
-          }}>
-            {conseillerName}
-          </Text>
-          {conseillerEmail && (
-            <Text style={{ fontSize: 9, color: palette.muted || '#666', marginTop: 2 }}>
-              {conseillerEmail}
-            </Text>
-          )}
-          <Text style={{ fontSize: 9, color: palette.muted || '#666', marginTop: 2, fontStyle: 'italic' }}>
-            Immeubles & Patrimoine
-          </Text>
-        </View>
-
-        <PageFooter isOffMarket={isOffMarket} />
-      </Page>
-    </Document>
-  );
-}
+              Synthèse des objections rencontrées
