@@ -290,7 +290,7 @@ export default function PlaquetteAcheteur({
         <View style={{ marginTop: 30 }}>
           <TableOfContents items={tocItems} isOffMarket={isOffMarket} />
         </View>
-        <PageFooter pageNumber={2} isOffMarket={isOffMarket} />
+        <PageFooter isOffMarket={isOffMarket} />
       </Page>
 
       <Page size="A4" style={styles.page}>
@@ -308,7 +308,7 @@ export default function PlaquetteAcheteur({
             ))}
           </CardsRow>
         )}
-        <PageFooter pageNumber={3} isOffMarket={isOffMarket} />
+        <PageFooter isOffMarket={isOffMarket} />
       </Page>
 
       {hasMapImage && (
@@ -415,7 +415,7 @@ export default function PlaquetteAcheteur({
               isOffMarket={isOffMarket}
             />
           </View>
-          <PageFooter pageNumber={null} isOffMarket={isOffMarket} />
+          <PageFooter isOffMarket={isOffMarket} />
         </Page>
       ))}
 
