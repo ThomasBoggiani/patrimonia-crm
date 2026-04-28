@@ -1441,19 +1441,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           )}
         </div>
 
-        {/* ═══ COLONNE DROITE — RÉSERVÉE ASSISTANT IA ═══ */}
-        <div className="space-y-4">
-          <div className="bg-gradient-to-br from-sage-50 to-cream-50 rounded-xl p-6 border-2 border-dashed border-sage-light min-h-[400px] flex flex-col items-center justify-center text-center">
-            <div className="w-14 h-14 rounded-full gradient-sage-dark flex items-center justify-center mb-3">
-              <Sparkles className="w-7 h-7 text-white" />
-            </div>
-            <h3 className="font-display text-lg font-semibold text-stone-900 mb-2">Assistant IA</h3>
-            <p className="text-xs text-stone-600 mb-4 max-w-[200px]">Stratégie, angle commercial, cible acquéreur, points forts, objections...</p>
-            <div className="text-[10px] uppercase tracking-wider text-sage-dark font-medium">Bientôt disponible</div>
-          </div>
-       </div>
-      </div>
-
       {/* ═══ MODALS ═══ */}
       {openModal === 'photos' && (
         <PhotosModal mandat={mandat} onClose={() => setOpenModal(null)} onUpdate={reload} />
