@@ -1,418 +1,343 @@
 // ═══════════════════════════════════════════════════════════════════
-// lib/pdf/templates/RapportVendeur.jsx — REFONTE Direction 1 v12.3
-// 
-// Rapport périodique pour le vendeur (propriétaire).
-// Style : Maison de prestige (Times-Roman, sage/crème)
-// 
-// Pages :
-//   1. Couverture sobre (logo + titre + période + date édition)
-//   2. Sommaire
-//   3. Synthèse activité (KPIs + analyse)
-//   4. Détail des événements
-//   5. Le bien & avancement
+// lib/pdf/templates/RapportVendeur.jsx — v1.0 Template I&P
+//
+// Rapport d'activité destiné au mandant (vendeur).
+// Période : configurable via props.period { start, end }
+//
+// Pages dynamiques :
+//   1. Couverture (toujours) — photo héro + titre + période
+//   2. Synthèse (toujours) — 4 KPIs : Contacts / Visites / Offres / Vues
+//   3. Actions réalisées (si events) — timeline chronologique
+//   4. Retours du marché (toujours) — texte qualitatif
+//   5. Conclusion (toujours) — message + signature commercial
 // ═══════════════════════════════════════════════════════════════════
 
 import React from 'react';
 import { Document, Page, View, Text, Image } from '@react-pdf/renderer';
 import { getStyles, COLORS, LAYOUT } from '../styles';
 import {
-  PageHeader,
+  PageLogo,
+  SectionTitle,
   PageFooter,
-  TableOfContents,
-  Section,
-  KpiCard,
-  FinancialRow,
+  Card,
+  CardsRow,
 } from '../components';
 import {
   formatPrix,
   formatSurface,
-  formatDate,
-  formatPeriodLabel,
   safeText,
-  ensureAbsoluteUrl,
+  normalizePhotos,
 } from '../helpers';
+import { LOGO_IP_BASE64 } from '../logo-base64';
+
+// ─────────────────────────────────────────────────────────────────
+// Helper : formater une date en français court
+// ─────────────────────────────────────────────────────────────────
+function formatDateFR(dateStr) {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('fr-FR', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+function formatDateShort(dateStr) {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+    });
+  } catch {
+    return dateStr;
+  }
+}
 
 export default function RapportVendeur({
   mandat,
   conseiller,
   logoUrl,
-  period,
-  stats,
-  events,
+  period,    // { start: 'YYYY-MM-DD', end: 'YYYY-MM-DD' }
+  stats,     // { nb_contacts, nb_visites, nb_offres, nb_vues }
+  events,    // [{ date, type, label, description }, ...]
 }) {
   const isOffMarket = mandat?.is_off_market === true;
   const styles = getStyles(isOffMarket);
   const palette = isOffMarket ? COLORS.offmarket : COLORS.standard;
-  const periodLabel = formatPeriodLabel(period?.start, period?.end);
 
-  const s = stats || {};
-  const safeStats = {
-    nb_visites: s.nb_visites ?? 0,
-    nb_contacts: s.nb_contacts ?? 0,
-    nb_offres: s.nb_offres ?? 0,
-    nb_vues: s.nb_vues ?? 0,
-  };
+  const photos = normalizePhotos(mandat?.photos);
+  const heroPhoto = photos[0] || null;
 
-  const tocItems = [
-    { label: "Synthèse de l'activité", page: 'p. 03' },
-    { label: "Détail des événements", page: 'p. 04' },
-    { label: 'Le bien & avancement', page: 'p. 05' },
+  const periodStart = formatDateFR(period?.start);
+  const periodEnd = formatDateFR(period?.end);
+  const today = new Date().toLocaleDateString('fr-FR', {
+    day: '2-digit', month: 'long', year: 'numeric'
+  });
+
+  // KPIs — Contacts / Visites / Offres / Vues (dans cet ordre)
+  const kpis = [
+    { number: stats?.nb_contacts ?? 0, label: 'Contacts' },
+    { number: stats?.nb_visites ?? 0, label: 'Visites' },
+    { number: stats?.nb_offres ?? 0, label: 'Offres' },
+    { number: stats?.nb_vues ?? 0, label: 'Vues' },
   ];
+
+  const hasEvents = Array.isArray(events) && events.length > 0;
+  const conseillerName = conseiller?.full_name || conseiller?.name || 'Votre interlocuteur';
+  const conseillerEmail = conseiller?.email || null;
 
   return (
     <Document
-      title={`Rapport vendeur — ${safeText(mandat?.nom, 'Mandat')}`}
+      title={`Rapport d'activité — ${safeText(mandat?.nom, 'Mandat')}`}
       author="Immeubles & Patrimoine"
-      subject="Rapport périodique vendeur"
+      subject="Rapport d'activité au mandant"
     >
       {/* ═══════════════════════════════════════ */}
-      {/* PAGE 1 : COUVERTURE SOBRE               */}
+      {/* PAGE 1 : COUVERTURE                     */}
       {/* ═══════════════════════════════════════ */}
       <Page size="A4" style={styles.coverPage}>
-        {/* Top bar : logo seul */}
-        <View style={styles.coverTopBar}>
-          {logoUrl ? (
-            <Image src={logoUrl} style={styles.coverLogo} />
-          ) : (
-            <View style={{ width: 50, height: 50 }} />
-          )}
-          <View />
-        </View>
+        <Image src={LOGO_IP_BASE64} style={styles.coverLogoLarge} />
 
-        {/* Bloc central : titre + période */}
-        <View
-          style={{
-            justifyContent: 'center',
-            alignItems: 'center',
-            paddingHorizontal: 60,
-            paddingTop: 100,
-            paddingBottom: 40,
-          }}
-        >
-          <Text
-            style={{
-              fontSize: LAYOUT.font.tiny,
-              fontFamily: 'Times-Bold',
-              color: palette.muted || palette.sageDeep,
-              letterSpacing: 4,
-              textTransform: 'uppercase',
-              marginBottom: 32,
-            }}
-          >
-            Rapport mandat vendeur
-          </Text>
-
-          <Text
-            style={{
-              fontSize: LAYOUT.font.huge,
-              fontFamily: 'Times-Bold',
-              color: isOffMarket ? COLORS.offmarket.cream : COLORS.standard.ink,
-              textAlign: 'center',
-              marginBottom: 12,
-              lineHeight: 1.1,
-            }}
-          >
-            {safeText(mandat?.nom, 'Bien à renseigner')}
-          </Text>
-
-          <Text
-            style={{
-              fontSize: LAYOUT.font.label,
-              fontFamily: 'Times-Italic',
-              color: isOffMarket ? COLORS.offmarket.muted : COLORS.standard.muted,
-              marginBottom: 60,
-              letterSpacing: 1,
-            }}
-          >
-            {[mandat?.type, mandat?.ville].filter(Boolean).join(' · ')}
-          </Text>
-
-          {periodLabel && (
-            <View
-              style={{
-                paddingVertical: 24,
-                paddingHorizontal: 36,
-                borderTopWidth: 0.5,
-                borderBottomWidth: 0.5,
-                borderColor: isOffMarket ? COLORS.offmarket.gold : COLORS.standard.sageDark,
-                alignItems: 'center',
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: LAYOUT.font.micro,
-                  fontFamily: 'Times-Bold',
-                  color: isOffMarket ? COLORS.offmarket.muted : COLORS.standard.muted,
-                  letterSpacing: 2,
-                  textTransform: 'uppercase',
-                  marginBottom: 8,
-                }}
-              >
-                Période couverte
-              </Text>
-              <Text
-                style={{
-                  fontSize: LAYOUT.font.label,
-                  fontFamily: 'Times-Roman',
-                  color: isOffMarket ? COLORS.offmarket.cream : COLORS.standard.ink,
-                }}
-              >
-                {periodLabel}
-              </Text>
-            </View>
-          )}
-
-          <Text
-            style={{
-              fontSize: LAYOUT.font.small,
-              fontFamily: 'Times-Italic',
-              color: isOffMarket ? COLORS.offmarket.muted : COLORS.standard.muted,
-              marginTop: 80,
-            }}
-          >
-            Édité le {formatDate(new Date().toISOString())}
-          </Text>
-        </View>
-
-        <PageFooter conseiller={conseiller} isOffMarket={isOffMarket} />
-      </Page>
-
-      {/* ═══════════════════════════════════════ */}
-      {/* PAGE 2 : SOMMAIRE                       */}
-      {/* ═══════════════════════════════════════ */}
-      <Page size="A4" style={styles.page}>
-        <View style={{ paddingTop: 80 }}>
-          <TableOfContents items={tocItems} isOffMarket={isOffMarket} />
-        </View>
-        <PageFooter conseiller={conseiller} isOffMarket={isOffMarket} />
-      </Page>
-
-      {/* ═══════════════════════════════════════ */}
-      {/* PAGE 3 : SYNTHÈSE D'ACTIVITÉ            */}
-      {/* ═══════════════════════════════════════ */}
-      <Page size="A4" style={styles.page}>
-        <PageHeader
-          eyebrow="Chapitre I"
-          title="Synthèse de l'activité"
-          pageNumber={1}
-          isOffMarket={isOffMarket}
-        />
-
-        {periodLabel && (
-          <Text
-            style={{
-              fontSize: LAYOUT.font.small,
-              fontFamily: 'Times-Italic',
-              color: palette.muted,
-              marginBottom: 24,
-            }}
-          >
-            Période : {periodLabel}
-          </Text>
+        {heroPhoto ? (
+          <Image src={heroPhoto} style={styles.coverPhoto} />
+        ) : (
+          <View style={styles.coverPhotoPlaceholder}>
+            <Text style={{ fontSize: 12, color: palette.muted, fontFamily: 'Helvetica-Oblique' }}>
+              Photo principale du bien
+            </Text>
+          </View>
         )}
 
-        {/* KPIs */}
-        <View style={styles.kpiRow}>
-          <KpiCard
-            label="Visites organisées"
-            value={String(safeStats.nb_visites)}
-            isOffMarket={isOffMarket}
-          />
-          <KpiCard
-            label="Contacts qualifiés"
-            value={String(safeStats.nb_contacts)}
-            isOffMarket={isOffMarket}
-          />
-        </View>
-        <View style={styles.kpiRow}>
-          <KpiCard
-            label="Offres reçues"
-            value={String(safeStats.nb_offres)}
-            isOffMarket={isOffMarket}
-          />
-          <KpiCard
-            label="Vues / sollicitations"
-            value={String(safeStats.nb_vues)}
-            isOffMarket={isOffMarket}
-          />
-        </View>
-
-        <Section eyebrow="Notre analyse" isOffMarket={isOffMarket}>
-          <Text style={styles.sectionContent}>
-            {generateAnalysisText(safeStats, mandat)}
+        <View style={styles.coverTitleBlock}>
+          <Text style={[styles.coverTitle, { fontSize: 26 }]}>
+            RAPPORT D'ACTIVITÉ
           </Text>
-        </Section>
+          <Text style={[styles.coverCity, { marginTop: 8 }]}>
+            {safeText(mandat?.nom, 'BIEN').toUpperCase()}
+          </Text>
+          <Text style={[styles.coverSubInfo, { marginTop: 12 }]}>
+            {periodStart && periodEnd
+              ? `Période du ${periodStart} au ${periodEnd}`
+              : `Édité le ${today}`}
+          </Text>
+        </View>
 
-        <PageFooter conseiller={conseiller} isOffMarket={isOffMarket} />
+        <Text style={styles.coverWebsite}>www.immeubles-patrimoine.fr</Text>
       </Page>
 
       {/* ═══════════════════════════════════════ */}
-      {/* PAGE 4 : DÉTAIL DES ÉVÉNEMENTS          */}
+      {/* PAGE 2 : SYNTHÈSE DE L'ACTIVITÉ         */}
       {/* ═══════════════════════════════════════ */}
       <Page size="A4" style={styles.page}>
-        <PageHeader
-          eyebrow="Chapitre II"
-          title="Détail des événements"
-          pageNumber={2}
-          isOffMarket={isOffMarket}
-        />
+        <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
+        <SectionTitle title="SYNTHÈSE DE L'ACTIVITÉ" isOffMarket={isOffMarket} />
 
-        <Section eyebrow="Activité de la période" isOffMarket={isOffMarket}>
-          {events && events.length > 0 ? (
-            events.map((event, i) => (
+        <View style={[styles.descriptionBlock, { marginTop: 8 }]}>
+          <Text style={styles.descriptionText}>
+            Cher mandant,{'\n\n'}
+            Voici la synthèse de l'activité menée sur votre bien
+            {mandat?.nom ? ` « ${mandat.nom} »` : ''} sur la période
+            {periodStart && periodEnd ? ` du ${periodStart} au ${periodEnd}` : ' écoulée'}.
+            {'\n\n'}
+            Notre équipe reste mobilisée à vos côtés pour mener cette transaction
+            dans les meilleures conditions.
+          </Text>
+        </View>
+
+        <View style={{ marginTop: 24 }}>
+          <CardsRow isOffMarket={isOffMarket}>
+            {kpis.map((k, i) => (
+              <Card
+                key={i}
+                number={k.number}
+                label={k.label}
+                isOffMarket={isOffMarket}
+              />
+            ))}
+          </CardsRow>
+        </View>
+
+        <PageFooter isOffMarket={isOffMarket} />
+      </Page>
+
+      {/* ═══════════════════════════════════════ */}
+      {/* PAGE 3 : ACTIONS RÉALISÉES (si events)  */}
+      {/* ═══════════════════════════════════════ */}
+      {hasEvents && (
+        <Page size="A4" style={styles.page}>
+          <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
+          <SectionTitle title="ACTIONS RÉALISÉES" isOffMarket={isOffMarket} />
+
+          <Text style={[styles.descriptionText, { marginTop: 16, marginBottom: 16, fontSize: 10 }]}>
+            Détail chronologique des actions menées sur la période.
+          </Text>
+
+          <View style={{ marginHorizontal: 30 }}>
+            {events.map((ev, i) => (
               <View
                 key={i}
                 style={{
                   flexDirection: 'row',
-                  paddingVertical: 12,
+                  paddingVertical: 8,
                   borderBottomWidth: 0.5,
-                  borderBottomColor: palette.borderLight || palette.accentLine,
+                  borderBottomColor: palette.muted || '#999',
                 }}
               >
-                <Text
-                  style={{
-                    width: 110,
-                    fontSize: LAYOUT.font.small,
-                    fontFamily: 'Times-Italic',
-                    color: palette.muted,
-                  }}
-                >
-                  {formatDate(event.date)}
+                <Text style={{
+                  width: 70,
+                  fontSize: 9,
+                  fontFamily: 'Helvetica-Bold',
+                  color: palette.accent || '#9CAF88',
+                }}>
+                  {formatDateShort(ev.date)}
                 </Text>
                 <View style={{ flex: 1 }}>
-                  <Text
-                    style={{
-                      fontSize: LAYOUT.font.body,
-                      fontFamily: 'Times-Bold',
-                      color: isOffMarket ? COLORS.offmarket.cream : COLORS.standard.ink,
-                    }}
-                  >
-                    {event.type || 'Événement'}
+                  <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', marginBottom: 2 }}>
+                    {ev.label || ev.type || 'Action'}
                   </Text>
-                  <Text
-                    style={{
-                      fontSize: LAYOUT.font.small,
-                      fontFamily: 'Times-Roman',
-                      color: palette.muted,
-                      marginTop: 4,
-                    }}
-                  >
-                    {event.description || '—'}
-                  </Text>
+                  {ev.description && (
+                    <Text style={{ fontSize: 9, color: palette.text || '#444' }}>
+                      {ev.description}
+                    </Text>
+                  )}
                 </View>
               </View>
-            ))
-          ) : (
-            <Text style={{ ...styles.sectionContent, fontFamily: 'Times-Italic' }}>
-              Aucun événement enregistré sur cette période.
-            </Text>
-          )}
-        </Section>
+            ))}
+          </View>
 
-        <PageFooter conseiller={conseiller} isOffMarket={isOffMarket} />
+          <PageFooter isOffMarket={isOffMarket} />
+        </Page>
+      )}
+
+      {/* ═══════════════════════════════════════ */}
+      {/* PAGE 4 : RETOURS DU MARCHÉ              */}
+      {/* ═══════════════════════════════════════ */}
+      <Page size="A4" style={styles.page}>
+        <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
+        <SectionTitle title="RETOURS DU MARCHÉ" isOffMarket={isOffMarket} />
+
+        <View style={[styles.descriptionBlock, { marginTop: 8 }]}>
+          <Text style={styles.descriptionText}>
+            Notre approche off-market et la qualification de notre fichier acheteurs
+            permettent de cibler des prospects sérieux et alignés avec le standing
+            de votre bien.{'\n\n'}
+            Les retours qualitatifs recueillis lors des visites et échanges nous
+            permettent d'affiner en continu notre stratégie de présentation et
+            de négociation.
+          </Text>
+        </View>
+
+        {/* Bloc structuré : Points positifs / Points de vigilance */}
+        <View style={{ flexDirection: 'row', marginTop: 24, paddingHorizontal: 20 }}>
+          <View style={{
+            flex: 1,
+            marginRight: 8,
+            padding: 14,
+            backgroundColor: palette.bgSoft || '#F5F2EC',
+            borderLeftWidth: 3,
+            borderLeftColor: palette.accent || '#9CAF88',
+          }}>
+            <Text style={{
+              fontSize: 10,
+              fontFamily: 'Helvetica-Bold',
+              color: palette.accent || '#9CAF88',
+              textTransform: 'uppercase',
+              letterSpacing: 1.2,
+              marginBottom: 8,
+            }}>
+              Points appréciés
+            </Text>
+            <Text style={{ fontSize: 9, color: palette.text || '#444', lineHeight: 1.5 }}>
+              Synthèse des éléments mis en avant par les acheteurs lors des visites
+              (à compléter par votre conseiller).
+            </Text>
+          </View>
+
+          <View style={{
+            flex: 1,
+            marginLeft: 8,
+            padding: 14,
+            backgroundColor: palette.bgSoft || '#F5F2EC',
+            borderLeftWidth: 3,
+            borderLeftColor: palette.muted || '#999',
+          }}>
+            <Text style={{
+              fontSize: 10,
+              fontFamily: 'Helvetica-Bold',
+              color: palette.muted || '#666',
+              textTransform: 'uppercase',
+              letterSpacing: 1.2,
+              marginBottom: 8,
+            }}>
+              Points de vigilance
+            </Text>
+            <Text style={{ fontSize: 9, color: palette.text || '#444', lineHeight: 1.5 }}>
+              Synthèse des objections rencontrées ou questions récurrentes
+              (à compléter par votre conseiller).
+            </Text>
+          </View>
+        </View>
+
+        <PageFooter isOffMarket={isOffMarket} />
       </Page>
 
       {/* ═══════════════════════════════════════ */}
-      {/* PAGE 5 : LE BIEN & AVANCEMENT           */}
+      {/* PAGE 5 : CONCLUSION & SIGNATURE         */}
       {/* ═══════════════════════════════════════ */}
       <Page size="A4" style={styles.page}>
-        <PageHeader
-          eyebrow="Chapitre III"
-          title="Le bien & avancement"
-          pageNumber={3}
-          isOffMarket={isOffMarket}
-        />
+        <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
+        <SectionTitle title="NOS PROCHAINES ÉTAPES" isOffMarket={isOffMarket} />
 
-        <Section eyebrow="Caractéristiques principales" isOffMarket={isOffMarket}>
-          <FinancialRow
-            label="Bien"
-            value={safeText(mandat?.nom, '—')}
-            isOffMarket={isOffMarket}
-          />
-          <FinancialRow
-            label="Type"
-            value={[mandat?.type, mandat?.sous_type].filter(Boolean).join(' · ') || '—'}
-            isOffMarket={isOffMarket}
-          />
-          <FinancialRow
-            label="Adresse"
-            value={[mandat?.adresse, mandat?.ville].filter(Boolean).join(', ') || '—'}
-            isOffMarket={isOffMarket}
-          />
-          <FinancialRow
-            label="Surface"
-            value={formatSurface(mandat?.surface)}
-            isOffMarket={isOffMarket}
-          />
-          <FinancialRow
-            label="Prix de présentation"
-            value={formatPrix(mandat?.prix)}
-            big={true}
-            isOffMarket={isOffMarket}
-          />
-        </Section>
+        <View style={[styles.descriptionBlock, { marginTop: 8 }]}>
+          <Text style={styles.descriptionText}>
+            Sur la période à venir, nous poursuivrons activement la commercialisation
+            de votre bien en orientant nos efforts sur :{'\n\n'}
+            •  La diffusion ciblée auprès de notre fichier qualifié de prospects
+            patrimoniaux.{'\n'}
+            •  L'organisation de visites avec les acheteurs pré-qualifiés.{'\n'}
+            •  Le retour régulier d'informations vous concernant l'évolution du dossier.
+            {'\n\n'}
+            Nous restons à votre entière disposition pour échanger sur ce rapport
+            et préciser toute information complémentaire.
+          </Text>
+        </View>
 
-        <Section eyebrow="Avancement du mandat" isOffMarket={isOffMarket}>
-          <FinancialRow
-            label="Statut actuel"
-            value={safeText(mandat?.statut, 'En cours de commercialisation')}
-            isOffMarket={isOffMarket}
-          />
-          <FinancialRow
-            label="Type de mandat"
-            value={safeText(mandat?.commercialisation, '—')}
-            isOffMarket={isOffMarket}
-          />
-          {mandat?.date_signature && (
-            <FinancialRow
-              label="Date de signature"
-              value={formatDate(mandat?.date_signature)}
-              isOffMarket={isOffMarket}
-            />
+        {/* Signature */}
+        <View style={{
+          marginTop: 60,
+          paddingHorizontal: 40,
+          alignItems: 'flex-end',
+        }}>
+          <Text style={{ fontSize: 10, color: palette.muted || '#666', marginBottom: 4 }}>
+            Bien cordialement,
+          </Text>
+          <Text style={{
+            fontSize: 12,
+            fontFamily: 'Helvetica-Bold',
+            color: palette.text || '#222',
+          }}>
+            {conseillerName}
+          </Text>
+          {conseillerEmail && (
+            <Text style={{ fontSize: 9, color: palette.muted || '#666', marginTop: 2 }}>
+              {conseillerEmail}
+            </Text>
           )}
-        </Section>
+          <Text style={{ fontSize: 9, color: palette.muted || '#666', marginTop: 2, fontStyle: 'italic' }}>
+            Immeubles & Patrimoine
+          </Text>
+        </View>
 
-        <PageFooter conseiller={conseiller} isOffMarket={isOffMarket} />
+        <PageFooter isOffMarket={isOffMarket} />
       </Page>
     </Document>
   );
-}
-
-// ─────────────────────────────────────────────────────────────────
-// Génération d'une phrase d'analyse selon les stats
-// ─────────────────────────────────────────────────────────────────
-
-function generateAnalysisText(stats, mandat) {
-  const lines = [];
-  const { nb_visites, nb_contacts, nb_offres, nb_vues } = stats;
-
-  if (nb_offres > 0) {
-    lines.push(
-      `Sur la période, ${nb_offres} offre${nb_offres > 1 ? 's ont été reçues' : ' a été reçue'} sur ce bien. `
-    );
-  }
-  if (nb_visites > 0) {
-    lines.push(
-      `${nb_visites} visite${nb_visites > 1 ? 's ont été organisées' : ' a été organisée'} avec des acquéreurs qualifiés. `
-    );
-  } else if (nb_contacts > 0) {
-    lines.push(
-      `${nb_contacts} contact${nb_contacts > 1 ? 's qualifiés ont' : ' qualifié a'} manifesté un intérêt sur la période. `
-    );
-  }
-  if (nb_vues > 50) {
-    lines.push(
-      `Le bien a généré une exposition significative (${nb_vues} sollicitations) — signe d'un positionnement attractif. `
-    );
-  }
-
-  if (lines.length === 0) {
-    return "Aucune activité significative enregistrée sur cette période. Nous proposons un point téléphonique pour ajuster ensemble la stratégie de commercialisation si nécessaire.";
-  }
-
-  lines.push(
-    "Nous restons à votre entière disposition pour toute question relative à l'avancement du mandat."
-  );
-
-  return lines.join('');
 }
