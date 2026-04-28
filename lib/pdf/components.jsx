@@ -2,6 +2,7 @@
 // lib/pdf/components.jsx — Composants partagés "Template I&P" v13.0
 // ═══════════════════════════════════════════════════════════════════
 
+import { LOGO_IP_BASE64 } from './logo-base64';
 import React from 'react';
 import { View, Text, Image } from '@react-pdf/renderer';
 import { getStyles, COLORS } from './styles';
@@ -10,10 +11,9 @@ import { getStyles, COLORS } from './styles';
 // PageLogo — Logo centré en haut de chaque page
 // ─────────────────────────────────────────────────────────────────
 export function PageLogo({ logoUrl, isOffMarket }) {
-  const finalUrl = logoUrl || 'https://patrimonia-crm.vercel.app/logo-ip-sage.jpg';
   return (
     <Image 
-      src={finalUrl} 
+      src={LOGO_IP_BASE64} 
       style={{ 
         width: 75, 
         height: 75, 
