@@ -46,12 +46,12 @@ export function SectionTitle({ title, subtitle, multiLine, isOffMarket }) {
 // ─────────────────────────────────────────────────────────────────
 // PageFooter — Bandeau sage en bas avec coords + n° page
 // ─────────────────────────────────────────────────────────────────
-export function PageFooter({ pageNumber, isOffMarket, showConfidential = true }) {
+export function PageFooter({ pageNumber, isOffMarket, showConfidential = true, hideOnFirstPage = false }) {
   const styles = getStyles(isOffMarket);
   return (
     <>
       {showConfidential && (
-        <Text style={styles.confidentialNote}>
+        <Text style={styles.confidentialNote} fixed>
           {isOffMarket ? 'OFF-MARKET — DIFFUSION RESTREINTE' : 'Confidentiel et non contractuel'}
         </Text>
       )}
@@ -61,9 +61,18 @@ export function PageFooter({ pageNumber, isOffMarket, showConfidential = true })
           <Text style={styles.footerAddress}>7 rue de Penthièvre 75008 Paris</Text>
           <Text style={styles.footerContact}>06 84 40 81 09  •  www.immeubles-patrimoine.fr</Text>
         </View>
-        {pageNumber && (
-          <Text style={styles.footerPageNumber}>{pageNumber}</Text>
-        )}
+        <Text
+          style={styles.footerPageNumber}
+          render={({ pageNumber: pn, totalPages: tp }) => {
+            // Si pageNumber est explicitement passé, on force cette valeur
+            // Sinon, on utilise les infos auto de React PDF
+            // Format : "P. X / Y"
+            const num = pageNumber || pn;
+            if (hideOnFirstPage && pn === 1) return '';
+            return `P. ${num} / ${tp}`;
+          }}
+          fixed
+        />
       </View>
     </>
   );
