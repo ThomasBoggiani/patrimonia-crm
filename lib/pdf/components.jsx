@@ -146,6 +146,8 @@ export function PhotoGrid({ photos, isOffMarket }) {
 // ─────────────────────────────────────────────────────────────────
 export function TeamMember({ photoUrl, name, role, email, phone, large, isOffMarket }) {
   const styles = getStyles(isOffMarket);
+  const palette = isOffMarket ? COLORS.offmarket : COLORS.standard;
+
   const initials = (name || '?')
     .split(' ')
     .map(s => s[0])
@@ -154,7 +156,8 @@ export function TeamMember({ photoUrl, name, role, email, phone, large, isOffMar
     .join('')
     .toUpperCase();
 
-  const photoSize = large ? 140 : 110;
+  // Tailles dynamiques selon "large" (boss au centre = plus grand)
+  const photoSize = large ? 130 : 100;
   const photoStyle = {
     width: photoSize,
     height: photoSize,
@@ -163,22 +166,22 @@ export function TeamMember({ photoUrl, name, role, email, phone, large, isOffMar
     marginBottom: 12,
   };
   const placeholderStyle = {
-    ...photoStyle,
-    backgroundColor: isOffMarket ? COLORS.offmarket.bgDeep : COLORS.standard.sage,
-    borderWidth: isOffMarket ? 2 : 0,
-    borderColor: isOffMarket ? COLORS.offmarket.gold : 'transparent',
-    justifyContent: 'center',
+    width: photoSize,
+    height: photoSize,
+    borderRadius: photoSize / 2,
+    backgroundColor: palette.accent || '#9CAF88',
     alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
   };
   const initialsStyle = {
-    fontSize: large ? 42 : 32,
+    color: '#FFFFFF',
+    fontSize: large ? 36 : 28,
     fontFamily: 'Helvetica-Bold',
-    color: isOffMarket ? COLORS.offmarket.gold : COLORS.standard.white,
-    letterSpacing: 2,
   };
 
   return (
-    <View style={styles.teamMember}>
+    <View style={[styles.teamMember || {}, { alignItems: 'center', maxWidth: 180 }]}>
       {photoUrl ? (
         <Image src={photoUrl} style={photoStyle} />
       ) : (
@@ -186,10 +189,22 @@ export function TeamMember({ photoUrl, name, role, email, phone, large, isOffMar
           <Text style={initialsStyle}>{initials}</Text>
         </View>
       )}
-      <Text style={styles.teamName}>{name}</Text>
-      <Text style={styles.teamRole}>{role}</Text>
-      {email && <Text style={styles.teamEmail}>{email}</Text>}
-      {phone && <Text style={styles.teamPhone}>{phone}</Text>}
+      <Text style={[styles.teamName || {}, { fontSize: large ? 13 : 11, fontFamily: 'Helvetica-Bold', textAlign: 'center', marginBottom: 2 }]}>
+        {name}
+      </Text>
+      <Text style={[styles.teamRole || {}, { fontSize: 9, color: palette.muted || '#666', textAlign: 'center', marginBottom: 6 }]}>
+        {role}
+      </Text>
+      {email && (
+        <Text style={[styles.teamEmail || {}, { fontSize: 8, color: palette.text || '#333', textAlign: 'center', marginBottom: 1 }]}>
+          {email}
+        </Text>
+      )}
+      {phone && (
+        <Text style={[styles.teamPhone || {}, { fontSize: 8, color: palette.text || '#333', textAlign: 'center' }]}>
+          {phone}
+        </Text>
+      )}
     </View>
   );
 }
