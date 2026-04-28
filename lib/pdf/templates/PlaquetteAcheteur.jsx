@@ -52,7 +52,7 @@ function buildTeamForPlaquette({ mandat, sender, allMembers }) {
   // allMembers est un dictionnaire : { 'TE': {name, role, email, phone, photo}, 'TB': ..., 'LH': ..., etc. }
   // Le BOSS est toujours Thomas Ezquerra (initiales 'TE')
   const BOSS_INITIALS = 'TE';
-  const ownerInitials = (mandat?.owner || '').toUpperCase();
+  const ownerInitials = (mandat?.ownerInitials || '').toUpperCase();
   const senderInitials = (sender?.initiales || sender?.initials || '').toUpperCase();
 
   const boss = allMembers[BOSS_INITIALS];
