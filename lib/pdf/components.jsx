@@ -10,7 +10,6 @@ import { getStyles, COLORS } from './styles';
 // PageLogo — Logo centré en haut de chaque page
 // ─────────────────────────────────────────────────────────────────
 export function PageLogo({ logoUrl, isOffMarket }) {
-  // Fallback : si pas de logoUrl, on utilise l'URL en dur
   const finalUrl = logoUrl || 'https://patrimonia-crm.vercel.app/logo-ip-sage.png';
   return (
     <Image 
