@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════
 // components/DocumentsModal.jsx
-// Modal de gestion des documents d'un mandat
+// Modal documents - upload DIRECT vers Supabase (bypass Vercel 4.5MB)
 // ═══════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef } from 'react';
@@ -39,9 +39,7 @@ function formatBytes(bytes) {
 function formatDate(dateStr) {
   if (!dateStr) return '';
   try {
-    return new Date(dateStr).toLocaleDateString('fr-FR', {
-      day: '2-digit', month: '2-digit', year: '2-digit'
-    });
+    return new Date(dateStr).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' });
   } catch { return ''; }
 }
 
@@ -59,15 +57,10 @@ export default function DocumentsModal({ mandat, onClose }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      if (!token) {
-        setLoading(false);
-        return;
-      }
+      if (!token) { setLoading(false); return; }
       const res = await fetch('/api/mandats/' + mandat.id + '/documents?token=' + encodeURIComponent(token));
       const data = await res.json();
-      if (data.ok) {
-        setDocuments(data.documents || []);
-      }
+      if (data.ok) { setDocuments(data.documents || []); }
     } catch (e) {
       console.error('[Docs] load error:', e);
     } finally {
@@ -75,9 +68,7 @@ export default function DocumentsModal({ mandat, onClose }) {
     }
   }
 
-  useEffect(() => {
-    loadDocuments();
-  }, [mandat?.id]);
+  useEffect(() => { loadDocuments(); }, [mandat?.id]);
 
   async function handleFileUpload(event) {
     const file = event.target.files?.[0];
@@ -86,33 +77,18 @@ export default function DocumentsModal({ mandat, onClose }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      if (!token) {
-        alert('Session expirée');
-        return;
-      }
+      if (!token) { alert('Session expirée'); return; }
 
-      // Sanitize nom de fichier
-      const cleanName = (file.name || 'file')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-zA-Z0-9._-]/g, '_');
+      const cleanName = (file.name || 'file').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
       const storagePath = mandat.id + '/' + Date.now() + '_' + cleanName;
 
-      // Upload DIRECT vers Supabase Storage (bypass Vercel)
-      const { error: uploadErr } = await supabase
-        .storage
-        .from('mandat-docs')
-        .upload(storagePath, file, {
-          contentType: file.type || 'application/octet-stream',
-          upsert: false,
-        });
+      const { error: uploadErr } = await supabase.storage.from('mandat-docs').upload(storagePath, file, {
+        contentType: file.type || 'application/octet-stream',
+        upsert: false,
+      });
 
-      if (uploadErr) {
-        alert('Erreur upload : ' + uploadErr.message);
-        return;
-      }
+      if (uploadErr) { alert('Erreur upload : ' + uploadErr.message); return; }
 
-      // Enregistrer les métadonnées en BDD via l'API
       const res = await fetch('/api/mandats/' + mandat.id + '/documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -129,16 +105,13 @@ export default function DocumentsModal({ mandat, onClose }) {
 
       const data = await res.json();
       if (!data.ok) {
-        // Rollback : supprimer le fichier uploadé
         await supabase.storage.from('mandat-docs').remove([storagePath]);
         alert('Erreur enregistrement : ' + (data.error || 'inconnue'));
         return;
       }
 
       await loadDocuments();
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (e) {
       alert('Erreur : ' + e.message);
     } finally {
@@ -147,10 +120,7 @@ export default function DocumentsModal({ mandat, onClose }) {
   }
 
   async function handleAddLink() {
-    if (!linkData.nom.trim() || !linkData.url.trim()) {
-      alert('Nom et URL requis');
-      return;
-    }
+    if (!linkData.nom.trim() || !linkData.url.trim()) { alert('Nom et URL requis'); return; }
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -168,10 +138,7 @@ export default function DocumentsModal({ mandat, onClose }) {
         }),
       });
       const data = await res.json();
-      if (!data.ok) {
-        alert('Erreur : ' + (data.error || 'inconnue'));
-        return;
-      }
+      if (!data.ok) { alert('Erreur : ' + (data.error || 'inconnue')); return; }
       setLinkData({ nom: '', url: '', category: 'autre' });
       setShowLinkForm(false);
       await loadDocuments();
@@ -193,10 +160,7 @@ export default function DocumentsModal({ mandat, onClose }) {
         body: JSON.stringify({ token, document_id: docId }),
       });
       const data = await res.json();
-      if (!data.ok) {
-        alert('Erreur suppression');
-        return;
-      }
+      if (!data.ok) { alert('Erreur suppression'); return; }
       await loadDocuments();
     } catch (e) {
       alert('Erreur : ' + e.message);
@@ -236,8 +200,7 @@ export default function DocumentsModal({ mandat, onClose }) {
               {uploading ? 'Upload...' : 'Ajouter un fichier'}
             </button>
             <button onClick={() => setShowLinkForm(!showLinkForm)} className="flex items-center gap-2 px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded-lg text-sm hover:bg-stone-100">
-              <Link2 className="w-4 h-4" />
-              Ajouter un lien
+              <Link2 className="w-4 h-4" /> Ajouter un lien
             </button>
           </div>
 
@@ -261,8 +224,7 @@ export default function DocumentsModal({ mandat, onClose }) {
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {loading ? (
             <div className="text-center py-12 text-stone-400">
-              <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-              Chargement...
+              <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" /> Chargement...
             </div>
           ) : documents.length === 0 ? (
             <div className="text-center py-12 text-stone-400">
@@ -287,11 +249,7 @@ export default function DocumentsModal({ mandat, onClose }) {
                           <div className="flex-1 min-w-0">
                             <div className="text-sm font-medium text-stone-900 truncate">{doc.nom}</div>
                             <div className="text-xs text-stone-500 flex items-center gap-2 mt-0.5">
-                              {doc.type === 'file' ? (
-                                <span>{formatBytes(doc.taille_bytes)}</span>
-                              ) : (
-                                <span className="text-stone-400">Lien externe</span>
-                              )}
+                              {doc.type === 'file' ? <span>{formatBytes(doc.taille_bytes)}</span> : <span className="text-stone-400">Lien externe</span>}
                               <span>•</span>
                               <span>{formatDate(doc.created_at)}</span>
                             </div>
