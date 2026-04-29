@@ -14,6 +14,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
 import VoiceNoteModal from './VoiceNoteModal';
+import MandatAIAssistant from './MandatAIAssistant';
 import DocumentsModal from './DocumentsModal';
 import SmartImportModal from './SmartImportModal';
 import GlobalVoiceModal from './GlobalVoiceModal';
