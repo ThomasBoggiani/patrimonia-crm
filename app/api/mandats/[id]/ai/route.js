@@ -1,128 +1,100 @@
 // ═══════════════════════════════════════════════════════════════════
-// app/api/mandats/[id]/pdf/route.js — VERSION v13.1
-//
-// Auth par token Supabase passé dans l'URL (param ?token=...)
-//
-// Usage :
-//   GET /api/mandats/{uuid}/pdf?template=plaquette&token=eyJhbG...
-//   GET /api/mandats/{uuid}/pdf?template=rapport&start=...&end=...&token=...
-//   GET /api/mandats/{uuid}/pdf?template=interne&token=...
+// app/api/mandats/[id]/ai/route.js
+// Endpoint Assistant IA contextuel pour un mandat
 // ═══════════════════════════════════════════════════════════════════
 
-import { renderToStream } from '@react-pdf/renderer';
-import React from 'react';
+import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 
-import PlaquetteAcheteur from '@/lib/pdf/templates/PlaquetteAcheteur';
-import RapportVendeur from '@/lib/pdf/templates/RapportVendeur';
-import FicheInterne from '@/lib/pdf/templates/FicheInterne';
+export const maxDuration = 60;
 
-// Client admin pour charger les données (bypasse RLS).
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
-// ─────────────────────────────────────────────────────────────────
-// AUTH par token URL
-// ─────────────────────────────────────────────────────────────────
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
 
 async function verifyToken(token) {
   if (!token) return null;
   const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !user) {
-    console.warn('[/api/mandats/[id]/pdf] Token invalide:', error?.message);
-    return null;
-  }
+  if (error || !user) return null;
   return user;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// LOAD MANDAT + CONSEILLER
-// ─────────────────────────────────────────────────────────────────
-
-async function loadMandatData(mandatId) {
-  const { data: mandat, error: mErr } = await supabaseAdmin
-    .from('mandats')
-    .select('*')
-    .eq('id', mandatId)
-    .maybeSingle();
-
-  if (mErr || !mandat) {
-    return { error: 'Mandat introuvable', mandat: null };
+function buildMandatContext(mandat) {
+  const lines = [];
+  lines.push(`# Contexte du bien`);
+  lines.push(`- Nom : ${mandat.nom || '(non renseigné)'}`);
+  lines.push(`- Type : ${mandat.type || '(non renseigné)'}${mandat.sous_type ? ' / ' + mandat.sous_type : ''}`);
+  if (mandat.adresse) lines.push(`- Adresse : ${mandat.adresse}`);
+  if (mandat.ville) lines.push(`- Ville : ${mandat.ville}`);
+  if (mandat.surface) lines.push(`- Surface : ${mandat.surface} m²`);
+  if (mandat.nb_pieces) lines.push(`- Pièces : ${mandat.nb_pieces}`);
+  if (mandat.nb_chambres) lines.push(`- Chambres : ${mandat.nb_chambres}`);
+  if (mandat.etage !== null && mandat.etage !== undefined) lines.push(`- Étage : ${mandat.etage}`);
+  if (mandat.prix) lines.push(`- Prix affiché (HAI) : ${mandat.prix} €`);
+  if (mandat.prix_net_vendeur) lines.push(`- Prix net vendeur : ${mandat.prix_net_vendeur} €`);
+  if (mandat.honoraires_charge) lines.push(`- Honoraires à charge : ${mandat.honoraires_charge}`);
+  if (mandat.honoraires_taux) lines.push(`- Taux honoraires : ${mandat.honoraires_taux} %`);
+  if (mandat.rendement) lines.push(`- Rendement : ${mandat.rendement} %`);
+  if (mandat.loyers_annuels) lines.push(`- Loyers annuels : ${mandat.loyers_annuels} €`);
+  if (mandat.charges_annuelles) lines.push(`- Charges courantes annuelles : ${mandat.charges_annuelles} €`);
+  if (mandat.dpe_consommation) lines.push(`- DPE consommation : ${mandat.dpe_consommation} kWh/m²/an`);
+  if (mandat.dpe_emissions) lines.push(`- DPE émissions : ${mandat.dpe_emissions} kg CO2/m²/an`);
+  if (mandat.annee_construction) lines.push(`- Année de construction : ${mandat.annee_construction}`);
+  if (mandat.statut_copropriete) lines.push(`- Copropriété : ${mandat.statut_copropriete}`);
+  if (mandat.nb_lots) lines.push(`- Nombre de lots copropriété : ${mandat.nb_lots}`);
+  lines.push(`- Statut commercial : ${mandat.is_off_market ? 'OFF-MARKET (diffusion restreinte)' : 'Marché ouvert'}`);
+  if (mandat.commercialisation) lines.push(`- Type de commercialisation : ${mandat.commercialisation}`);
+  if (Array.isArray(mandat.highlights) && mandat.highlights.length > 0) {
+    lines.push(`- Points forts ("Nous aimons") : ${mandat.highlights.join(', ')}`);
   }
-
-  let conseiller = null;
-  if (mandat.profile_id) {
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('id, email, prenom, nom, tel')
-      .eq('id', mandat.profile_id)
-      .maybeSingle();
-
-    if (profile) {
-      conseiller = {
-        ...profile,
-        full_name: `${profile.prenom || ''} ${profile.nom || ''}`.trim() || 'Conseiller',
-      };
-    }
+  if (mandat.description) {
+    lines.push(``);
+    lines.push(`# Description actuelle du bien`);
+    lines.push(mandat.description);
   }
-
-  if (!conseiller && mandat.owner) {
-    conseiller = {
-      full_name: mandat.owner,
-      email: null,
-      tel: null,
-    };
-  }
-
-  return { mandat, conseiller };
+  return lines.join('\n');
 }
 
-// ─────────────────────────────────────────────────────────────────
-// LOAD STATS POUR LE RAPPORT VENDEUR
-// ─────────────────────────────────────────────────────────────────
+const QUICK_ACTIONS = {
+  descriptif: {
+    user: `Génère-moi un descriptif marketing professionnel et engageant pour ce bien, à utiliser sur les portails immobiliers et plaquettes. Le ton doit être valorisant sans être survendu, factuel sur les caractéristiques, avec une accroche initiale forte. Longueur : 200-300 mots. Structure :
+1. Une accroche (1 phrase)
+2. Une description fluide du bien (2-3 paragraphes)
+3. Un dernier paragraphe sur l'environnement/quartier si pertinent
 
-async function loadVendeurStats(mandatId, period) {
-  if (!period?.start || !period?.end) {
-    return { stats: {}, events: [] };
-  }
-  return {
-    stats: {
-      nb_visites: 0,
-      nb_contacts: 0,
-      nb_offres: 0,
-      nb_vues: 0,
-    },
-    events: [],
-  };
-}
+Réponds directement avec le descriptif, sans introduction du type "Voici le descriptif".`,
+  },
+  email_mandant: {
+    user: `Rédige un email professionnel et chaleureux à destination du mandant (le vendeur de ce bien) pour faire un point d'étape sur la commercialisation. L'email doit :
+- Commencer par "Cher Madame, Cher Monsieur," (ou similaire)
+- Être chaleureux et rassurant
+- Faire le point sur les actions menées (en ton générique, sans inventer de chiffres)
+- Demander un retour ou proposer un échange téléphonique
+- Se terminer par une formule de politesse soignée
 
-// ─────────────────────────────────────────────────────────────────
-// CONSTRUCTION URL DES LOGOS
-// ─────────────────────────────────────────────────────────────────
+Longueur : 150-200 mots. Réponds directement par l'email, sans introduction.`,
+  },
+  argumentaire: {
+    user: `Génère un argumentaire de vente percutant pour ce bien, à utiliser face à un acheteur intéressé. L'argumentaire doit :
+- Identifier 5-7 arguments clés (un par ligne, format puces)
+- Anticiper les objections probables avec des éléments de réponse (2-3 objections + réponses)
+- Hiérarchiser les arguments du plus fort au plus secondaire
 
-function getLogoUrl(request, isOffMarket) {
-  const host = request.headers.get('host') || 'patrimonia-crm.vercel.app';
-  const protocol = host.includes('localhost') ? 'http' : 'https';
-  const baseUrl = `${protocol}://${host}`;
-  return `${baseUrl}/logo-ip-sage.png`;
-}
+Format clair en 2 sections : "Arguments clés" et "Réponses aux objections probables". Réponds directement avec l'argumentaire.`,
+  },
+};
 
-// ─────────────────────────────────────────────────────────────────
-// HANDLER GET
-// ─────────────────────────────────────────────────────────────────
-
-export async function GET(request, { params }) {
+export async function POST(request, { params }) {
   try {
-    const url = new URL(request.url);
-    const token = url.searchParams.get('token');
-    const template = url.searchParams.get('template') || 'plaquette';
-    const startStr = url.searchParams.get('start');
-    const endStr = url.searchParams.get('end');
+    const body = await request.json();
+    const { token, action, message, history = [] } = body;
 
-    // 1. Auth par token URL
     const user = await verifyToken(token);
     if (!user) {
       return new Response(
@@ -131,7 +103,6 @@ export async function GET(request, { params }) {
       );
     }
 
-    // 2. ID mandat
     const { id: mandatId } = params;
     if (!mandatId) {
       return new Response(
@@ -140,149 +111,83 @@ export async function GET(request, { params }) {
       );
     }
 
-    // 3. Chargement données
-    const { mandat, conseiller, error } = await loadMandatData(mandatId);
-    if (error) {
+    const { data: mandat, error: mErr } = await supabaseAdmin
+      .from('mandats')
+      .select('*')
+      .eq('id', mandatId)
+      .maybeSingle();
+
+    if (mErr || !mandat) {
       return new Response(
-        JSON.stringify({ ok: false, error }),
+        JSON.stringify({ ok: false, error: 'Mandat introuvable' }),
         { status: 404, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    // 4. Logo selon mode
-    const logoUrl = getLogoUrl(request, mandat.is_off_market === true);
+    const mandatContext = buildMandatContext(mandat);
+    const systemPrompt = `Tu es l'assistant IA d'Immeubles & Patrimoine, une agence immobilière patrimoniale haut de gamme spécialisée dans les transactions off-market à Paris.
 
-    // 5. Sélection template
-    let pdfElement;
-    let filename;
+Tu aides les commerciaux à valoriser leurs mandats. Tu tutoies l'utilisateur de manière professionnelle (style "voici ton descriptif"). Tu es direct, précis, sans formules superflues.
 
-    if (template === 'plaquette') {
-      // Construction du dictionnaire des membres pour la page équipe
-      const { data: profiles, error: pErr } = await supabaseAdmin
-        .from('profiles')
-        .select('id, prenom, nom, email, tel, fonction, photo_url')
-        .eq('actif', true);
+Tu as accès aux informations complètes du mandat sur lequel travaille l'utilisateur (ci-dessous). Utilise ces données concrètes dans tes réponses, sans inventer ni extrapoler de chiffres.
 
-      console.log('[PDF Plaquette] profiles count =', profiles?.length || 0);
-      if (pErr) console.error('[PDF Plaquette] Erreur profiles query:', pErr.message);
+${mandatContext}
 
-      const teamMembers = {};
-      let ownerProfile = null;
+# Règles
+- Réponds en français.
+- Ne mentionne jamais "Claude" ou "Anthropic" dans tes réponses.
+- Ne raconte pas que tu es un assistant IA, sauf si on te demande explicitement.
+- Sois concis et opérationnel. Pas de blabla.
+- Si une donnée manque, ne l'invente pas — dis simplement qu'elle est à compléter.`;
 
-      for (const p of (profiles || [])) {
-        const initials = `${(p.prenom || '').charAt(0)}${(p.nom || '').charAt(0)}`.toUpperCase();
-        if (initials) {
-          teamMembers[initials] = {
-            name: `${p.prenom || ''} ${p.nom || ''}`.trim(),
-            role: p.fonction || 'Conseiller',
-            email: p.email,
-            phone: p.tel,
-            photo: p.photo_url, // null si pas de photo
-          };
-        }
-        // Identifier le détenteur du mandat par profile_id
-        if (mandat.profile_id && p.id === mandat.profile_id) {
-          ownerProfile = p;
-        }
-      }
-
-      // Calculer les initiales du détenteur du mandat
-      const ownerInitials = ownerProfile
-        ? `${(ownerProfile.prenom || '').charAt(0)}${(ownerProfile.nom || '').charAt(0)}`.toUpperCase()
-        : '';
-      const mandatEnriched = { ...mandat, ownerInitials };
-
-      // Enrichir l'objet conseiller avec ses initiales
-      const conseillerEnriched = conseiller ? {
-        ...conseiller,
-        initiales: `${(conseiller.prenom || '').charAt(0)}${(conseiller.nom || '').charAt(0)}`.toUpperCase(),
-      } : null;
-
-      // Logs de debug
-      console.log('[PDF Plaquette] mandat.profile_id =', mandat.profile_id);
-      console.log('[PDF Plaquette] ownerInitials =', ownerInitials);
-      console.log('[PDF Plaquette] conseiller.initiales =', conseillerEnriched?.initiales);
-      console.log('[PDF Plaquette] teamMembers keys =', Object.keys(teamMembers));
-
-      pdfElement = React.createElement(PlaquetteAcheteur, {
-        mandat: mandatEnriched,
-        conseiller: conseillerEnriched,
-        logoUrl,
-        teamMembers,
-      });
-
-      filename = `Plaquette_${slugify(mandat.nom)}.pdf`;
-    } else if (template === 'rapport') {
-      if (!startStr || !endStr) {
-        return new Response(
-          JSON.stringify({
-            ok: false,
-            error: 'Pour un rapport, fournir start et end (format YYYY-MM-DD)',
-          }),
-          { status: 400, headers: { 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const period = { start: startStr, end: endStr };
-      const { stats, events } = await loadVendeurStats(mandatId, period);
-
-      pdfElement = React.createElement(RapportVendeur, {
-        mandat,
-        conseiller,
-        logoUrl,
-        period,
-        stats,
-        events,
-      });
-      filename = `Rapport_${slugify(mandat.nom)}_${startStr}_${endStr}.pdf`;
-    } else if (template === 'interne') {
-      pdfElement = React.createElement(FicheInterne, {
-        mandat,
-        conseiller,
-        logoUrl,
-      });
-      filename = `Fiche_interne_${slugify(mandat.nom)}.pdf`;
+    let userMessage;
+    if (action && QUICK_ACTIONS[action]) {
+      userMessage = QUICK_ACTIONS[action].user;
+    } else if (message) {
+      userMessage = message;
     } else {
       return new Response(
-        JSON.stringify({
-          ok: false,
-          error: `Template inconnu : "${template}". Valeurs : plaquette, rapport, interne.`,
-        }),
+        JSON.stringify({ ok: false, error: 'action ou message requis' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    // 6. Rendu
-    const stream = await renderToStream(pdfElement);
+    const messages = [
+      ...history.filter(m => m.role && m.content),
+      { role: 'user', content: userMessage },
+    ];
 
-    return new Response(stream, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename="${filename}"`,
-        'Cache-Control': 'no-store',
-      },
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 2000,
+      system: systemPrompt,
+      messages,
     });
+
+    const text = response.content
+      .filter(block => block.type === 'text')
+      .map(block => block.text)
+      .join('\n');
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        text,
+        usage: response.usage,
+      }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        },
+      }
+    );
   } catch (err) {
-    console.error('[/api/mandats/[id]/pdf] Erreur:', err);
+    console.error('[/api/mandats/[id]/ai] Erreur:', err);
     return new Response(
       JSON.stringify({ ok: false, error: 'Erreur serveur', details: err.message }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
-}
-
-// ─────────────────────────────────────────────────────────────────
-// UTILITAIRES
-// ─────────────────────────────────────────────────────────────────
-
-function slugify(str) {
-  if (!str) return 'mandat';
-  return String(str)
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_|_$/g, '')
-    .slice(0, 60);
 }
