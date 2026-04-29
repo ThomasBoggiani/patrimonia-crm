@@ -77,7 +77,7 @@ function TeamCard({ member, palette, size = 100, compact = false }) {
     .toUpperCase();
 
   return (
-    <View style={{ alignItems: 'center', maxWidth: 180, marginHorizontal: 24, marginBottom: marginBottomCard }}>
+    <View style={{ alignItems: 'center', maxWidth: 200, marginHorizontal: 16, marginBottom: marginBottomCard }}>
       {member.photo ? (
         <Image
           src={member.photo}
@@ -122,7 +122,7 @@ function TeamCard({ member, palette, size = 100, compact = false }) {
         color: palette.muted || '#666',
         textAlign: 'center',
         marginBottom: compact ? 2 : 4,
-        maxWidth: 160,
+        maxWidth: 190,
       }}>
         {member.role || ''}
       </Text>
