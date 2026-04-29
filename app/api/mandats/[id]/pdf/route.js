@@ -90,7 +90,7 @@ Format clair en 2 sections : "Arguments clés" et "Réponses aux objections prob
   },
 };
 
-export async function POST(request, { params }) {
+export async function GET(request, { params })
   try {
     const body = await request.json();
     const { token, action, message, history = [] } = body;
