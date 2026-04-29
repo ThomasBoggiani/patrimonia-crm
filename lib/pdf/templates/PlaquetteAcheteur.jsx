@@ -444,9 +444,9 @@ export default function PlaquetteAcheteur({
         <SectionTitle title="NOTRE ÉQUIPE" isOffMarket={isOffMarket} />
 
         {team.length > 0 && (
-          <View style={{ marginTop: 12, paddingHorizontal: 20 }}>
+          <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 30 }}>
             {dossier.length > 0 && (
-              <View style={{ marginBottom: 12 }}>
+              <View style={{ marginBottom: 30 }}>
                 <Text style={{
                   fontSize: 10,
                   fontFamily: 'Helvetica-Bold',
@@ -474,7 +474,7 @@ export default function PlaquetteAcheteur({
               <View style={{
                 borderBottomWidth: 0.5,
                 borderBottomColor: palette.muted || '#999',
-                marginVertical: 8,
+                marginVertical: 24,
                 marginHorizontal: 60,
               }} />
             )}
@@ -488,7 +488,7 @@ export default function PlaquetteAcheteur({
               const autresSansBoss = autres.filter(m => !isBossInAutres(m));
 
               return (
-                <View style={{ marginTop: 8 }}>
+                <View style={{ marginTop: 24 }}>
                   <Text style={{
                     fontSize: 10,
                     fontFamily: 'Helvetica-Bold',
@@ -505,7 +505,7 @@ export default function PlaquetteAcheteur({
                     <View style={{
                       flexDirection: 'row',
                       justifyContent: 'center',
-                      marginBottom: autresSansBoss.length > 0 ? 8 : 0,
+                      marginBottom: autresSansBoss.length > 0 ? 28 : 0,
                     }}>
                       <TeamCard member={bossEntry} palette={palette} compact />
                     </View>
