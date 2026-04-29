@@ -77,7 +77,7 @@ function TeamCard({ member, palette, size = 100, compact = false }) {
     .toUpperCase();
 
   return (
-    <View style={{ alignItems: 'center', maxWidth: 180, marginHorizontal: 10, marginBottom: marginBottomCard }}>
+    <View style={{ alignItems: 'center', maxWidth: 180, marginHorizontal: 24, marginBottom: marginBottomCard }}>
       {member.photo ? (
         <Image
           src={member.photo}
@@ -515,6 +515,7 @@ export default function PlaquetteAcheteur({
                     <View style={{
                       flexDirection: 'row',
                       justifyContent: 'center',
+                      alignItems: 'flex-start',
                       flexWrap: 'wrap',
                     }}>
                       {autresSansBoss.map((member, i) => (
