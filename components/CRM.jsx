@@ -11,10 +11,11 @@ import {
   User as UserIcon, LogOut, Shield, Menu,
   Image as ImageIcon, Camera, Plug
 } from 'lucide-react';
+import { FolderOpen, ... } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
 import VoiceNoteModal from './VoiceNoteModal';
-import MandatAIAssistant from './MandatAIAssistant';
+import DocumentsModal from './DocumentsModal';
 import SmartImportModal from './SmartImportModal';
 import GlobalVoiceModal from './GlobalVoiceModal';
 import AgendaTab from './AgendaTab';
@@ -1313,6 +1314,9 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
             <button onClick={() => setOpenModal('mandant')} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
               <UserIcon className="w-4 h-4" /> Mandant {(mandat.mandantInfo || mandat.mandant_info) && Object.values(mandat.mandantInfo || mandat.mandant_info).some(v => v) && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
             </button>
+            <button onClick={() => setOpenModal('documents')} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
+              <FolderOpen className="w-4 h-4" /> Documents
+            </button>
           </div>
         </div>
 
@@ -1448,6 +1452,9 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
       )}
       {openModal === 'mandant' && (
         <MandantModal mandat={mandat} onClose={() => setOpenModal(null)} onUpdate={reload} />
+      )}
+      {openModal === 'documents' && (
+        <DocumentsModal mandat={mandat} onClose={() => setOpenModal(null)} />
       )}
     {/* Quelque chose */}
 
