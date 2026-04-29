@@ -222,4 +222,12 @@ export default function DocumentsModal({ mandat, onClose }) {
               </select>
               <div className="flex gap-2">
                 <button onClick={handleAddLink} className="flex-1 px-3 py-2 bg-stone-900 text-white rounded text-sm hover:bg-stone-800">Ajouter</button>
-                <button onClick={() => { setShowLinkForm(false); setLinkData({ nom: '', url: '', category: 'autre' }); }} className="px-3 py-2 bg-white border border-
+                <button
+                  onClick={() => {
+                    setShowLinkForm(false);
+                    setLinkData({ nom: '', url: '', category: 'autre' });
+                  }}
+                  className="px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded text-sm hover:bg-stone-100"
+                >
+                  Annuler
+                </button>
