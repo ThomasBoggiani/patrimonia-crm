@@ -1386,12 +1386,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
                   value={mandat.charges_annuelles ? `${parseFloat(mandat.charges_annuelles).toLocaleString('fr')} €` : '—'} 
                 />
               </div>
-            <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t border-cream">
-              <DetailItem label="Surface" value={mandat.surface ? `${mandat.surface} m²` : '—'} />
-              <DetailItem label="Type" value={mandat.type} />
-              <DetailItem label="Owner" value={mandat.owner} />
-              <DetailItem label="Créé le" value={mandat.createdAt ? new Date(mandat.createdAt).toLocaleDateString('fr-FR') : '—'} />
-            </div>
+              
           </div>
 
           {/* ═══ STATISTIQUES DU DOSSIER ═══ */}
