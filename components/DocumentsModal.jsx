@@ -222,12 +222,79 @@ export default function DocumentsModal({ mandat, onClose }) {
               </select>
               <div className="flex gap-2">
                 <button onClick={handleAddLink} className="flex-1 px-3 py-2 bg-stone-900 text-white rounded text-sm hover:bg-stone-800">Ajouter</button>
-                <button
-                  onClick={() => {
-                    setShowLinkForm(false);
-                    setLinkData({ nom: '', url: '', category: 'autre' });
-                  }}
-                  className="px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded text-sm hover:bg-stone-100"
-                >
-                  Annuler
-                </button>
+                <button onClick={() => { setShowLinkForm(false); setLinkData({ nom: '', url: '', category: 'autre' }); }} className="px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded text-sm hover:bg-stone-100">Annuler</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {loading ? (
+            <div className="text-center py-12 text-stone-400">
+              <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+              Chargement...
+            </div>
+          ) : documents.length === 0 ? (
+            <div className="text-center py-12 text-stone-400">
+              <FolderOpen className="w-10 h-10 mx-auto mb-3 text-stone-300" />
+              <p className="text-sm">Aucun document pour ce mandat.</p>
+              <p className="text-xs mt-1">Ajoute un fichier ou un lien ci-dessus.</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {grouped.map(cat => (
+                <div key={cat.id}>
+                  <h3 className="text-xs uppercase tracking-wide text-stone-500 font-semibold mb-2 flex items-center gap-1.5">
+                    <span>{cat.icon}</span> {cat.label}
+                    <span className="text-stone-400 normal-case font-normal">({cat.docs.length})</span>
+                  </h3>
+                  <div className="space-y-2">
+                    {cat.docs.map(doc => {
+                      const Icon = doc.type === 'link' ? Link2 : getFileIcon(doc.mime_type);
+                      return (
+                        <div key={doc.id} className="flex items-center gap-3 p-3 bg-white border border-stone-200 rounded-lg hover:bg-stone-50">
+                          <Icon className="w-5 h-5 text-stone-500 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-stone-900 truncate">{doc.nom}</div>
+                            <div className="text-xs text-stone-500 flex items-center gap-2 mt-0.5">
+                              {doc.type === 'file' ? (
+                                <span>{formatBytes(doc.taille_bytes)}</span>
+                              ) : (
+                                <span className="text-stone-400">Lien externe</span>
+                              )}
+                              <span>•</span>
+                              <span>{formatDate(doc.created_at)}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {doc.type === 'file' && doc.signedUrl && (
+                              <a href={doc.signedUrl} target="_blank" rel="noopener noreferrer" className="p-2 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded" title="Télécharger / Ouvrir">
+                                <Download className="w-4 h-4" />
+                              </a>
+                            )}
+                            {doc.type === 'link' && doc.url && (
+                              <a href={doc.url} target="_blank" rel="noopener noreferrer" className="p-2 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded" title="Ouvrir le lien">
+                                <ExternalLink className="w-4 h-4" />
+                              </a>
+                            )}
+                            <button onClick={() => handleDelete(doc.id)} className="p-2 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded" title="Supprimer">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-3 border-t border-stone-200 bg-stone-50 text-xs text-stone-500 text-center">
+          Stockage sécurisé Supabase · URLs signées valides 1h
+        </div>
+      </div>
+    </div>
+  );
+}
