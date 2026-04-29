@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════
-// app/api/mandats/[id]/documents/route.js
-// CRUD documents : fichiers (Storage) + liens externes
+// app/api/mandats/[id]/documents/route.js — v2
+// CRUD documents : upload direct côté frontend, l'API gère juste les métadonnées
 // ═══════════════════════════════════════════════════════════════════
 
 import { createClient } from '@supabase/supabase-js';
@@ -22,9 +22,7 @@ async function verifyToken(token) {
   return user;
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// GET → liste des documents d'un mandat (avec URLs signées pour fichiers)
-// ═══════════════════════════════════════════════════════════════════
+// GET → liste
 export async function GET(request, { params }) {
   try {
     const url = new URL(request.url);
@@ -32,21 +30,14 @@ export async function GET(request, { params }) {
 
     const user = await verifyToken(token);
     if (!user) {
-      return new Response(
-        JSON.stringify({ ok: false, error: 'Authentification requise' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ ok: false, error: 'Authentification requise' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
     }
 
     const { id: mandatId } = params;
     if (!mandatId) {
-      return new Response(
-        JSON.stringify({ ok: false, error: 'ID mandat manquant' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ ok: false, error: 'ID mandat manquant' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Charger les documents
     const { data: docs, error } = await supabaseAdmin
       .from('mandat_documents')
       .select('*')
@@ -54,166 +45,50 @@ export async function GET(request, { params }) {
       .order('created_at', { ascending: false });
 
     if (error) {
-      return new Response(
-        JSON.stringify({ ok: false, error: error.message }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ ok: false, error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Pour chaque fichier, générer une URL signée valide 1h
     const enrichedDocs = await Promise.all((docs || []).map(async (doc) => {
       if (doc.type === 'file' && doc.storage_path) {
-        const { data: signed } = await supabaseAdmin
-          .storage
-          .from(BUCKET)
-          .createSignedUrl(doc.storage_path, 3600); // 1h
+        const { data: signed } = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(doc.storage_path, 3600);
         return { ...doc, signedUrl: signed?.signedUrl || null };
       }
       return doc;
     }));
 
-    return new Response(
-      JSON.stringify({ ok: true, documents: enrichedDocs }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({ ok: true, documents: enrichedDocs }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (err) {
     console.error('[/api/mandats/[id]/documents GET] Erreur:', err);
-    return new Response(
-      JSON.stringify({ ok: false, error: 'Erreur serveur', details: err.message }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({ ok: false, error: 'Erreur serveur', details: err.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// POST → ajout d'un document
-// 2 modes :
-// 1. multipart/form-data avec un fichier  → upload + insert
-// 2. application/json { type:'link', ... } → juste insert
-// ═══════════════════════════════════════════════════════════════════
+// POST → ajout (lien OU métadonnées de fichier déjà uploadé)
 export async function POST(request, { params }) {
   try {
     const { id: mandatId } = params;
     if (!mandatId) {
-      return new Response(
-        JSON.stringify({ ok: false, error: 'ID mandat manquant' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ ok: false, error: 'ID mandat manquant' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
 
-    const contentType = request.headers.get('content-type') || '';
-
-    // ─── Mode multipart : upload de fichier ───
-    if (contentType.includes('multipart/form-data')) {
-      const formData = await request.formData();
-      const token = formData.get('token');
-      const file = formData.get('file');
-      const category = formData.get('category') || 'autre';
-      const nom = formData.get('nom') || file?.name || 'document';
-      const description = formData.get('description') || null;
-
-      const user = await verifyToken(token);
-      if (!user) {
-        return new Response(
-          JSON.stringify({ ok: false, error: 'Authentification requise' }),
-          { status: 401, headers: { 'Content-Type': 'application/json' } }
-        );
-      }
-
-      if (!file || typeof file === 'string') {
-        return new Response(
-          JSON.stringify({ ok: false, error: 'Fichier manquant' }),
-          { status: 400, headers: { 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Sanitize nom de fichier
-      const cleanName = (file.name || 'file')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-zA-Z0-9._-]/g, '_');
-      const storagePath = `${mandatId}/${Date.now()}_${cleanName}`;
-
-      // Upload vers Supabase Storage
-      const arrayBuffer = await file.arrayBuffer();
-      const { error: uploadErr } = await supabaseAdmin
-        .storage
-        .from(BUCKET)
-        .upload(storagePath, arrayBuffer, {
-          contentType: file.type || 'application/octet-stream',
-          upsert: false,
-        });
-
-      if (uploadErr) {
-        return new Response(
-          JSON.stringify({ ok: false, error: 'Upload échoué', details: uploadErr.message }),
-          { status: 500, headers: { 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Insert en BDD
-      const { data: doc, error: insErr } = await supabaseAdmin
-        .from('mandat_documents')
-        .insert({
-          mandat_id: mandatId,
-          type: 'file',
-          category,
-          nom,
-          storage_path: storagePath,
-          taille_bytes: file.size,
-          mime_type: file.type || 'application/octet-stream',
-          description,
-          created_by: user.id,
-        })
-        .select()
-        .single();
-
-      if (insErr) {
-        // Rollback : supprimer le fichier uploadé
-        await supabaseAdmin.storage.from(BUCKET).remove([storagePath]);
-        return new Response(
-          JSON.stringify({ ok: false, error: 'Insert échoué', details: insErr.message }),
-          { status: 500, headers: { 'Content-Type': 'application/json' } }
-        );
-      }
-
-      return new Response(
-        JSON.stringify({ ok: true, document: doc }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // ─── Mode JSON : ajout de lien ───
     const body = await request.json();
-    const { token, type, category = 'autre', nom, url: linkUrl, description = null } = body;
+    const { token, type, category = 'autre', nom, url: linkUrl, description = null, storage_path, taille_bytes, mime_type } = body;
 
     const user = await verifyToken(token);
     if (!user) {
-      return new Response(
-        JSON.stringify({ ok: false, error: 'Authentification requise' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ ok: false, error: 'Authentification requise' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
     }
 
     if (type !== 'link' && type !== 'file_meta') {
-      return new Response(
-        JSON.stringify({ ok: false, error: 'Type non supporté en JSON' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ ok: false, error: 'Type non supporté' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Validation selon le type
     if (type === 'link' && (!nom || !linkUrl)) {
-      return new Response(
-        JSON.stringify({ ok: false, error: 'nom et url requis pour un lien' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ ok: false, error: 'nom et url requis' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
-    if (type === 'file_meta' && (!nom || !body.storage_path)) {
-      return new Response(
-        JSON.stringify({ ok: false, error: 'nom et storage_path requis pour un fichier' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+
+    if (type === 'file_meta' && (!nom || !storage_path)) {
+      return new Response(JSON.stringify({ ok: false, error: 'nom et storage_path requis' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
 
     const insertData = type === 'link'
@@ -231,9 +106,9 @@ export async function POST(request, { params }) {
           type: 'file',
           category,
           nom,
-          storage_path: body.storage_path,
-          taille_bytes: body.taille_bytes || null,
-          mime_type: body.mime_type || null,
+          storage_path,
+          taille_bytes: taille_bytes || null,
+          mime_type: mime_type || null,
           description,
           created_by: user.id,
         };
@@ -241,39 +116,21 @@ export async function POST(request, { params }) {
     const { data: doc, error: insErr } = await supabaseAdmin
       .from('mandat_documents')
       .insert(insertData)
-        category,
-        nom,
-        url: linkUrl,
-        description,
-        created_by: user.id,
-      })
       .select()
       .single();
 
     if (insErr) {
-      return new Response(
-        JSON.stringify({ ok: false, error: 'Insert échoué', details: insErr.message }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ ok: false, error: 'Insert échoué', details: insErr.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
 
-    return new Response(
-      JSON.stringify({ ok: true, document: doc }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({ ok: true, document: doc }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (err) {
     console.error('[/api/mandats/[id]/documents POST] Erreur:', err);
-    return new Response(
-      JSON.stringify({ ok: false, error: 'Erreur serveur', details: err.message }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({ ok: false, error: 'Erreur serveur', details: err.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// DELETE → suppression d'un document (BDD + Storage si fichier)
-// Body JSON : { token, document_id }
-// ═══════════════════════════════════════════════════════════════════
+// DELETE → suppression (BDD + Storage si fichier)
 export async function DELETE(request, { params }) {
   try {
     const body = await request.json();
@@ -281,20 +138,13 @@ export async function DELETE(request, { params }) {
 
     const user = await verifyToken(token);
     if (!user) {
-      return new Response(
-        JSON.stringify({ ok: false, error: 'Authentification requise' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ ok: false, error: 'Authentification requise' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
     }
 
     if (!document_id) {
-      return new Response(
-        JSON.stringify({ ok: false, error: 'document_id requis' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ ok: false, error: 'document_id requis' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Charger le doc pour récupérer storage_path
     const { data: doc, error: getErr } = await supabaseAdmin
       .from('mandat_documents')
       .select('*')
@@ -302,45 +152,26 @@ export async function DELETE(request, { params }) {
       .maybeSingle();
 
     if (getErr || !doc) {
-      return new Response(
-        JSON.stringify({ ok: false, error: 'Document introuvable' }),
-        { status: 404, headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ ok: false, error: 'Document introuvable' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Si fichier : supprimer du Storage
     if (doc.type === 'file' && doc.storage_path) {
-      const { error: storageErr } = await supabaseAdmin
-        .storage
-        .from(BUCKET)
-        .remove([doc.storage_path]);
-      if (storageErr) {
-        console.warn('[DELETE] Storage remove warning:', storageErr.message);
-      }
+      const { error: storageErr } = await supabaseAdmin.storage.from(BUCKET).remove([doc.storage_path]);
+      if (storageErr) console.warn('[DELETE] Storage warning:', storageErr.message);
     }
 
-    // Supprimer en BDD
     const { error: delErr } = await supabaseAdmin
       .from('mandat_documents')
       .delete()
       .eq('id', document_id);
 
     if (delErr) {
-      return new Response(
-        JSON.stringify({ ok: false, error: 'Delete échoué', details: delErr.message }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ ok: false, error: 'Delete échoué', details: delErr.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
 
-    return new Response(
-      JSON.stringify({ ok: true }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (err) {
     console.error('[/api/mandats/[id]/documents DELETE] Erreur:', err);
-    return new Response(
-      JSON.stringify({ ok: false, error: 'Erreur serveur', details: err.message }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({ ok: false, error: 'Erreur serveur', details: err.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 }
