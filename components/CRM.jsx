@@ -1236,6 +1236,31 @@ function MandatForm({ mandat, onSave, onClose }) {
     </div>
   );
 }
+// Helpers DPE
+function getDPEClass(conso) {
+  if (!conso) return null;
+  const c = parseFloat(conso);
+  if (c <= 70) return 'A';
+  if (c <= 110) return 'B';
+  if (c <= 180) return 'C';
+  if (c <= 250) return 'D';
+  if (c <= 330) return 'E';
+  if (c <= 420) return 'F';
+  return 'G';
+}
+
+function getDPEColor(conso) {
+  const cls = getDPEClass(conso);
+  return {
+    'A': '#00A651',  // vert vif
+    'B': '#52B847',  // vert
+    'C': '#A6CE39',  // vert clair
+    'D': '#F9C20B',  // jaune
+    'E': '#F58220',  // orange
+    'F': '#E94E1B',  // rouge orangé
+    'G': '#C8102E',  // rouge foncé
+  }[cls] || '#9CA3AF';
+}
 
 function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, annonces }) {
   const [openModal, setOpenModal] = useState(null); // 'photos' | 'visite' | 'mandant' | null
@@ -1337,14 +1362,30 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
       <div className="space-y-4">
         <div className="col-span-3 space-y-4">
           {/* ═══ ANALYSE FINANCIÈRE — REMONTÉE EN PREMIÈRE POSITION ═══ */}
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-            <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Analyse financière</h2>
-            <div className="grid grid-cols-4 gap-4">
-              <DetailItem label="Prix net vendeur" value={formatPrix(mandat.prix)} highlight />
-              <DetailItem label="Prix au m²" value={mandat.prixM2 ? `${parseFloat(mandat.prixM2).toLocaleString('fr')}€` : '—'} />
-              <DetailItem label="Loyers annuels" value={mandat.loyersAnnuels ? `${parseFloat(mandat.loyersAnnuels).toLocaleString('fr')}€` : '—'} />
-              <DetailItem label="Rendement" value={parseFloat(mandat.rendement) > 0 ? `${mandat.rendement}%` : '—'} highlight />
-            </div>
+          <div className="grid grid-cols-5 gap-4 mt-4 pt-4 border-t border-cream">
+                <DetailItem label="Surface" value={mandat.surface ? `${mandat.surface} m²` : '—'} />
+                <DetailItem label="Type" value={mandat.type} />
+                <DetailItem 
+                  label="DPE" 
+                  value={
+                    mandat.dpe_consommation ? (
+                      <span className="text-2xl font-bold" style={{
+                        color: getDPEColor(mandat.dpe_consommation)
+                      }}>
+                        {getDPEClass(mandat.dpe_consommation)}
+                      </span>
+                    ) : '—'
+                  } 
+                />
+                <DetailItem 
+                  label="Taxe foncière" 
+                  value={mandat.taxe_fonciere ? `${parseFloat(mandat.taxe_fonciere).toLocaleString('fr')} €` : '—'} 
+                />
+                <DetailItem 
+                  label="Charges annuelles" 
+                  value={mandat.charges_annuelles ? `${parseFloat(mandat.charges_annuelles).toLocaleString('fr')} €` : '—'} 
+                />
+              </div>
             <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t border-cream">
               <DetailItem label="Surface" value={mandat.surface ? `${mandat.surface} m²` : '—'} />
               <DetailItem label="Type" value={mandat.type} />
