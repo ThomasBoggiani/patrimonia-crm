@@ -1,6 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════
-// app/api/mandats/[id]/ai/route.js
-// Endpoint Assistant IA contextuel pour un mandat
+// app/api/mandats/[id]/ai/route.js — v2.0
+// Streaming + persistence en BDD
+//
+// POST /api/mandats/{id}/ai            → streaming chat
+// GET  /api/mandats/{id}/ai/history    → ❌ NON, on fait via POST { mode: 'load' }
+// POST /api/mandats/{id}/ai            { mode: 'load', token }   → charge l'historique
+// POST /api/mandats/{id}/ai            { mode: 'clear', token }  → efface l'historique
+// POST /api/mandats/{id}/ai            { token, action|message, history } → stream
 // ═══════════════════════════════════════════════════════════════════
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -63,6 +69,7 @@ function buildMandatContext(mandat) {
 
 const QUICK_ACTIONS = {
   descriptif: {
+    label: 'Descriptif',
     user: `Génère-moi un descriptif marketing professionnel et engageant pour ce bien, à utiliser sur les portails immobiliers et plaquettes. Le ton doit être valorisant sans être survendu, factuel sur les caractéristiques, avec une accroche initiale forte. Longueur : 200-300 mots. Structure :
 1. Une accroche (1 phrase)
 2. Une description fluide du bien (2-3 paragraphes)
@@ -71,6 +78,7 @@ const QUICK_ACTIONS = {
 Réponds directement avec le descriptif, sans introduction du type "Voici le descriptif".`,
   },
   email_mandant: {
+    label: 'Email mandant',
     user: `Rédige un email professionnel et chaleureux à destination du mandant (le vendeur de ce bien) pour faire un point d'étape sur la commercialisation. L'email doit :
 - Commencer par "Cher Madame, Cher Monsieur," (ou similaire)
 - Être chaleureux et rassurant
@@ -81,6 +89,7 @@ Réponds directement avec le descriptif, sans introduction du type "Voici le des
 Longueur : 150-200 mots. Réponds directement par l'email, sans introduction.`,
   },
   argumentaire: {
+    label: 'Argumentaire',
     user: `Génère un argumentaire de vente percutant pour ce bien, à utiliser face à un acheteur intéressé. L'argumentaire doit :
 - Identifier 5-7 arguments clés (un par ligne, format puces)
 - Anticiper les objections probables avec des éléments de réponse (2-3 objections + réponses)
@@ -90,10 +99,44 @@ Format clair en 2 sections : "Arguments clés" et "Réponses aux objections prob
   },
 };
 
+// Helper : load conversation depuis BDD
+async function loadConversation(mandatId, userId) {
+  const { data } = await supabaseAdmin
+    .from('ai_conversations')
+    .select('messages')
+    .eq('mandat_id', mandatId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  return Array.isArray(data?.messages) ? data.messages : [];
+}
+
+// Helper : save/update conversation en BDD (upsert)
+async function saveConversation(mandatId, userId, messages) {
+  const { error } = await supabaseAdmin
+    .from('ai_conversations')
+    .upsert({
+      mandat_id: mandatId,
+      user_id: userId,
+      messages,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'mandat_id,user_id' });
+  if (error) console.error('[AI] saveConversation error:', error.message);
+}
+
+// Helper : clear conversation
+async function clearConversation(mandatId, userId) {
+  const { error } = await supabaseAdmin
+    .from('ai_conversations')
+    .delete()
+    .eq('mandat_id', mandatId)
+    .eq('user_id', userId);
+  if (error) console.error('[AI] clearConversation error:', error.message);
+}
+
 export async function POST(request, { params }) {
   try {
     const body = await request.json();
-    const { token, action, message, history = [] } = body;
+    const { token, action, message, mode } = body;
 
     const user = await verifyToken(token);
     if (!user) {
@@ -111,6 +154,25 @@ export async function POST(request, { params }) {
       );
     }
 
+    // Mode : load history
+    if (mode === 'load') {
+      const messages = await loadConversation(mandatId, user.id);
+      return new Response(
+        JSON.stringify({ ok: true, messages }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Mode : clear history
+    if (mode === 'clear') {
+      await clearConversation(mandatId, user.id);
+      return new Response(
+        JSON.stringify({ ok: true }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Mode : streaming chat (default)
     const { data: mandat, error: mErr } = await supabaseAdmin
       .from('mandats')
       .select('*')
@@ -124,6 +186,39 @@ export async function POST(request, { params }) {
       );
     }
 
+    // Construire le user message
+    let userMessage;
+    let userVisibleLabel; // ce qui sera stocké dans l'historique côté user
+    if (action && QUICK_ACTIONS[action]) {
+      userMessage = QUICK_ACTIONS[action].user;
+      userVisibleLabel = `[Action] ${QUICK_ACTIONS[action].label}`;
+    } else if (message) {
+      userMessage = message;
+      userVisibleLabel = message;
+    } else {
+      return new Response(
+        JSON.stringify({ ok: false, error: 'action ou message requis' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Charger l'historique BDD existant
+    const history = await loadConversation(mandatId, user.id);
+
+    // Construire les messages pour l'API Claude
+    // (l'historique BDD contient déjà des entrées au bon format)
+    const apiMessages = [
+      ...history.map(m => ({
+        role: m.role,
+        // Pour les actions rapides, on remplace le label par le vrai prompt
+        content: m.role === 'user' && m.action && QUICK_ACTIONS[m.action]
+          ? QUICK_ACTIONS[m.action].user
+          : m.content,
+      })),
+      { role: 'user', content: userMessage },
+    ];
+
+    // System prompt
     const mandatContext = buildMandatContext(mandat);
     const systemPrompt = `Tu es l'assistant IA d'Immeubles & Patrimoine, une agence immobilière patrimoniale haut de gamme spécialisée dans les transactions off-market à Paris.
 
@@ -140,49 +235,67 @@ ${mandatContext}
 - Sois concis et opérationnel. Pas de blabla.
 - Si une donnée manque, ne l'invente pas — dis simplement qu'elle est à compléter.`;
 
-    let userMessage;
-    if (action && QUICK_ACTIONS[action]) {
-      userMessage = QUICK_ACTIONS[action].user;
-    } else if (message) {
-      userMessage = message;
-    } else {
-      return new Response(
-        JSON.stringify({ ok: false, error: 'action ou message requis' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const messages = [
-      ...history.filter(m => m.role && m.content),
-      { role: 'user', content: userMessage },
-    ];
-
-    const response = await anthropic.messages.create({
+    // Appel Claude en mode STREAMING
+    const stream = await anthropic.messages.stream({
       model: 'claude-haiku-4-5',
       max_tokens: 2000,
       system: systemPrompt,
-      messages,
+      messages: apiMessages,
     });
 
-    const text = response.content
-      .filter(block => block.type === 'text')
-      .map(block => block.text)
-      .join('\n');
+    // Construire le ReadableStream pour la réponse SSE
+    const encoder = new TextEncoder();
+    let fullText = '';
 
-    return new Response(
-      JSON.stringify({
-        ok: true,
-        text,
-        usage: response.usage,
-      }),
-      {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-store',
-        },
-      }
-    );
+    const readable = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const event of stream) {
+            if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+              const chunk = event.delta.text || '';
+              fullText += chunk;
+              // Format SSE : "data: <json>\n\n"
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'delta', text: chunk })}\n\n`));
+            }
+          }
+
+          // Fin du stream → sauver l'historique
+          const newHistory = [
+            ...history,
+            {
+              role: 'user',
+              content: userVisibleLabel,
+              action: action || null,
+              ts: new Date().toISOString(),
+            },
+            {
+              role: 'assistant',
+              content: fullText,
+              ts: new Date().toISOString(),
+            },
+          ];
+
+          await saveConversation(mandatId, user.id, newHistory);
+
+          // Signal de fin
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`));
+          controller.close();
+        } catch (err) {
+          console.error('[AI stream] Erreur:', err);
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`));
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(readable, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+      },
+    });
   } catch (err) {
     console.error('[/api/mandats/[id]/ai] Erreur:', err);
     return new Response(
