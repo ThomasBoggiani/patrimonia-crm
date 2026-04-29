@@ -90,21 +90,51 @@ export default function DocumentsModal({ mandat, onClose }) {
         alert('Session expirée');
         return;
       }
-      const formData = new FormData();
-      formData.append('token', token);
-      formData.append('file', file);
-      formData.append('category', uploadCategory);
-      formData.append('nom', file.name);
 
-      const res = await fetch('/api/mandats/' + mandat.id + '/documents', {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json();
-      if (!data.ok) {
-        alert('Erreur upload : ' + (data.error || 'inconnue'));
+      // Sanitize nom de fichier
+      const cleanName = (file.name || 'file')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9._-]/g, '_');
+      const storagePath = mandat.id + '/' + Date.now() + '_' + cleanName;
+
+      // Upload DIRECT vers Supabase Storage (bypass Vercel)
+      const { error: uploadErr } = await supabase
+        .storage
+        .from('mandat-docs')
+        .upload(storagePath, file, {
+          contentType: file.type || 'application/octet-stream',
+          upsert: false,
+        });
+
+      if (uploadErr) {
+        alert('Erreur upload : ' + uploadErr.message);
         return;
       }
+
+      // Enregistrer les métadonnées en BDD via l'API
+      const res = await fetch('/api/mandats/' + mandat.id + '/documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          type: 'file_meta',
+          category: uploadCategory,
+          nom: file.name,
+          storage_path: storagePath,
+          taille_bytes: file.size,
+          mime_type: file.type || 'application/octet-stream',
+        }),
+      });
+
+      const data = await res.json();
+      if (!data.ok) {
+        // Rollback : supprimer le fichier uploadé
+        await supabase.storage.from('mandat-docs').remove([storagePath]);
+        alert('Erreur enregistrement : ' + (data.error || 'inconnue'));
+        return;
+      }
+
       await loadDocuments();
       if (fileInputRef.current) {
         fileInputRef.current.value = '';

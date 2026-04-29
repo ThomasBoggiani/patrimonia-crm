@@ -195,25 +195,52 @@ export async function POST(request, { params }) {
       );
     }
 
-    if (type !== 'link') {
+    if (type !== 'link' && type !== 'file_meta') {
       return new Response(
         JSON.stringify({ ok: false, error: 'Type non supporté en JSON' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    if (!nom || !linkUrl) {
+    // Validation selon le type
+    if (type === 'link' && (!nom || !linkUrl)) {
       return new Response(
-        JSON.stringify({ ok: false, error: 'nom et url requis' }),
+        JSON.stringify({ ok: false, error: 'nom et url requis pour un lien' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    if (type === 'file_meta' && (!nom || !body.storage_path)) {
+      return new Response(
+        JSON.stringify({ ok: false, error: 'nom et storage_path requis pour un fichier' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
+    const insertData = type === 'link'
+      ? {
+          mandat_id: mandatId,
+          type: 'link',
+          category,
+          nom,
+          url: linkUrl,
+          description,
+          created_by: user.id,
+        }
+      : {
+          mandat_id: mandatId,
+          type: 'file',
+          category,
+          nom,
+          storage_path: body.storage_path,
+          taille_bytes: body.taille_bytes || null,
+          mime_type: body.mime_type || null,
+          description,
+          created_by: user.id,
+        };
+
     const { data: doc, error: insErr } = await supabaseAdmin
       .from('mandat_documents')
-      .insert({
-        mandat_id: mandatId,
-        type: 'link',
+      .insert(insertData)
         category,
         nom,
         url: linkUrl,
