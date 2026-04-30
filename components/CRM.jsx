@@ -390,7 +390,7 @@ function Dashboard({ mandats, clients, deals, todos }) {
   };
   
   const myTodayTasks = todos.filter(t => 
-    (t.assignee === myInitials || t.owner === myInitials) 
+    (t.assignedToUserId === user?.id || t.assigned_to_user_id === user?.id)
     && t.statut !== 'Terminé' 
     && isToday(t.echeance)
   );
@@ -407,7 +407,7 @@ function Dashboard({ mandats, clients, deals, todos }) {
 
   // ─── Tâches par priorité ───
   const myTasks = todos.filter(t => 
-    (t.assignee === myInitials || t.owner === myInitials) 
+    (t.assignedToUserId === user?.id || t.assigned_to_user_id === user?.id)
     && t.statut !== 'Terminé'
   );
 
