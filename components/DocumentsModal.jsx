@@ -52,6 +52,8 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
   const [uploadCategory, setUploadCategory] = useState('autre');
   const [analyzingDocId, setAnalyzingDocId] = useState(null);
   const [analyzeResult, setAnalyzeResult] = useState(null);
+  const [folderUploadProgress, setFolderUploadProgress] = useState(null); // { current, total, fileName }
+  const folderInputRef = useRef(null);
   const fileInputRef = useRef(null);
 
   async function loadDocuments() {
@@ -156,6 +158,74 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
     }
   }
 
+  async function handleFolderUpload(event) {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    setFolderUploadProgress({ current: 0, total: files.length, fileName: 'Catégorisation IA en cours...' });
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { alert('Session expirée'); setFolderUploadProgress(null); return; }
+
+      // 1. Catégoriser tous les fichiers en 1 appel IA
+      const fileNames = files.map(f => f.name);
+      const catRes = await fetch('/api/mandats/' + mandat.id + '/categorize-files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, fileNames }),
+      });
+      const catData = await catRes.json();
+      if (!catData.ok) {
+        alert('Erreur catégorisation : ' + (catData.error || 'inconnue'));
+        setFolderUploadProgress(null);
+        return;
+      }
+      const categories = catData.categories || {};
+
+      // 2. Upload chaque fichier
+      let uploaded = 0;
+      for (const file of files) {
+        setFolderUploadProgress({ current: uploaded + 1, total: files.length, fileName: file.name });
+        const cleanName = (file.name || 'file').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const storagePath = mandat.id + '/' + Date.now() + '_' + uploaded + '_' + cleanName;
+        const category = categories[file.name] || 'autre';
+
+        const { error: uploadErr } = await supabase.storage.from('mandat-docs').upload(storagePath, file, {
+          contentType: file.type || 'application/octet-stream',
+          upsert: false,
+        });
+
+        if (uploadErr) {
+          console.error('[FolderUpload] Erreur upload:', file.name, uploadErr.message);
+          continue;
+        }
+
+        await fetch('/api/mandats/' + mandat.id + '/documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token,
+            type: 'file_meta',
+            category,
+            nom: file.name,
+            storage_path: storagePath,
+            taille_bytes: file.size,
+            mime_type: file.type || 'application/octet-stream',
+          }),
+        });
+        uploaded++;
+      }
+
+      setFolderUploadProgress(null);
+      await loadDocuments();
+      if (folderInputRef.current) folderInputRef.current.value = '';
+    } catch (e) {
+      alert('Erreur : ' + e.message);
+      setFolderUploadProgress(null);
+    }
+  }
   async function handleAddLink() {
     if (!linkData.nom.trim() || !linkData.url.trim()) { alert('Nom et URL requis'); return; }
     try {
@@ -260,6 +330,20 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
           </button>
         </div>
 
+        {folderUploadProgress && (
+          <div className="px-6 py-3 border-b bg-sage-50 border-sage-200">
+            <div className="flex items-center gap-2 text-sm">
+              <Loader2 className="w-4 h-4 animate-spin text-sage-dark" />
+              <span className="text-sage-darker font-medium">
+                {folderUploadProgress.current === 0 ? 'Préparation...' : 'Upload ' + folderUploadProgress.current + '/' + folderUploadProgress.total}
+              </span>
+              <span className="text-stone-600 truncate">— {folderUploadProgress.fileName}</span>
+            </div>
+            <div className="mt-2 h-1.5 bg-sage-100 rounded-full overflow-hidden">
+              <div className="h-full bg-sage-dark transition-all" style={{ width: (folderUploadProgress.total > 0 ? (folderUploadProgress.current / folderUploadProgress.total) * 100 : 0) + '%' }} />
+            </div>
+          </div>
+        )}
         {analyzeResult && (
           <div className={`px-6 py-3 border-b ${analyzeResult.error ? 'bg-red-50 border-red-200' : 'bg-sage-50 border-sage-200'}`}>
             <div className="flex items-start gap-2">
@@ -293,6 +377,10 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
             <button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="flex items-center gap-2 px-3 py-2 bg-stone-900 text-white rounded-lg text-sm hover:bg-stone-800 disabled:opacity-50">
               {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
               {uploading ? 'Upload...' : 'Ajouter un fichier'}
+            </button>
+            <input type="file" ref={folderInputRef} onChange={handleFolderUpload} className="hidden" multiple webkitdirectory="" directory="" />
+            <button onClick={() => folderInputRef.current?.click()} disabled={folderUploadProgress !== null} className="flex items-center gap-2 px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded-lg text-sm hover:bg-stone-100 disabled:opacity-50">
+              <Folder className="w-4 h-4" /> Importer un dossier ✨
             </button>
             <button onClick={() => setShowLinkForm(!showLinkForm)} className="flex items-center gap-2 px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded-lg text-sm hover:bg-stone-100">
               <Link2 className="w-4 h-4" /> Ajouter un lien
