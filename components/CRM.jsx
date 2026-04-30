@@ -1392,54 +1392,26 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
           const { error: uploadErr } = await supabase.storage.from('mandat-docs').upload(storagePath, compressed, {
             contentType: compressed.type || 'application/octet-stream', upsert: false,
           });
-          if (uploadErr) { processed++; return { ok: false, error: uploadErr.message }; }
-
-          let category = 'autre';
-          let extractedData = {};
-          let filledKeys = [];
-          try {
-            const aiRes = await fetch('/api/mandats/' + mandatId + '/import-folder', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ token, storage_path: storagePath, applyToMandat: true }),
-            });
-            const aiData = await aiRes.json();
-            if (aiData.ok) { category = aiData.category || 'autre'; extractedData = aiData.data || {}; filledKeys = aiData.filled || []; }
-          } catch (e) { console.warn('[import] AI failed:', e.message); }
-
-          await fetch('/api/mandats/' + mandatId + '/documents', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              token, type: 'file_meta', category, nom: file.name,
-              storage_path: storagePath, taille_bytes: compressed.size,
-              mime_type: compressed.type || 'application/octet-stream',
-            }),
-          });
-          processed++;
-          return { ok: true, category, extracted: extractedData, filled: filledKeys };
-        }));
-
-        for (const r of results) {
-          if (r.ok) {
-            totalFilled += (r.filled?.length || 0);
-            const label = ({ mandat: 'Mandat', diagnostics: 'Diagnostics', plans_photos: 'Plans & photos', notes: 'Notes', mandant: 'Mandant', autre: 'Autre' })[r.category] || 'Autre';
-            categoriesByLabel[label] = (categoriesByLabel[label] || 0) + 1;
-            for (const [k, v] of Object.entries(r.extracted || {})) {
-              if (v !== null && v !== undefined && v !== '') allExtracted[k] = v;
-            }
-          } else { errors++; }
-        }
-        if (i + BATCH_SIZE < files.length) await new Promise(r => setTimeout(r, 500));
-      }
-
-      const { data: refreshed } = await supabase.from('mandats').select('*').eq('id', mandatId).maybeSingle();
-      if (refreshed) {
-        const newData = { ...data, id: refreshed.id };
-        const newFilled = new Set();
-        for (const [snake, camel] of Object.entries(FIELD_MAP)) {
-          if (refreshed[snake] !== null && refreshed[snake] !== undefined && refreshed[snake] !== '') {
-            newData[camel] = refreshed[snake];
-            if (allExtracted[snake] !== undefined) newFilled.add(camel);
-          }
+          {/* ═══ TÂCHES LIÉES AU MANDAT ═══ */}
+          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
+            <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
+              <CheckSquare className="w-5 h-5 text-sage-dark" />Tâches liées au mandat
+              {mandatTodos.length > 0 && (
+                <span className="text-sm text-stone-500 font-normal">({mandatTodos.filter(t => t.statut !== 'Terminé').length} en cours)</span>
+              )}
+            </h2>
+            <div className="space-y-2">
+              {mandatTodos.map(t => (
+                <TaskInline key={t.id} task={t} mandats={[mandat]} clients={clients} onUpdate={reload} />
+              ))}
+              <QuickAddTask
+                lienType="mandat"
+                lienId={mandat.id}
+                defaultAssignee={mandat.owner === 'TB' ? 'Thomas Boggiani' : null}
+                onAdd={reload}
+              />
+            </div>
+          </div>
         }
         if (newData.prix && newData.surface && !newData.prixM2) {
           newData.prixM2 = Math.round(newData.prix / newData.surface);
