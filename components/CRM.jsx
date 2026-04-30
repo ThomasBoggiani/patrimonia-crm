@@ -1412,8 +1412,7 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
               />
             </div>
           </div>
-          
-        if (newData.prix && newData.surface && !newData.prixM2) {
+          if (newData.prix && newData.surface && !newData.prixM2) {
           newData.prixM2 = Math.round(newData.prix / newData.surface);
           newFilled.add('prixM2');
         }
