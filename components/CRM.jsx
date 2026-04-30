@@ -749,10 +749,10 @@ function MandatForm({ mandat, onSave, onClose }) {
     contact: '', tel: '', docs: [], alerts: [], highlights: []
   });
 
-  const [importState, setImportState] = useState({ loading: false, error: null, result: null });
-  const [importedFiles, setImportedFiles] = useState([]);
+  const [importProgress, setImportProgress] = useState(null);
+  const [importResult, setImportResult] = useState(null);
   const [filledFields, setFilledFields] = useState(new Set());
-  const [selectedActions, setSelectedActions] = useState(new Set());
+  const folderInputRef = React.useRef(null);
 
   const update = (k, v) => setData({ ...data, [k]: v });
 
@@ -763,406 +763,324 @@ function MandatForm({ mandat, onSave, onClose }) {
     nbLots: 'Nombre de lots', contact: 'Contact propriétaire'
   };
 
-  const fileToBase64 = (file) => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(',')[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-
-  // Compresse les images au-dessus d'une certaine taille pour rester sous la limite API
-  const compressImage = (file, maxWidth = 2000, quality = 0.85) => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > maxWidth) {
-          height = (maxWidth / width) * height;
-          width = maxWidth;
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-        canvas.toBlob((blob) => {
-          if (!blob) return reject(new Error('Compression échouée'));
-          const compressedFile = new File([blob], file.name, { type: 'image/jpeg' });
-          resolve(compressedFile);
-        }, 'image/jpeg', quality);
+  // Compresse une image côté client (max 1920px / qualité 80%)
+  async function compressImage(file) {
+    if (!file.type.startsWith('image/')) return file;
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const MAX_WIDTH = 1920;
+          let { width, height } = img;
+          if (width > MAX_WIDTH) {
+            height = (MAX_WIDTH / width) * height;
+            width = MAX_WIDTH;
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob((blob) => {
+            if (!blob) { resolve(file); return; }
+            const compressed = new File([blob], file.name, { type: 'image/jpeg' });
+            resolve(compressed.size < file.size ? compressed : file);
+          }, 'image/jpeg', 0.8);
+        };
+        img.onerror = () => resolve(file);
+        img.src = e.target.result;
       };
-      img.onerror = reject;
-      img.src = e.target.result;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-
-  // Prépare un fichier pour envoi : compresse si image trop lourde
-  const prepareFile = async (file) => {
-    const MAX_SIZE_BYTES = 3 * 1024 * 1024; // 3 Mo max (sécurité par rapport à la limite 4,5 Mo de Vercel)
-    
-    let finalFile = file;
-    if (file.type.startsWith('image/') && file.size > MAX_SIZE_BYTES) {
-      finalFile = await compressImage(file);
-      // Si toujours trop gros, compression plus agressive
-      if (finalFile.size > MAX_SIZE_BYTES) {
-        finalFile = await compressImage(file, 1500, 0.7);
-      }
-    }
-    
-    return {
-      name: file.name,
-      type: finalFile.type,
-      data: await fileToBase64(finalFile),
-      originalSize: file.size,
-      finalSize: finalFile.size
-    };
-  };
-
-  const analyzeDocuments = async (files) => {
-    setImportState({ loading: true, error: null, result: null });
-    try {
-      // Préparer et compresser les fichiers
-      const filesData = await Promise.all(files.map(prepareFile));
-      
-      // Vérifier la taille totale après compression
-      const totalBase64Size = filesData.reduce((sum, f) => sum + f.data.length, 0);
-      const MAX_PAYLOAD = 4 * 1024 * 1024; // 4 Mo (marge sécurité sous la limite 4,5 Mo de Vercel)
-      
-      if (totalBase64Size > MAX_PAYLOAD) {
-        const totalMB = (totalBase64Size / 1024 / 1024).toFixed(1);
-        // Identifier les fichiers PDF qui sont probablement à l'origine du souci
-        const bigPdfs = filesData.filter(f => f.type === 'application/pdf' && f.data.length > 1024 * 1024);
-        let msg = `Le poids total des fichiers (${totalMB} Mo) dépasse la limite de 4 Mo pour l'analyse. `;
-        if (bigPdfs.length > 0) {
-          msg += `Le(s) PDF volumineux : ${bigPdfs.map(f => f.name).join(', ')}. `;
-          msg += `Astuce : réduisez votre PDF avec un outil comme ilovepdf.com (fonction « compresser PDF ») puis réessayez.`;
-        } else {
-          msg += `Essayez de sélectionner moins de fichiers, ou des fichiers plus légers.`;
-        }
-        throw new Error(msg);
-      }
-      
-      // Envoi seulement des champs nécessaires (pas originalSize/finalSize)
-      const payload = filesData.map(({ name, type, data }) => ({ name, type, data }));
-
-      const response = await fetch('/api/analyze-mandat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files: payload })
-      });
-
-      if (!response.ok) {
-        if (response.status === 413) {
-          throw new Error("Les fichiers sont trop volumineux après compression. Essayez avec un PDF compressé (ilovepdf.com) ou des images plus petites.");
-        }
-        const errText = await response.text().catch(() => '');
-        throw new Error(`Erreur API ${response.status}: ${errText.slice(0, 100)}`);
-      }
-      const parsed = await response.json();
-
-      const newFilled = new Set();
-      const newData = { ...data };
-      Object.entries(parsed.fields || {}).forEach(([key, value]) => {
-        if (value !== null && value !== undefined && value !== '') {
-          newData[key] = value;
-          newFilled.add(key);
-        }
-      });
-
-      if (newData.prix && newData.surface && !newData.prixM2) {
-        newData.prixM2 = Math.round(newData.prix / newData.surface);
-        newFilled.add('prixM2');
-      }
-
-      newData.alerts = parsed.alerts || [];
-      newData.highlights = parsed.highlights || [];
-
-      setData(newData);
-      setFilledFields(newFilled);
-      setImportedFiles([...importedFiles, ...files.map(f => f.name)]);
-      
-      // Cocher automatiquement les actions de priorité Haute et Moyenne
-      const actions = parsed.actions || [];
-      const autoSelected = new Set();
-      actions.forEach((a, i) => {
-        if (a.priorite === 'Haute' || a.priorite === 'Moyenne') autoSelected.add(i);
-      });
-      setSelectedActions(autoSelected);
-      
-      setImportState({ loading: false, error: null, result: parsed });
-    } catch (err) {
-      console.error(err);
-      setImportState({ loading: false, error: err.message || "Erreur d'analyse", result: null });
-    }
-  };
-
-  const handleFiles = (e) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length) analyzeDocuments(files);
-  };
-
-  // Charge des fichiers depuis Dropbox (via leur URL directe) puis les analyse
-  const handleDropboxFiles = async (dropboxFiles) => {
-    if (!dropboxFiles || !dropboxFiles.length) return;
-    setImportState({ loading: true, error: null, result: null });
-    try {
-      // Télécharge chaque fichier Dropbox et le convertit en File
-      const files = await Promise.all(dropboxFiles.map(async (dbf) => {
-        // dbf.link est l'URL de prévisualisation, on remplace dl=0 par dl=1 pour téléchargement direct
-        const directUrl = dbf.link.replace('?dl=0', '?dl=1').replace('&dl=0', '&dl=1');
-        const urlWithDl = directUrl.includes('dl=') ? directUrl : directUrl + (directUrl.includes('?') ? '&' : '?') + 'dl=1';
-        const response = await fetch(urlWithDl);
-        if (!response.ok) throw new Error(`Impossible de télécharger ${dbf.name}`);
-        const blob = await response.blob();
-        // Déduire le type MIME si besoin
-        let mime = blob.type;
-        if (!mime || mime === 'application/octet-stream') {
-          const ext = dbf.name.split('.').pop().toLowerCase();
-          if (ext === 'pdf') mime = 'application/pdf';
-          else if (['jpg','jpeg'].includes(ext)) mime = 'image/jpeg';
-          else if (ext === 'png') mime = 'image/png';
-          else if (ext === 'webp') mime = 'image/webp';
-          else if (ext === 'docx') mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-          else mime = 'text/plain';
-        }
-        return new File([blob], dbf.name, { type: mime });
-      }));
-      await analyzeDocuments(files);
-    } catch (err) {
-      setImportState({ loading: false, error: err.message || "Erreur téléchargement Dropbox", result: null });
-    }
-  };
-
-  const openDropboxChooser = () => {
-    if (typeof window === 'undefined' || !window.Dropbox) {
-      setImportState({ loading: false, error: "Dropbox n'est pas encore chargé, réessayez dans quelques secondes.", result: null });
-      return;
-    }
-    window.Dropbox.choose({
-      success: handleDropboxFiles,
-      linkType: 'direct',
-      multiselect: true,
-      extensions: ['.pdf', '.docx', '.doc', '.png', '.jpg', '.jpeg', '.webp', '.txt']
+      reader.onerror = () => resolve(file);
+      reader.readAsDataURL(file);
     });
+  }
+
+  // Mappage snake_case (BDD/API) -> camelCase (state local)
+  const FIELD_MAP = {
+    nom: 'nom',
+    adresse: 'adresse',
+    ville: 'ville',
+    type: 'type',
+    sous_type: 'sousType',
+    surface: 'surface',
+    nb_pieces: 'nbPieces',
+    nb_chambres: 'nbChambres',
+    etage: 'etage',
+    annee_construction: 'anneeConstruction',
+    prix: 'prix',
+    prix_net_vendeur: 'prix',
+    prix_m2: 'prixM2',
+    honoraires_charge: 'honorairesCharge',
+    honoraires_taux: 'honorairesTaux',
+    honoraires_montant: 'honorairesMontant',
+    loyers_annuels: 'loyersAnnuels',
+    rendement: 'rendement',
+    charges_annuelles: 'chargesAnnuelles',
+    taxe_fonciere: 'taxeFonciere',
+    dpe_consommation: 'dpeConsommation',
+    dpe_emissions: 'dpeEmissions',
+    dpe_date: 'dpeDate',
+    mandat_numero: 'mandatNumero',
+    mandat_type: 'mandatType',
+    date_signature: 'dateSignature',
+    mandat_date_echeance: 'mandatDateEcheance',
+    nb_lots: 'nbLots',
+    description: 'description',
+    commercialisation: 'commercialisation',
   };
+
+  // Importer un dossier complet : crée le mandat si besoin, puis upload + analyse chaque fichier
+  async function handleFolderImport(event) {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    setImportResult(null);
+    setImportProgress({ current: 0, total: files.length, fileName: 'Préparation...' });
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { alert('Session expirée'); setImportProgress(null); return; }
+
+      // Étape 1 : si on est en création (pas encore d'ID), créer un mandat brouillon en BDD
+      let mandatId = mandat?.id;
+      if (!mandatId) {
+        const { data: created, error: createErr } = await supabase
+          .from('mandats')
+          .insert({
+            nom: data.nom || 'Nouveau mandat (import en cours)',
+            type: data.type || "Immeuble d'habitation",
+            statut: 'Sourcing',
+            owner: data.owner || 'JD',
+            commercialisation: data.commercialisation || 'Off-market',
+          })
+          .select()
+          .single();
+        if (createErr || !created) {
+          alert('Erreur création mandat : ' + (createErr?.message || 'inconnue'));
+          setImportProgress(null);
+          return;
+        }
+        mandatId = created.id;
+        setData(d => ({ ...d, id: mandatId }));
+      }
+
+      let totalFilled = 0;
+      const allExtracted = {};
+      const categoriesByLabel = {};
+      let errors = 0;
+      const BATCH_SIZE = 3;
+      let processed = 0;
+
+      for (let i = 0; i < files.length; i += BATCH_SIZE) {
+        const batch = files.slice(i, i + BATCH_SIZE);
+        const results = await Promise.all(batch.map(async (file) => {
+          const compressed = await compressImage(file);
+          setImportProgress({ current: processed + 1, total: files.length, fileName: file.name });
+
+          // Upload sur Storage
+          const cleanName = (file.name || 'file').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
+          const storagePath = mandatId + '/' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '_' + cleanName;
+          const { error: uploadErr } = await supabase.storage.from('mandat-docs').upload(storagePath, compressed, {
+            contentType: compressed.type || 'application/octet-stream',
+            upsert: false,
+          });
+          if (uploadErr) {
+            processed++;
+            return { ok: false, error: uploadErr.message };
+          }
+
+          // Appel à l'API import-folder pour catégoriser + analyser + auto-fill BDD
+          let category = 'autre';
+          let extractedData = {};
+          let filledKeys = [];
+          try {
+            const aiRes = await fetch('/api/mandats/' + mandatId + '/import-folder', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token, storage_path: storagePath, applyToMandat: true }),
+            });
+            const aiData = await aiRes.json();
+            if (aiData.ok) {
+              category = aiData.category || 'autre';
+              extractedData = aiData.data || {};
+              filledKeys = aiData.filled || [];
+            }
+          } catch (e) {
+            console.warn('[import] AI failed:', e.message);
+          }
+
+          // Enregistrer dans mandat_documents
+          await fetch('/api/mandats/' + mandatId + '/documents', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              token,
+              type: 'file_meta',
+              category,
+              nom: file.name,
+              storage_path: storagePath,
+              taille_bytes: compressed.size,
+              mime_type: compressed.type || 'application/octet-stream',
+            }),
+          });
+
+          processed++;
+          return { ok: true, category, extracted: extractedData, filled: filledKeys };
+        }));
+
+        for (const r of results) {
+          if (r.ok) {
+            totalFilled += (r.filled?.length || 0);
+            const label = ({
+              mandat: 'Mandat',
+              diagnostics: 'Diagnostics',
+              plans_photos: 'Plans & photos',
+              notes: 'Notes',
+              mandant: 'Mandant',
+              autre: 'Autre',
+            })[r.category] || 'Autre';
+            categoriesByLabel[label] = (categoriesByLabel[label] || 0) + 1;
+            // Fusionner les données extraites
+            for (const [k, v] of Object.entries(r.extracted || {})) {
+              if (v !== null && v !== undefined && v !== '') {
+                allExtracted[k] = v;
+              }
+            }
+          } else {
+            errors++;
+          }
+        }
+        if (i + BATCH_SIZE < files.length) {
+          await new Promise(r => setTimeout(r, 500));
+        }
+      }
+
+      // Recharger le mandat depuis la BDD pour avoir les valeurs à jour (l'API a fait les UPDATE)
+      const { data: refreshed } = await supabase.from('mandats').select('*').eq('id', mandatId).maybeSingle();
+      if (refreshed) {
+        const newData = { ...data, id: refreshed.id };
+        const newFilled = new Set();
+        for (const [snake, camel] of Object.entries(FIELD_MAP)) {
+          if (refreshed[snake] !== null && refreshed[snake] !== undefined && refreshed[snake] !== '') {
+            newData[camel] = refreshed[snake];
+            if (allExtracted[snake] !== undefined) newFilled.add(camel);
+          }
+        }
+        if (newData.prix && newData.surface && !newData.prixM2) {
+          newData.prixM2 = Math.round(newData.prix / newData.surface);
+          newFilled.add('prixM2');
+        }
+        setData(newData);
+        setFilledFields(newFilled);
+      }
+
+      setImportProgress(null);
+      setImportResult({
+        total: files.length,
+        success: files.length - errors,
+        errors,
+        totalFilled,
+        categoriesByLabel,
+      });
+      if (folderInputRef.current) folderInputRef.current.value = '';
+    } catch (e) {
+      console.error('[FolderImport] Erreur:', e);
+      alert('Erreur : ' + e.message);
+      setImportProgress(null);
+    }
+  }
 
   const missingFields = Object.entries(REQUIRED_FIELDS).filter(([k]) => {
     const v = data[k];
     return v === null || v === undefined || v === '' || v === 0;
   });
 
-  const alertConfig = {
-    critical: { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-800', icon: AlertCircle },
-    warning: { bg: 'bg-sage-50', border: 'border-sage-light', text: 'text-sage-darker', icon: AlertTriangle },
-    info: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-800', icon: Info }
-  };
-
   const fieldClass = (key) => {
     const base = "w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:border-stone-900";
-    if (filledFields.has(key)) return `${base} border-emerald-300 bg-emerald-50/30`;
-    return `${base} border-stone-200`;
+    if (filledFields.has(key)) return base + " border-emerald-300 bg-emerald-50/30";
+    return base + " border-stone-200";
   };
 
   return (
     <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-6" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-luxe-hover max-w-3xl w-full max-h-[92vh] overflow-y-auto scrollbar-thin" onClick={e => e.stopPropagation()}>
+
         <div className="flex items-center justify-between p-6 border-b border-stone-200 sticky top-0 bg-white z-10">
           <div>
             <h2 className="font-display text-2xl font-semibold text-stone-900">{mandat ? 'Modifier' : 'Nouveau'} mandat</h2>
-            {!mandat && <p className="text-xs text-stone-500 mt-0.5">Importez un dossier pour pré-remplir automatiquement</p>}
+            <p className="text-xs text-stone-500 mt-0.5">Importe un dossier — l'IA catégorise et pré-remplit la fiche</p>
           </div>
           <button onClick={onClose} className="text-stone-500 hover:text-stone-900"><X className="w-5 h-5" /></button>
         </div>
 
-        {!mandat && (
-          <div className="p-6 border-b border-stone-200 bg-gradient-to-br from-sage-50/70 to-cream-50">
-            {!importState.result && !importState.loading && (
-              <>
-                <label className="block border-2 border-dashed border-sage-light rounded-xl p-6 text-center cursor-pointer hover:border-sage hover:bg-white/50">
-                  <input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.webp,.txt" onChange={handleFiles} className="hidden" />
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="w-12 h-12 gradient-sage-dark rounded-xl flex items-center justify-center mb-1">
-                      <Wand2 className="w-6 h-6 text-cream-50" />
-                    </div>
-                    <div className="font-display text-lg font-semibold text-stone-900">Importer un ou plusieurs dossiers</div>
-                    <div className="text-sm text-stone-600 max-w-md">Plaquette, fiche immeuble, baux, photos… Claude lira tout et remplira la fiche en signalant les points d'attention.</div>
-                    <div className="text-xs text-stone-500 mt-2 flex items-center gap-3">
-                      <span className="flex items-center gap-1"><FileText className="w-3 h-3" />PDF</span>
-                      <span className="flex items-center gap-1"><FileText className="w-3 h-3" />DOCX</span>
-                      <span className="flex items-center gap-1"><FileText className="w-3 h-3" />Images</span>
-                    </div>
-                  </div>
-                </label>
+        {/* Zone d'import dossier (toujours visible) */}
+        <div className="p-6 border-b border-stone-200 bg-gradient-to-br from-sage-50/70 to-cream-50">
+          <input type="file" ref={folderInputRef} onChange={handleFolderImport} className="hidden" multiple webkitdirectory="" directory="" />
+          <button
+            type="button"
+            onClick={() => folderInputRef.current?.click()}
+            disabled={importProgress !== null}
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-sage-dark text-white rounded-xl hover:bg-sage-darker disabled:opacity-50 transition-colors"
+          >
+            <Wand2 className="w-5 h-5" />
+            <span className="font-medium">{importProgress ? 'Import en cours...' : 'Importer un dossier ✨'}</span>
+          </button>
+          <p className="text-xs text-stone-600 text-center mt-2">
+            L'IA lira tous les fichiers, les classera et pré-remplira la fiche
+          </p>
 
-                {/* Bouton appareil photo direct (mobile) */}
-                <label className="md:hidden mt-3 flex items-center justify-center gap-2 px-4 py-3 bg-ink-deep text-white rounded-xl text-sm font-medium hover:bg-ink cursor-pointer">
-                  <input type="file" accept="image/*" capture="environment" onChange={handleFiles} className="hidden" />
-                  <Camera className="w-5 h-5" />
-                  Prendre une photo du dossier
-                </label>
-                <div className="flex items-center gap-3 my-3">
-                  <div className="flex-1 h-px bg-sage-light/50"></div>
-                  <span className="text-xs text-stone-500 uppercase tracking-wide">ou</span>
-                  <div className="flex-1 h-px bg-sage-light/50"></div>
+          {importProgress && (
+            <div className="mt-3 p-3 bg-white rounded-xl border border-sage-light">
+              <div className="flex items-center gap-2 text-sm">
+                <Loader2 className="w-4 h-4 animate-spin text-sage-dark flex-shrink-0" />
+                <span className="text-sage-darker font-medium">
+                  {importProgress.current}/{importProgress.total}
+                </span>
+                <span className="text-stone-600 truncate">— {importProgress.fileName}</span>
+              </div>
+              <div className="mt-2 h-1.5 bg-sage-100 rounded-full overflow-hidden">
+                <div className="h-full bg-sage-dark transition-all" style={{ width: (importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0) + '%' }} />
+              </div>
+            </div>
+          )}
+
+          {importResult && (
+            <div className="mt-3 p-3 bg-white rounded-xl border border-sage-light">
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 mt-0.5 text-emerald-600 flex-shrink-0" />
+                <div className="flex-1 text-sm">
+                  <div className="font-medium text-stone-900">
+                    Import terminé : {importResult.success}/{importResult.total} fichiers
+                  </div>
+                  <div className="text-stone-700 mt-0.5">
+                    {Object.entries(importResult.categoriesByLabel).map(([label, count]) => label + ' (' + count + ')').join(' · ')}
+                  </div>
+                  {importResult.totalFilled > 0 && (
+                    <div className="text-emerald-700 font-medium mt-1">
+                      ✨ {importResult.totalFilled} champ(s) pré-remplis
+                    </div>
+                  )}
+                  {importResult.errors > 0 && (
+                    <div className="text-red-600 mt-0.5">
+                      {importResult.errors} fichier(s) en erreur
+                    </div>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={openDropboxChooser}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-sage-light rounded-xl hover:bg-sage-50 hover:border-sage transition-colors text-sm font-medium text-stone-800"
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="#0061FF"><path d="M12 6.5L6 2.5l-6 4 6 4 6-4zm12 0l-6-4-6 4 6 4 6-4zM0 14.5l6 4 6-4-6-4-6 4zm18-4l-6 4 6 4 6-4-6-4zm-12 9.5l6 4 6-4-6-4-6 4z"/></svg>
-                  Importer depuis Dropbox
+                <button onClick={() => setImportResult(null)} className="text-stone-400 hover:text-stone-700">
+                  <X className="w-4 h-4" />
                 </button>
-              </>
-            )}
-
-            {importState.loading && (
-              <div className="flex items-center gap-4 p-4 bg-white rounded-xl border border-sage-light">
-                <Loader2 className="w-6 h-6 text-sage-dark animate-spin" />
-                <div>
-                  <div className="font-medium text-stone-900 text-sm">Analyse en cours…</div>
-                  <div className="text-xs text-stone-500">Claude lit vos documents et extrait les informations</div>
-                </div>
               </div>
-            )}
-
-            {importState.error && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-800">
-                <div className="font-medium mb-1 flex items-center gap-2"><AlertCircle className="w-4 h-4" />Erreur d'analyse</div>
-                <div>{importState.error}</div>
-                <button onClick={() => setImportState({ loading: false, error: null, result: null })} className="mt-2 text-xs underline">Réessayer</button>
-              </div>
-            )}
-
-            {importState.result && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                    <span className="font-medium text-stone-900 text-sm">{filledFields.size} champ{filledFields.size > 1 ? 's' : ''} rempli{filledFields.size > 1 ? 's' : ''} automatiquement</span>
-                  </div>
-                  <label className="text-xs text-stone-600 hover:text-stone-900 cursor-pointer flex items-center gap-1">
-                    <input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.webp,.txt" onChange={handleFiles} className="hidden" />
-                    <FileUp className="w-3 h-3" /> Ajouter d'autres docs
-                  </label>
-                </div>
-
-                {importedFiles.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {importedFiles.map((f, i) => (
-                      <span key={i} className="text-xs px-2 py-1 bg-white border border-stone-200 rounded-full text-stone-700 flex items-center gap-1">
-                        <FileText className="w-3 h-3" />{f}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {importState.result.alerts && importState.result.alerts.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-stone-600 mt-2">Points d'attention détectés</div>
-                    {importState.result.alerts.map((a, i) => {
-                      const cfg = alertConfig[a.type] || alertConfig.info;
-                      const Icon = cfg.icon;
-                      return (
-                        <div key={i} className={`p-3 rounded-lg border ${cfg.bg} ${cfg.border} flex items-start gap-2`}>
-                          <Icon className={`w-4 h-4 ${cfg.text} flex-shrink-0 mt-0.5`} />
-                          <div className="flex-1 min-w-0">
-                            <div className={`text-sm font-medium ${cfg.text}`}>{a.title}</div>
-                            <div className={`text-xs ${cfg.text} opacity-90 mt-0.5`}>{a.message}</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {missingFields.length > 0 && (
-                  <div className="p-3 rounded-lg bg-stone-100 border border-cream-dark">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-stone-700 mb-2 flex items-center gap-1.5">
-                      <AlertCircle className="w-3.5 h-3.5" /> Informations manquantes ({missingFields.length})
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {missingFields.map(([k, label]) => (
-                        <span key={k} className="text-xs px-2 py-1 bg-white border border-stone-300 rounded-full text-stone-700">{label}</span>
-                      ))}
-                    </div>
-                    <div className="text-xs text-stone-600 mt-2 italic">Complétez-les manuellement ci-dessous.</div>
-                  </div>
-                )}
-
-                {importState.result.highlights && importState.result.highlights.length > 0 && (
-                  <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-emerald-800 mb-2 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5" /> Atouts commerciaux
-                    </div>
-                    <ul className="space-y-1">
-                      {importState.result.highlights.map((h, i) => (
-                        <li key={i} className="text-xs text-emerald-900 flex items-start gap-1.5">
-                          <Check className="w-3 h-3 mt-0.5 flex-shrink-0" /><span>{h}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {importState.result.actions && importState.result.actions.length > 0 && (
-                  <div className="p-3 rounded-lg bg-white border-2 border-sage-light">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-sage-darker flex items-center gap-1.5">
-                        <CheckSquare className="w-3.5 h-3.5" /> Actions à mener ({selectedActions.size}/{importState.result.actions.length})
-                      </div>
-                      <div className="flex gap-2">
-                        <button type="button" onClick={() => setSelectedActions(new Set(importState.result.actions.map((_,i) => i)))}
-                          className="text-[10px] text-sage-dark hover:underline">Tout cocher</button>
-                        <button type="button" onClick={() => setSelectedActions(new Set())}
-                          className="text-[10px] text-stone-500 hover:underline">Tout décocher</button>
-                      </div>
-                    </div>
-                    <div className="text-[11px] text-stone-600 mb-2 italic">Ces tâches seront créées dans votre to-do et liées à ce mandat dès l'enregistrement.</div>
-                    <div className="space-y-1.5">
-                      {importState.result.actions.map((a, i) => (
-                        <label key={i} className="flex items-start gap-2 p-2 rounded-md hover:bg-sage-50 cursor-pointer">
-                          <input type="checkbox" 
-                            checked={selectedActions.has(i)}
-                            onChange={() => {
-                              const s = new Set(selectedActions);
-                              if (s.has(i)) s.delete(i); else s.add(i);
-                              setSelectedActions(s);
-                            }}
-                            className="mt-0.5 accent-[#6B7F5A]" />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-xs font-medium text-stone-900">{a.titre}</span>
-                              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
-                                a.priorite === 'Haute' ? 'bg-red-50 text-red-700' : 
-                                a.priorite === 'Moyenne' ? 'bg-amber-50 text-amber-700' : 
-                                'bg-stone-100 text-stone-600'
-                              }`}>{a.priorite}</span>
-                              <span className="text-[10px] text-stone-500">
-                                <Calendar className="w-2.5 h-2.5 inline mr-0.5" />
-                                {a.echeanceJours}j
-                              </span>
-                            </div>
-                            {a.motif && <div className="text-[10px] text-stone-500 mt-0.5 italic">{a.motif}</div>}
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
 
         <div className="p-6 space-y-4">
           {filledFields.size > 0 && (
             <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5" />
-              Les champs en <span className="font-semibold">vert</span> ont été remplis automatiquement — vérifiez-les avant d'enregistrer.
+              Les champs en <span className="font-semibold">vert</span> ont été remplis automatiquement par l'IA — vérifie-les avant d'enregistrer.
             </div>
           )}
 
@@ -1217,19 +1135,25 @@ function MandatForm({ mandat, onSave, onClose }) {
           </div>
 
           <Field label="Description"><textarea value={data.description || ''} onChange={e => update('description', e.target.value)} rows={3} className={fieldClass('description')} /></Field>
+
+          {missingFields.length > 0 && (
+            <div className="p-3 rounded-lg bg-stone-100 border border-cream-dark">
+              <div className="text-xs font-semibold uppercase tracking-wide text-stone-700 mb-2 flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5" /> Informations manquantes ({missingFields.length})
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {missingFields.map(([k, label]) => (
+                  <span key={k} className="text-xs px-2 py-1 bg-white border border-stone-300 rounded-full text-stone-700">{label}</span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex gap-2 justify-end p-6 border-t border-stone-200 bg-stone-50 sticky bottom-0">
           <button onClick={onClose} className="px-4 py-2 text-sm text-stone-700 hover:bg-cream-200 rounded-lg">Annuler</button>
-          <button onClick={() => {
-            const docsAjoutes = importedFiles.length ? [...(data.docs || []), ...importedFiles] : (data.docs || []);
-            // Préparer les actions à créer dans la to-do
-            const actionsToCreate = importState.result?.actions 
-              ? importState.result.actions.filter((_, i) => selectedActions.has(i))
-              : [];
-            onSave({ ...data, docs: docsAjoutes }, actionsToCreate);
-          }} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
-            Enregistrer{selectedActions.size > 0 ? ` + ${selectedActions.size} tâche${selectedActions.size > 1 ? 's' : ''}` : ''}
+          <button onClick={() => onSave(data, [])} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
+            Enregistrer
           </button>
         </div>
       </div>
