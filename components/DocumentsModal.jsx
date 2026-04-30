@@ -50,6 +50,8 @@ export default function DocumentsModal({ mandat, onClose }) {
   const [showLinkForm, setShowLinkForm] = useState(false);
   const [linkData, setLinkData] = useState({ nom: '', url: '', category: 'autre' });
   const [uploadCategory, setUploadCategory] = useState('autre');
+  const [analyzingDocId, setAnalyzingDocId] = useState(null);
+  const [analyzeResult, setAnalyzeResult] = useState(null); // { filled: [...], message: '...' }
   const fileInputRef = useRef(null);
 
   async function loadDocuments() {
@@ -147,7 +149,38 @@ export default function DocumentsModal({ mandat, onClose }) {
     }
   }
 
-  async function handleDelete(docId) {
+  async function handleAnalyze(doc) {
+    if (!doc?.storage_path) {
+      alert('Ce document n\u2019est pas un fichier analysable.');
+      return;
+    }
+    setAnalyzingDocId(doc.id);
+    setAnalyzeResult(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { alert('Session expir\u00e9e'); return; }
+
+      const res = await fetch('/api/mandats/' + mandat.id + '/analyze-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, storage_path: doc.storage_path, document_id: doc.id }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setAnalyzeResult({ error: data.error || 'Erreur inconnue' });
+        return;
+      }
+      setAnalyzeResult({
+        filled: data.filled || [],
+        count: (data.filled || []).length,
+      });
+    } catch (e) {
+      setAnalyzeResult({ error: e.message });
+    } finally {
+      setAnalyzingDocId(null);
+    }
+  }async function handleDelete(docId) {
     if (!confirm('Supprimer ce document définitivement ?')) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -187,7 +220,27 @@ export default function DocumentsModal({ mandat, onClose }) {
           </button>
         </div>
 
-        <div className="px-6 py-3 border-b border-stone-100 bg-stone-50">
+        {analyzeResult && (
+          <div className={`px-6 py-3 border-b ${analyzeResult.error ? 'bg-red-50 border-red-200' : 'bg-sage-50 border-sage-200'}`}>
+            <div className="flex items-start gap-2">
+              <Sparkles className={`w-4 h-4 mt-0.5 flex-shrink-0 ${analyzeResult.error ? 'text-red-600' : 'text-sage-dark'}`} />
+              <div className="flex-1 text-sm">
+                {analyzeResult.error ? (
+                  <span className="text-red-700">Erreur : {analyzeResult.error}</span>
+                ) : analyzeResult.count === 0 ? (
+                  <span className="text-stone-700">L'IA a analys\u00e9 le document mais tous les champs concern\u00e9s sont d\u00e9j\u00e0 remplis dans le mandat.</span>
+                ) : (
+                  <span className="text-sage-darker font-medium">
+                    {analyzeResult.count} champ{analyzeResult.count > 1 ? 's' : ''} mis \u00e0 jour : {analyzeResult.filled.join(', ')}
+                  </span>
+                )}
+              </div>
+              <button onClick={() => setAnalyzeResult(null)} className="text-stone-400 hover:text-stone-700">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}<div className="px-6 py-3 border-b border-stone-100 bg-stone-50">
           <div className="flex items-center gap-2 flex-wrap">
             <select value={uploadCategory} onChange={e => setUploadCategory(e.target.value)} className="px-3 py-2 border border-stone-200 rounded-lg text-sm bg-white">
               {CATEGORIES.map(c => (
@@ -265,7 +318,16 @@ export default function DocumentsModal({ mandat, onClose }) {
                                 <ExternalLink className="w-4 h-4" />
                               </a>
                             )}
-                            <button onClick={() => handleDelete(doc.id)} className="p-2 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded" title="Supprimer">
+                            {doc.type === 'file' && doc.storage_path && (
+                              <button
+                                onClick={() => handleAnalyze(doc)}
+                                disabled={analyzingDocId === doc.id}
+                                className="p-2 text-stone-500 hover:text-sage-dark hover:bg-sage-50 rounded disabled:opacity-50"
+                                title="Analyser avec l'IA"
+                              >
+                                {analyzingDocId === doc.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                              </button>
+                            )}<button onClick={() => handleDelete(doc.id)} className="p-2 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded" title="Supprimer">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
