@@ -43,7 +43,7 @@ function formatDate(dateStr) {
   } catch { return ''; }
 }
 
-export default function DocumentsModal({ mandat, onClose }) {
+export default function DocumentsModal({ mandat, onClose, onUpdate }) {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -51,7 +51,14 @@ export default function DocumentsModal({ mandat, onClose }) {
   const [linkData, setLinkData] = useState({ nom: '', url: '', category: 'autre' });
   const [uploadCategory, setUploadCategory] = useState('autre');
   const [analyzingDocId, setAnalyzingDocId] = useState(null);
-  const [analyzeResult, setAnalyzeResult] = useState(null); // { filled: [...], message: '...' }
+  setAnalyzeResult({
+        filled: data.filled || [],
+        count: (data.filled || []).length,
+      });
+      // Rafraîchir la fiche mandat si au moins 1 champ a été mis à jour
+      if ((data.filled || []).length > 0 && typeof onUpdate === 'function') {
+        onUpdate();
+      }
   const fileInputRef = useRef(null);
 
   async function loadDocuments() {
