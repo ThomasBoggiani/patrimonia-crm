@@ -186,15 +186,15 @@ export async function POST(request, { params }) {
       );
     }
 
-    // Construire l'update : on ne remplit QUE les champs vides
+    // Construire l'update : on écrase TOUJOURS avec les nouvelles valeurs
+    // (le dernier document est considéré comme la source de vérité la plus à jour)
     const updates = {};
     const filled = [];
     for (const [key, value] of Object.entries(extracted)) {
       if (value === null || value === undefined || value === '') continue;
       const current = currentMandat[key];
-      // Champ vide ou 0/0.0 → on remplit
-      const isEmpty = current === null || current === undefined || current === '' || current === 0;
-      if (isEmpty) {
+      // On ne met à jour que si la valeur a changé (pour éviter un UPDATE inutile)
+      if (current !== value) {
         updates[key] = value;
         filled.push(key);
       }
