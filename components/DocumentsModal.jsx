@@ -1,10 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════
-// components/DocumentsModal.jsx
-// Modal documents avec analyse IA
+// components/DocumentsModal.jsx — v3
+// CRUD documents + Import dossier avec auto-catégo + auto-fill BDD via IA
 // ═══════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Upload, Link2, Trash2, FileText, Image as ImageIcon, FileArchive, File, Download, ExternalLink, Loader2, FolderOpen, Sparkles } from 'lucide-react';
+import { X, Upload, Link2, Trash2, FileText, Image as ImageIcon, FileArchive, File, Download, ExternalLink, Loader2, FolderOpen, Sparkles, Folder } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 const CATEGORIES = [
@@ -43,6 +43,40 @@ function formatDate(dateStr) {
   } catch { return ''; }
 }
 
+// Compresse une image côté client (max 1920px / qualité 80%)
+async function compressImage(file) {
+  if (!file.type.startsWith('image/')) return file;
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX_WIDTH = 1920;
+        let { width, height } = img;
+        if (width > MAX_WIDTH) {
+          height = (MAX_WIDTH / width) * height;
+          width = MAX_WIDTH;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (!blob) { resolve(file); return; }
+          const compressed = new File([blob], file.name, { type: 'image/jpeg' });
+          // Si la compression a aggravé le poids, on garde l'original
+          resolve(compressed.size < file.size ? compressed : file);
+        }, 'image/jpeg', 0.8);
+      };
+      img.onerror = () => resolve(file);
+      img.src = e.target.result;
+    };
+    reader.onerror = () => resolve(file);
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function DocumentsModal({ mandat, onClose, onUpdate }) {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -50,11 +84,10 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
   const [showLinkForm, setShowLinkForm] = useState(false);
   const [linkData, setLinkData] = useState({ nom: '', url: '', category: 'autre' });
   const [uploadCategory, setUploadCategory] = useState('autre');
-  const [analyzingDocId, setAnalyzingDocId] = useState(null);
-  const [analyzeResult, setAnalyzeResult] = useState(null);
-  const [folderUploadProgress, setFolderUploadProgress] = useState(null); // { current, total, fileName }
-  const folderInputRef = useRef(null);
+  const [importProgress, setImportProgress] = useState(null); // { current, total, fileName, totalFilled }
+  const [importResult, setImportResult] = useState(null);
   const fileInputRef = useRef(null);
+  const folderInputRef = useRef(null);
 
   async function loadDocuments() {
     setLoading(true);
@@ -64,42 +97,7 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
       if (!token) { setLoading(false); return; }
       const res = await fetch('/api/mandats/' + mandat.id + '/documents?token=' + encodeURIComponent(token));
       const data = await res.json();
-      if (!data.ok) {
-        // Cas spécial : adresse non concordante
-        if (data.error === 'address_mismatch') {
-          const choice = confirm(
-            'Adresse non concordante !\n\n' +
-            'Adresse du mandat : ' + (data.currentAddress || 'aucune') + '\n' +
-            'Adresse du document : ' + (data.extractedAddress || 'aucune') + '\n\n' +
-            (data.potentialDuplicates?.length > 0
-              ? 'Doublons potentiels trouvés :\n' + data.potentialDuplicates.map(m => '• ' + m.nom + ' (' + m.adresse + ')').join('\n') + '\n\n'
-              : '') +
-            'Veux-tu quand même appliquer les autres données du document à ce mandat ?'
-          );
-          if (choice) {
-            // Renvoyer la requête avec un flag de bypass
-            const res2 = await fetch('/api/mandats/' + mandat.id + '/analyze-document', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ token, storage_path: doc.storage_path, document_id: doc.id, force: true }),
-            });
-            const data2 = await res2.json();
-            if (data2.ok) {
-              setAnalyzeResult({
-                filled: data2.filled || [],
-                count: (data2.filled || []).length,
-              });
-            } else {
-              setAnalyzeResult({ error: data2.error || 'Erreur inconnue' });
-            }
-          } else {
-            setAnalyzeResult({ error: 'Analyse annulée (adresse non concordante)' });
-          }
-          return;
-        }
-        setAnalyzeResult({ error: data.error || 'Erreur inconnue' });
-        return;
-      }
+      if (data.ok) { setDocuments(data.documents || []); }
     } catch (e) {
       console.error('[Docs] load error:', e);
     } finally {
@@ -108,6 +106,60 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
   }
 
   useEffect(() => { loadDocuments(); }, [mandat?.id]);
+
+  async function uploadOneFile(file, token, category, applyToMandat) {
+    const cleanName = (file.name || 'file').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storagePath = mandat.id + '/' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '_' + cleanName;
+
+    const { error: uploadErr } = await supabase.storage.from('mandat-docs').upload(storagePath, file, {
+      contentType: file.type || 'application/octet-stream',
+      upsert: false,
+    });
+    if (uploadErr) {
+      return { ok: false, error: uploadErr.message };
+    }
+
+    // Appel à l'API import-folder pour catégoriser + analyser + auto-fill BDD
+    let aiCategory = category || 'autre';
+    let filledFields = [];
+    if (applyToMandat) {
+      try {
+        const aiRes = await fetch('/api/mandats/' + mandat.id + '/import-folder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, storage_path: storagePath, applyToMandat: true }),
+        });
+        const aiData = await aiRes.json();
+        if (aiData.ok) {
+          aiCategory = aiData.category || aiCategory;
+          filledFields = aiData.filled || [];
+        }
+      } catch (e) {
+        console.warn('[upload] AI analyze failed:', e.message);
+      }
+    }
+
+    // Enregistrer le document dans la table mandat_documents
+    const res = await fetch('/api/mandats/' + mandat.id + '/documents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token,
+        type: 'file_meta',
+        category: aiCategory,
+        nom: file.name,
+        storage_path: storagePath,
+        taille_bytes: file.size,
+        mime_type: file.type || 'application/octet-stream',
+      }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      await supabase.storage.from('mandat-docs').remove([storagePath]);
+      return { ok: false, error: data.error || 'Erreur enregistrement' };
+    }
+    return { ok: true, category: aiCategory, filled: filledFields };
+  }
 
   async function handleFileUpload(event) {
     const file = event.target.files?.[0];
@@ -118,37 +170,12 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
       const token = session?.access_token;
       if (!token) { alert('Session expirée'); return; }
 
-      const cleanName = (file.name || 'file').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
-      const storagePath = mandat.id + '/' + Date.now() + '_' + cleanName;
-
-      const { error: uploadErr } = await supabase.storage.from('mandat-docs').upload(storagePath, file, {
-        contentType: file.type || 'application/octet-stream',
-        upsert: false,
-      });
-
-      if (uploadErr) { alert('Erreur upload : ' + uploadErr.message); return; }
-
-      const res = await fetch('/api/mandats/' + mandat.id + '/documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token,
-          type: 'file_meta',
-          category: uploadCategory,
-          nom: file.name,
-          storage_path: storagePath,
-          taille_bytes: file.size,
-          mime_type: file.type || 'application/octet-stream',
-        }),
-      });
-
-      const data = await res.json();
-      if (!data.ok) {
-        await supabase.storage.from('mandat-docs').remove([storagePath]);
-        alert('Erreur enregistrement : ' + (data.error || 'inconnue'));
+      const compressed = await compressImage(file);
+      const result = await uploadOneFile(compressed, token, uploadCategory, false);
+      if (!result.ok) {
+        alert('Erreur upload : ' + result.error);
         return;
       }
-
       await loadDocuments();
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (e) {
@@ -162,87 +189,73 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
-    setFolderUploadProgress({ current: 0, total: files.length, fileName: 'Catégorisation IA en cours...' });
+    setImportResult(null);
+    setImportProgress({ current: 0, total: files.length, fileName: 'Préparation...', totalFilled: 0 });
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      if (!token) { alert('Session expirée'); setFolderUploadProgress(null); return; }
+      if (!token) { alert('Session expirée'); setImportProgress(null); return; }
 
-      // 1. Catégoriser tous les fichiers en 1 appel IA
-      const fileNames = files.map(f => f.name);
-      const catRes = await fetch('/api/mandats/' + mandat.id + '/categorize-files', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, fileNames }),
-      });
-      const catData = await catRes.json();
-      if (!catData.ok) {
-        alert('Erreur catégorisation : ' + (catData.error || 'inconnue'));
-        setFolderUploadProgress(null);
-        return;
-      }
-      const categories = catData.categories || {};
+      let totalFilled = 0;
+      let categoriesByLabel = {};
+      let errors = 0;
 
-      // 2. Upload chaque fichier
-      let uploaded = 0;
-      for (const file of files) {
-        setFolderUploadProgress({ current: uploaded + 1, total: files.length, fileName: file.name });
-        const cleanName = (file.name || 'file').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
-        const storagePath = mandat.id + '/' + Date.now() + '_' + uploaded + '_' + cleanName;
-        const category = categories[file.name] || 'autre';
-
-        const { error: uploadErr } = await supabase.storage.from('mandat-docs').upload(storagePath, file, {
-          contentType: file.type || 'application/octet-stream',
-          upsert: false,
-        });
-
-        if (uploadErr) {
-          console.error('[FolderUpload] Erreur upload:', file.name, uploadErr.message);
-          continue;
+      // Traiter par batches de 3 (rate limit Tier 1 : 5 req/min)
+      const BATCH_SIZE = 3;
+      let processed = 0;
+      for (let i = 0; i < files.length; i += BATCH_SIZE) {
+        const batch = files.slice(i, i + BATCH_SIZE);
+        const results = await Promise.all(batch.map(async (file) => {
+          const compressed = await compressImage(file);
+          setImportProgress({ current: processed + 1, total: files.length, fileName: file.name, totalFilled });
+          const result = await uploadOneFile(compressed, token, 'autre', true);
+          processed++;
+          return result;
+        }));
+        for (const r of results) {
+          if (r.ok) {
+            totalFilled += (r.filled?.length || 0);
+            const label = CATEGORIES.find(c => c.id === r.category)?.label || 'Autre';
+            categoriesByLabel[label] = (categoriesByLabel[label] || 0) + 1;
+          } else {
+            errors++;
+          }
         }
-
-        await fetch('/api/mandats/' + mandat.id + '/documents', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            token,
-            type: 'file_meta',
-            category,
-            nom: file.name,
-            storage_path: storagePath,
-            taille_bytes: file.size,
-            mime_type: file.type || 'application/octet-stream',
-          }),
-        });
-        uploaded++;
+        setImportProgress({ current: processed, total: files.length, fileName: 'Batch ' + (Math.floor(i / BATCH_SIZE) + 1), totalFilled });
+        // Petite pause entre les batches pour respecter le rate limit
+        if (i + BATCH_SIZE < files.length) {
+          await new Promise(r => setTimeout(r, 500));
+        }
       }
 
-      setFolderUploadProgress(null);
+      setImportProgress(null);
+      setImportResult({
+        total: files.length,
+        success: files.length - errors,
+        errors,
+        totalFilled,
+        categoriesByLabel,
+      });
       await loadDocuments();
       if (folderInputRef.current) folderInputRef.current.value = '';
+      if (totalFilled > 0 && typeof onUpdate === 'function') onUpdate();
     } catch (e) {
       alert('Erreur : ' + e.message);
-      setFolderUploadProgress(null);
+      setImportProgress(null);
     }
   }
+
   async function handleAddLink() {
     if (!linkData.nom.trim() || !linkData.url.trim()) { alert('Nom et URL requis'); return; }
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
       if (!token) return;
-
       const res = await fetch('/api/mandats/' + mandat.id + '/documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token,
-          type: 'link',
-          nom: linkData.nom,
-          url: linkData.url,
-          category: linkData.category,
-        }),
+        body: JSON.stringify({ token, type: 'link', ...linkData }),
       });
       const data = await res.json();
       if (!data.ok) { alert('Erreur : ' + (data.error || 'inconnue')); return; }
@@ -254,49 +267,12 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
     }
   }
 
-  async function handleAnalyze(doc) {
-    if (!doc?.storage_path) {
-      alert('Ce document n\u2019est pas un fichier analysable.');
-      return;
-    }
-    setAnalyzingDocId(doc.id);
-    setAnalyzeResult(null);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) { alert('Session expirée'); return; }
-
-      const res = await fetch('/api/mandats/' + mandat.id + '/analyze-document', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, storage_path: doc.storage_path, document_id: doc.id }),
-      });
-      const data = await res.json();
-      if (!data.ok) {
-        setAnalyzeResult({ error: data.error || 'Erreur inconnue' });
-        return;
-      }
-      setAnalyzeResult({
-        filled: data.filled || [],
-        count: (data.filled || []).length,
-      });
-      if ((data.filled || []).length > 0 && typeof onUpdate === 'function') {
-        onUpdate();
-      }
-    } catch (e) {
-      setAnalyzeResult({ error: e.message });
-    } finally {
-      setAnalyzingDocId(null);
-    }
-  }
-
   async function handleDelete(docId) {
     if (!confirm('Supprimer ce document définitivement ?')) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
       if (!token) return;
-
       const res = await fetch('/api/mandats/' + mandat.id + '/documents', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
@@ -330,36 +306,44 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
           </button>
         </div>
 
-        {folderUploadProgress && (
+        {importProgress && (
           <div className="px-6 py-3 border-b bg-sage-50 border-sage-200">
             <div className="flex items-center gap-2 text-sm">
-              <Loader2 className="w-4 h-4 animate-spin text-sage-dark" />
+              <Loader2 className="w-4 h-4 animate-spin text-sage-dark flex-shrink-0" />
               <span className="text-sage-darker font-medium">
-                {folderUploadProgress.current === 0 ? 'Préparation...' : 'Upload ' + folderUploadProgress.current + '/' + folderUploadProgress.total}
+                Import {importProgress.current}/{importProgress.total}
               </span>
-              <span className="text-stone-600 truncate">— {folderUploadProgress.fileName}</span>
+              <span className="text-stone-600 truncate">— {importProgress.fileName}</span>
             </div>
             <div className="mt-2 h-1.5 bg-sage-100 rounded-full overflow-hidden">
-              <div className="h-full bg-sage-dark transition-all" style={{ width: (folderUploadProgress.total > 0 ? (folderUploadProgress.current / folderUploadProgress.total) * 100 : 0) + '%' }} />
+              <div className="h-full bg-sage-dark transition-all" style={{ width: (importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0) + '%' }} />
             </div>
           </div>
         )}
-        {analyzeResult && (
-          <div className={`px-6 py-3 border-b ${analyzeResult.error ? 'bg-red-50 border-red-200' : 'bg-sage-50 border-sage-200'}`}>
-            <div className="flex items-start gap-2">
-              <Sparkles className={`w-4 h-4 mt-0.5 flex-shrink-0 ${analyzeResult.error ? 'text-red-600' : 'text-sage-dark'}`} />
-              <div className="flex-1 text-sm">
-                {analyzeResult.error ? (
-                  <span className="text-red-700">Erreur : {analyzeResult.error}</span>
-                ) : analyzeResult.count === 0 ? (
-                  <span className="text-stone-700">L'IA a analysé le document mais tous les champs concernés sont déjà remplis.</span>
-                ) : (
-                  <span className="text-sage-darker font-medium">
-                    {analyzeResult.count} champ{analyzeResult.count > 1 ? 's' : ''} mis à jour : {analyzeResult.filled.join(', ')}
-                  </span>
+
+        {importResult && (
+          <div className="px-6 py-3 border-b bg-sage-50 border-sage-200">
+            <div className="flex items-start gap-2 text-sm">
+              <Sparkles className="w-4 h-4 mt-0.5 text-sage-dark flex-shrink-0" />
+              <div className="flex-1">
+                <div className="text-sage-darker font-medium">
+                  Import terminé : {importResult.success}/{importResult.total} fichiers
+                </div>
+                <div className="text-stone-700 mt-0.5">
+                  {Object.entries(importResult.categoriesByLabel).map(([label, count]) => label + ' (' + count + ')').join(' · ')}
+                </div>
+                {importResult.totalFilled > 0 && (
+                  <div className="text-sage-darker mt-1">
+                    ✨ {importResult.totalFilled} champ(s) du mandat mis à jour automatiquement
+                  </div>
+                )}
+                {importResult.errors > 0 && (
+                  <div className="text-red-600 mt-0.5">
+                    {importResult.errors} fichier(s) en erreur
+                  </div>
                 )}
               </div>
-              <button onClick={() => setAnalyzeResult(null)} className="text-stone-400 hover:text-stone-700">
+              <button onClick={() => setImportResult(null)} className="text-stone-400 hover:text-stone-700">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -368,22 +352,25 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
 
         <div className="px-6 py-3 border-b border-stone-100 bg-stone-50">
           <div className="flex items-center gap-2 flex-wrap">
+            <input type="file" ref={folderInputRef} onChange={handleFolderUpload} className="hidden" multiple webkitdirectory="" directory="" />
+            <button onClick={() => folderInputRef.current?.click()} disabled={importProgress !== null} className="flex items-center gap-2 px-3 py-2 bg-sage-dark text-white rounded-lg text-sm hover:bg-sage-darker disabled:opacity-50">
+              <Folder className="w-4 h-4" /> Importer un dossier ✨
+            </button>
+
+            <span className="text-stone-300">|</span>
+
             <select value={uploadCategory} onChange={e => setUploadCategory(e.target.value)} className="px-3 py-2 border border-stone-200 rounded-lg text-sm bg-white">
               {CATEGORIES.map(c => (
                 <option key={c.id} value={c.id}>{c.icon} {c.label}</option>
               ))}
             </select>
             <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-            <button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="flex items-center gap-2 px-3 py-2 bg-stone-900 text-white rounded-lg text-sm hover:bg-stone-800 disabled:opacity-50">
+            <button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="flex items-center gap-2 px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded-lg text-sm hover:bg-stone-100 disabled:opacity-50">
               {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              {uploading ? 'Upload...' : 'Ajouter un fichier'}
-            </button>
-            <input type="file" ref={folderInputRef} onChange={handleFolderUpload} className="hidden" multiple webkitdirectory="" directory="" />
-            <button onClick={() => folderInputRef.current?.click()} disabled={folderUploadProgress !== null} className="flex items-center gap-2 px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded-lg text-sm hover:bg-stone-100 disabled:opacity-50">
-              <Folder className="w-4 h-4" /> Importer un dossier ✨
+              {uploading ? 'Upload...' : 'Fichier seul'}
             </button>
             <button onClick={() => setShowLinkForm(!showLinkForm)} className="flex items-center gap-2 px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded-lg text-sm hover:bg-stone-100">
-              <Link2 className="w-4 h-4" /> Ajouter un lien
+              <Link2 className="w-4 h-4" /> Lien
             </button>
           </div>
 
@@ -413,7 +400,7 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
             <div className="text-center py-12 text-stone-400">
               <FolderOpen className="w-10 h-10 mx-auto mb-3 text-stone-300" />
               <p className="text-sm">Aucun document pour ce mandat.</p>
-              <p className="text-xs mt-1">Ajoute un fichier ou un lien ci-dessus.</p>
+              <p className="text-xs mt-1">Importe un dossier ou ajoute des fichiers.</p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -438,18 +425,13 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
                             </div>
                           </div>
                           <div className="flex items-center gap-1">
-                            {doc.type === 'file' && doc.storage_path && (
-                              <button onClick={() => handleAnalyze(doc)} disabled={analyzingDocId === doc.id} className="p-2 text-stone-500 hover:text-sage-dark hover:bg-sage-50 rounded disabled:opacity-50" title="Analyser avec l'IA">
-                                {analyzingDocId === doc.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                              </button>
-                            )}
                             {doc.type === 'file' && doc.signedUrl && (
-                              <a href={doc.signedUrl} target="_blank" rel="noopener noreferrer" className="p-2 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded" title="Télécharger / Ouvrir">
+                              <a href={doc.signedUrl} target="_blank" rel="noopener noreferrer" className="p-2 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded" title="Télécharger">
                                 <Download className="w-4 h-4" />
                               </a>
                             )}
                             {doc.type === 'link' && doc.url && (
-                              <a href={doc.url} target="_blank" rel="noopener noreferrer" className="p-2 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded" title="Ouvrir le lien">
+                              <a href={doc.url} target="_blank" rel="noopener noreferrer" className="p-2 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded" title="Ouvrir">
                                 <ExternalLink className="w-4 h-4" />
                               </a>
                             )}
@@ -468,7 +450,7 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
         </div>
 
         <div className="px-6 py-3 border-t border-stone-200 bg-stone-50 text-xs text-stone-500 text-center">
-          Stockage sécurisé Supabase · URLs signées valides 1h
+          ✨ L'IA catégorise et extrait les données automatiquement lors de l'import dossier
         </div>
       </div>
     </div>
