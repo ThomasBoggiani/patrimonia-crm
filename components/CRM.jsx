@@ -1480,7 +1480,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
         <MandantModal mandat={mandat} onClose={() => setOpenModal(null)} onUpdate={reload} />
       )}
       {openModal === 'documents' && (
-        <DocumentsModal mandat={mandat} onClose={() => setOpenModal(null)} onUpdate={reload} />
+        <DocumentsModal mandat={mandat} onClose={() => setOpenModal(null)} />
       )}
     {/* Quelque chose */}
 
