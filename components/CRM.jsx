@@ -362,85 +362,329 @@ export default function CRM() {
 }
 
 // === DASHBOARD ===
+// ═══════════════════════════════════════════════════════════════════
+// Dashboard v2 — vue centrée sur l'utilisateur connecté
+// À coller dans components/CRM.jsx en remplacement de la fonction Dashboard actuelle
+// Lignes ~365-446 dans l'original
+// ═══════════════════════════════════════════════════════════════════
+
 function Dashboard({ mandats, clients, deals, todos }) {
-  const stats = {
-    mandatsActifs: mandats.filter(m => !['Perdu', 'Acte'].includes(m.statut)).length,
-    clientsActifs: clients.filter(c => c.statut === 'Actif').length,
-    dealsEnCours: deals.filter(d => !['Perdu', 'Gagné', 'Refusé'].includes(d.statut)).length,
-    tachesUrgentes: todos.filter(t => t.statut !== 'Terminé' && t.priorite === 'Haute').length,
-    caTotal: mandats.filter(m => m.statut !== 'Perdu').reduce((s, m) => s + (parseFloat(m.prix) || 0), 0),
-    exclusifs: mandats.filter(m => m.commercialisation === 'Mandat exclusif').length,
-    simples: mandats.filter(m => m.commercialisation === 'Mandat simple').length,
-    offmarket: mandats.filter(m => m.commercialisation === 'Off-market').length
+  const { user, profile } = useAuth();
+  const myInitials = getCurrentUserInitials();
+  const myFirstName = profile?.prenom || (profile?.nom ? profile.nom.split(' ')[0] : 'utilisateur');
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const endOfWeek = new Date(today);
+  endOfWeek.setDate(endOfWeek.getDate() + (7 - today.getDay()));
+
+  // ─── KPIs personnalisés ───
+  const myMandats = mandats.filter(m => m.owner === myInitials && !['Perdu', 'Acte'].includes(m.statut));
+  
+  const isToday = (dateStr) => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    return d.toDateString() === today.toDateString();
   };
+  
+  const myTodayTasks = todos.filter(t => 
+    (t.assignee === myInitials || t.owner === myInitials) 
+    && t.statut !== 'Terminé' 
+    && isToday(t.echeance)
+  );
+
+  const affairesEnCours = mandats.filter(m => 
+    ['Mandat signé', 'Commercialisation', 'Offre', 'Promesse'].includes(m.statut)
+  );
+
+  const honorairesPrevisionnels = mandats
+    .filter(m => !['Perdu', 'Acte'].includes(m.statut))
+    .reduce((sum, m) => sum + (parseFloat(m.honorairesMontant) || 0), 0);
+
+  // ─── Tâches par priorité ───
+  const myTasks = todos.filter(t => 
+    (t.assignee === myInitials || t.owner === myInitials) 
+    && t.statut !== 'Terminé'
+  );
+
+  const tasksRetard = myTasks.filter(t => {
+    if (!t.echeance) return false;
+    return new Date(t.echeance) < today;
+  });
+
+  const tasksAujourdhui = myTasks.filter(t => isToday(t.echeance));
+
+  const tasksSemaine = myTasks.filter(t => {
+    if (!t.echeance) return false;
+    const d = new Date(t.echeance);
+    return d >= tomorrow && d <= endOfWeek;
+  });
+
+  // ─── Alertes intelligentes ───
+  const mandatsExpirentBientot = mandats.filter(m => {
+    if (!m.mandatDateEcheance && !m.mandat_date_echeance) return false;
+    const dateStr = m.mandatDateEcheance || m.mandat_date_echeance;
+    const d = new Date(dateStr);
+    const days = (d - today) / (1000 * 60 * 60 * 24);
+    return days >= 0 && days <= 30;
+  });
+
+  const mandatsSansDPE = mandats.filter(m => 
+    !['Perdu', 'Acte'].includes(m.statut) 
+    && !m.dpeConsommation 
+    && !m.dpe_consommation
+  );
+
+  const mandatsSansPhotos = mandats.filter(m => {
+    if (['Perdu', 'Acte'].includes(m.statut)) return false;
+    const photos = m.photos || m.docs;
+    if (!photos) return true;
+    if (Array.isArray(photos)) return photos.length === 0;
+    return false;
+  });
+
+  // Salutation contextuelle
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Bonjour' : hour < 18 ? 'Bonne après-midi' : 'Bonsoir';
+  const dateLabel = today.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
     <div className="p-8 max-w-7xl">
       <div className="mb-8">
-        <h1 className="font-display text-4xl font-semibold text-stone-900 mb-1">Tableau de bord</h1>
-        <p className="text-stone-500">Vue d'ensemble de votre activité patrimoniale</p>
+        <h1 className="font-display text-4xl font-semibold text-stone-900 mb-1">
+          {greeting}, {myFirstName}
+        </h1>
+        <p className="text-stone-500 capitalize">{dateLabel}</p>
       </div>
 
+      {/* ═══ 4 KPIs personnalisés ═══ */}
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <StatCard label="Mandats actifs" value={stats.mandatsActifs} icon={Building2} color="amber" />
-        <StatCard label="Clients actifs" value={stats.clientsActifs} icon={Users} color="stone" />
-        <StatCard label="Deals en cours" value={stats.dealsEnCours} icon={Handshake} color="emerald" />
-        <StatCard label="Tâches urgentes" value={stats.tachesUrgentes} icon={AlertCircle} color="red" />
+        <KpiCard
+          label="Mes mandats"
+          value={myMandats.length}
+          icon={Building2}
+          accent="sage"
+          sublabel={`Sur ${mandats.filter(m => !['Perdu', 'Acte'].includes(m.statut)).length} actifs au total`}
+        />
+        <KpiCard
+          label="Mes tâches du jour"
+          value={myTodayTasks.length}
+          icon={CheckSquare}
+          accent={myTodayTasks.length > 0 ? "amber" : "stone"}
+          sublabel={tasksRetard.length > 0 ? `+ ${tasksRetard.length} en retard` : 'À jour ✓'}
+        />
+        <KpiCard
+          label="Affaires en cours"
+          value={affairesEnCours.length}
+          icon={Handshake}
+          accent="emerald"
+          sublabel="Mandat signé → Promesse"
+        />
+        <KpiCard
+          label="Honoraires prévisionnels"
+          value={formatPrixCompact(honorairesPrevisionnels)}
+          icon={Sparkles}
+          accent="sage"
+          sublabel="Sur mandats actifs"
+          isAmount
+        />
       </div>
 
-      <div className="grid grid-cols-3 gap-6 mb-6">
-        <div className="col-span-2 bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-          <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Portefeuille sous mandat</h2>
-          <div className="text-4xl font-display font-semibold text-stone-900 mb-1">
-            {formatPrixCompact(stats.caTotal)}
-          </div>
-          <p className="text-sm text-stone-500 mb-6">Valeur totale des biens en commercialisation</p>
-          <div className="space-y-3">
-            <CommRow label="Mandats exclusifs" value={stats.exclusifs} color="bg-emerald-500" />
-            <CommRow label="Mandats simples" value={stats.simples} color="bg-blue-500" />
-            <CommRow label="Off-market" value={stats.offmarket} color="bg-red-500" />
-          </div>
-        </div>
+      {/* ═══ Tâches par priorité ═══ */}
+      <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-6">
+        <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
+          <CheckSquare className="w-5 h-5 text-sage-dark" />
+          À faire aujourd'hui
+        </h2>
 
-        <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-          <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Pipeline deals</h2>
-          <div className="space-y-2.5">
-            {STATUTS_DEAL.slice(0, 6).map(s => {
-              const count = deals.filter(d => d.statut === s).length;
-              const pct = deals.length ? (count / deals.length) * 100 : 0;
-              return (
-                <div key={s}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-stone-700">{s}</span>
-                    <span className="font-medium text-stone-900">{count}</span>
-                  </div>
-                  <div className="h-1.5 bg-stone-100 rounded-full overflow-hidden">
-                    <div className="h-full gradient-gold" style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              );
-            })}
+        {tasksRetard.length === 0 && tasksAujourdhui.length === 0 && tasksSemaine.length === 0 && (
+          <div className="text-center py-8 text-stone-400">
+            <Check className="w-8 h-8 mx-auto mb-2 text-emerald-400" />
+            <p className="text-sm">Aucune tâche en attente — bien joué !</p>
           </div>
-        </div>
-      </div>
+        )}
 
-      <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-        <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Tâches prioritaires</h2>
-        <div className="space-y-2">
-          {todos.filter(t => t.statut !== 'Terminé').slice(0, 5).map(t => (
-            <div key={t.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-cream-50">
-              <div className={`w-2 h-2 rounded-full ${
-                t.priorite === 'Haute' ? 'bg-red-500' : t.priorite === 'Moyenne' ? 'bg-amber-500' : 'bg-stone-300'
-              }`} />
-              <span className="flex-1 text-sm text-stone-700">{t.titre}</span>
-              <span className="text-xs text-stone-500">{t.echeance}</span>
+        {tasksRetard.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-2 h-2 rounded-full bg-red-500" />
+              <h3 className="text-sm font-semibold text-red-700">En retard ({tasksRetard.length})</h3>
             </div>
-          ))}
-          {todos.filter(t => t.statut !== 'Terminé').length === 0 && (
-            <p className="text-sm text-stone-500 italic">Aucune tâche en cours</p>
-          )}
+            <div className="space-y-1.5">
+              {tasksRetard.slice(0, 5).map(t => (
+                <TaskRow key={t.id} task={t} mandats={mandats} variant="late" />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tasksAujourdhui.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-2 h-2 rounded-full bg-amber-500" />
+              <h3 className="text-sm font-semibold text-amber-700">Aujourd'hui ({tasksAujourdhui.length})</h3>
+            </div>
+            <div className="space-y-1.5">
+              {tasksAujourdhui.slice(0, 5).map(t => (
+                <TaskRow key={t.id} task={t} mandats={mandats} variant="today" />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tasksSemaine.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-2 h-2 rounded-full bg-sage-dark" />
+              <h3 className="text-sm font-semibold text-sage-darker">Cette semaine ({tasksSemaine.length})</h3>
+            </div>
+            <div className="space-y-1.5">
+              {tasksSemaine.slice(0, 5).map(t => (
+                <TaskRow key={t.id} task={t} mandats={mandats} variant="week" />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ═══ Alertes intelligentes ═══ */}
+      {(mandatsExpirentBientot.length > 0 || mandatsSansDPE.length > 0 || mandatsSansPhotos.length > 0) && (
+        <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-6">
+          <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-amber-600" />
+            Points d'attention
+          </h2>
+          <div className="space-y-2">
+            {mandatsExpirentBientot.length > 0 && (
+              <AlertRow
+                level="warning"
+                count={mandatsExpirentBientot.length}
+                label={`mandat${mandatsExpirentBientot.length > 1 ? 's' : ''} expire${mandatsExpirentBientot.length > 1 ? 'nt' : ''} dans les 30 prochains jours`}
+                items={mandatsExpirentBientot.slice(0, 3).map(m => m.nom)}
+              />
+            )}
+            {mandatsSansDPE.length > 0 && (
+              <AlertRow
+                level="info"
+                count={mandatsSansDPE.length}
+                label={`mandat${mandatsSansDPE.length > 1 ? 's' : ''} sans DPE renseigné`}
+                items={mandatsSansDPE.slice(0, 3).map(m => m.nom)}
+              />
+            )}
+            {mandatsSansPhotos.length > 0 && (
+              <AlertRow
+                level="info"
+                count={mandatsSansPhotos.length}
+                label={`mandat${mandatsSansPhotos.length > 1 ? 's' : ''} sans photos`}
+                items={mandatsSansPhotos.slice(0, 3).map(m => m.nom)}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Récap global du portefeuille ═══ */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-white rounded-xl p-5 shadow-luxe border border-cream-dark">
+          <div className="text-xs uppercase tracking-wide text-stone-500 mb-1">Portefeuille total</div>
+          <div className="text-2xl font-display font-semibold text-stone-900">
+            {formatPrixCompact(mandats.filter(m => m.statut !== 'Perdu').reduce((s, m) => s + (parseFloat(m.prix) || 0), 0))}
+          </div>
+          <div className="text-xs text-stone-500 mt-1">{mandats.filter(m => !['Perdu', 'Acte'].includes(m.statut)).length} mandats actifs</div>
+        </div>
+        <div className="bg-white rounded-xl p-5 shadow-luxe border border-cream-dark">
+          <div className="text-xs uppercase tracking-wide text-stone-500 mb-1">Off-market</div>
+          <div className="text-2xl font-display font-semibold text-stone-900">
+            {mandats.filter(m => m.commercialisation === 'Off-market' && !['Perdu', 'Acte'].includes(m.statut)).length}
+          </div>
+          <div className="text-xs text-stone-500 mt-1">Mandats discrets</div>
+        </div>
+        <div className="bg-white rounded-xl p-5 shadow-luxe border border-cream-dark">
+          <div className="text-xs uppercase tracking-wide text-stone-500 mb-1">Clients actifs</div>
+          <div className="text-2xl font-display font-semibold text-stone-900">
+            {clients.filter(c => c.statut === 'Actif').length}
+          </div>
+          <div className="text-xs text-stone-500 mt-1">Sur {clients.length} au total</div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Carte KPI personnalisée
+function KpiCard({ label, value, icon: Icon, accent, sublabel, isAmount }) {
+  const accentColors = {
+    sage: 'bg-sage-50 text-sage-dark border-sage-light',
+    stone: 'bg-stone-50 text-stone-700 border-stone-200',
+    emerald: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+    amber: 'bg-amber-50 text-amber-700 border-amber-200',
+    red: 'bg-red-50 text-red-700 border-red-100',
+  };
+  return (
+    <div className="bg-white rounded-xl p-5 shadow-luxe border border-cream-dark">
+      <div className="flex items-start justify-between mb-3">
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center border ${accentColors[accent] || accentColors.stone}`}>
+          <Icon className="w-5 h-5" />
+        </div>
+      </div>
+      <div className="text-xs uppercase tracking-wide text-stone-500 mb-1">{label}</div>
+      <div className={`font-display font-semibold text-stone-900 ${isAmount ? 'text-2xl' : 'text-3xl'}`}>{value}</div>
+      {sublabel && <div className="text-xs text-stone-500 mt-1">{sublabel}</div>}
+    </div>
+  );
+}
+
+// Ligne tâche avec lien au mandat
+function TaskRow({ task, mandats, variant }) {
+  const variantStyles = {
+    late: 'bg-red-50/50 border-red-100',
+    today: 'bg-amber-50/50 border-amber-100',
+    week: 'bg-sage-50/40 border-sage-light/50',
+  };
+  const linkedMandat = task.mandatId || task.mandat_id ? mandats.find(m => m.id === (task.mandatId || task.mandat_id)) : null;
+  const echeanceLabel = task.echeance 
+    ? new Date(task.echeance).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
+    : '—';
+  return (
+    <div className={`flex items-center gap-3 p-2.5 rounded-lg border ${variantStyles[variant] || variantStyles.week}`}>
+      <div className="w-3 h-3 rounded border-2 border-stone-300 flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium text-stone-900 truncate">{task.titre}</div>
+        {linkedMandat && (
+          <div className="text-xs text-stone-500 truncate">→ {linkedMandat.nom}</div>
+        )}
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {task.priorite === 'Haute' && <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-700 rounded-full font-medium">Haute</span>}
+        <span className="text-xs text-stone-500 flex items-center gap-1">
+          <Calendar className="w-3 h-3" />{echeanceLabel}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// Ligne d'alerte
+function AlertRow({ level, count, label, items }) {
+  const levelStyles = {
+    warning: 'bg-amber-50 border-amber-200 text-amber-900',
+    info: 'bg-blue-50 border-blue-200 text-blue-900',
+    danger: 'bg-red-50 border-red-200 text-red-900',
+  };
+  return (
+    <div className={`p-3 rounded-lg border ${levelStyles[level] || levelStyles.info}`}>
+      <div className="flex items-start gap-2">
+        <div className="font-medium text-sm">
+          <span className="font-bold">{count}</span> {label}
+        </div>
+      </div>
+      {items && items.length > 0 && (
+        <div className="mt-1 text-xs opacity-80">
+          {items.join(' · ')}{items.length < count ? '...' : ''}
+        </div>
+      )}
     </div>
   );
 }
