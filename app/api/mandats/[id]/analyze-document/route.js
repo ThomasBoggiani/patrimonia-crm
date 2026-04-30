@@ -53,7 +53,7 @@ Règles : nombres = number, dates = YYYY-MM-DD, hésitation = ne pas mettre la c
 export async function POST(request, { params }) {
   try {
     const body = await request.json();
-    const { token, storage_path } = body;
+    const { token, storage_path, force } = body;
 
     const user = await verifyToken(token);
     if (!user) {
@@ -140,7 +140,7 @@ export async function POST(request, { params }) {
     const extractedAddress = (extracted.adresse || '').trim().toLowerCase();
     const currentAddress = (currentMandat.adresse || '').trim().toLowerCase();
 
-    if (extractedAddress && currentAddress && extractedAddress !== currentAddress) {
+    if (!force && extractedAddress && currentAddress && extractedAddress !== currentAddress) {
       // Comparaison flexible : on tolère petites différences (numéro de rue, casse, accents)
       const normalize = (s) => s
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
