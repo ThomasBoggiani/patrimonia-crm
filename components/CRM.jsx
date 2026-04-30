@@ -395,12 +395,14 @@ function Dashboard({ mandats, clients, deals, todos }) {
     && isToday(t.echeance)
   );
 
+  // Affaires en cours = à partir de la signature de l'offre (Offre, Promesse, Acte)
   const affairesEnCours = mandats.filter(m => 
-    ['Mandat signé', 'Commercialisation', 'Offre', 'Promesse'].includes(m.statut)
+    ['Offre', 'Promesse', 'Acte'].includes(m.statut)
   );
 
+  // Honoraires prévisionnels = uniquement mandats en Promesse (signée mais pas encore vendue)
   const honorairesPrevisionnels = mandats
-    .filter(m => !['Perdu', 'Acte'].includes(m.statut))
+    .filter(m => m.statut === 'Promesse')
     .reduce((sum, m) => sum + (parseFloat(m.honorairesMontant) || 0), 0);
 
   // ─── Tâches par priorité ───
@@ -480,14 +482,14 @@ function Dashboard({ mandats, clients, deals, todos }) {
           value={affairesEnCours.length}
           icon={Handshake}
           accent="emerald"
-          sublabel="Mandat signé → Promesse"
+          sublabel="Offre → Acte"
         />
         <KpiCard
           label="Honoraires prévisionnels"
           value={formatPrixCompact(honorairesPrevisionnels)}
           icon={Sparkles}
           accent="sage"
-          sublabel="Sur mandats actifs"
+          sublabel="Promesse signée"
           isAmount
         />
       </div>
