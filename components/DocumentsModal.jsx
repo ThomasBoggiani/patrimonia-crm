@@ -51,6 +51,8 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
   const [linkData, setLinkData] = useState({ nom: '', url: '', category: 'autre' });
   const [uploadCategory, setUploadCategory] = useState('autre');
   const [analyzingDocId, setAnalyzingDocId] = useState(null);
+  const [analyzeResult, setAnalyzeResult] = useState(null);
+  const [analyzingDocId, setAnalyzingDocId] = useState(null);
   setAnalyzeResult({
         filled: data.filled || [],
         count: (data.filled || []).length,
