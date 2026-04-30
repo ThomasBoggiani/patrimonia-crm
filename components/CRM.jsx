@@ -762,6 +762,157 @@ function Field({ label, children }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// TaskInline : composant réutilisable pour afficher + modifier une tâche
+// Utilisé dans le Dashboard, fiche Mandat, fiche Client
+// ═══════════════════════════════════════════════════════════════════
+function TaskInline({ task, mandats = [], clients = [], onUpdate }) {
+  const [editing, setEditing] = useState(false);
+  const [editData, setEditData] = useState({ titre: task.titre, echeance: task.echeance || '', priorite: task.priorite || 'Moyenne' });
+
+  const isLate = task.echeance && new Date(task.echeance) < new Date(new Date().toDateString()) && task.statut !== 'Terminé';
+  const isToday = task.echeance && new Date(task.echeance).toDateString() === new Date().toDateString();
+  const isDone = task.statut === 'Terminé';
+
+  const linkedMandat = task.lienId && task.lienType === 'mandat' ? mandats.find(m => m.id === task.lienId) : null;
+  const linkedClient = task.lienId && task.lienType === 'client' ? clients.find(c => c.id === task.lienId) : null;
+
+  async function toggle() {
+    await supabase.from('todos').update({
+      statut: isDone ? 'À faire' : 'Terminé',
+      updated_at: new Date().toISOString(),
+    }).eq('id', task.id);
+    if (onUpdate) onUpdate();
+  }
+
+  async function saveEdit() {
+    await supabase.from('todos').update({
+      titre: editData.titre,
+      echeance: editData.echeance || null,
+      priorite: editData.priorite,
+    }).eq('id', task.id);
+    setEditing(false);
+    if (onUpdate) onUpdate();
+  }
+
+  async function deleteTask() {
+    if (!confirm('Supprimer cette tâche ?')) return;
+    await supabase.from('todos').delete().eq('id', task.id);
+    if (onUpdate) onUpdate();
+  }
+
+  if (editing) {
+    return (
+      <div className="p-3 bg-white border border-stone-300 rounded-lg space-y-2">
+        <input type="text" value={editData.titre} onChange={e => setEditData({ ...editData, titre: e.target.value })}
+          className="w-full px-2 py-1.5 border border-stone-200 rounded text-sm" autoFocus />
+        <div className="grid grid-cols-2 gap-2">
+          <input type="date" value={editData.echeance} onChange={e => setEditData({ ...editData, echeance: e.target.value })}
+            className="px-2 py-1.5 border border-stone-200 rounded text-sm" />
+          <select value={editData.priorite} onChange={e => setEditData({ ...editData, priorite: e.target.value })}
+            className="px-2 py-1.5 border border-stone-200 rounded text-sm bg-white">
+            <option>Haute</option>
+            <option>Moyenne</option>
+            <option>Basse</option>
+          </select>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={saveEdit} className="flex-1 px-3 py-1.5 bg-stone-900 text-white rounded text-sm hover:bg-stone-800">Enregistrer</button>
+          <button onClick={() => setEditing(false)} className="px-3 py-1.5 bg-white border border-stone-200 text-stone-700 rounded text-sm hover:bg-stone-100">Annuler</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex items-center gap-3 p-2.5 rounded-lg border ${
+      isDone ? 'bg-stone-50 border-stone-200 opacity-60' :
+      isLate ? 'bg-red-50/50 border-red-100' :
+      isToday ? 'bg-amber-50/50 border-amber-100' :
+      'bg-white border-stone-200 hover:bg-stone-50'
+    }`}>
+      <button onClick={toggle} className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+        isDone ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300 hover:border-stone-500'
+      }`}>
+        {isDone && <Check className="w-2.5 h-2.5 text-white" />}
+      </button>
+
+      <div className="flex-1 min-w-0 cursor-pointer" onClick={() => !isDone && setEditing(true)}>
+        <div className={`text-sm font-medium ${isDone ? 'line-through text-stone-500' : 'text-stone-900'}`}>{task.titre}</div>
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+          {linkedMandat && <span className="text-[10px] text-stone-500">→ {linkedMandat.nom}</span>}
+          {linkedClient && <span className="text-[10px] text-stone-500">→ {linkedClient.prenom} {linkedClient.nom}</span>}
+          {task.priorite === 'Haute' && <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-700 rounded-full font-medium">Haute</span>}
+          {task.echeance && (
+            <span className={`text-[10px] flex items-center gap-1 ${isLate ? 'text-red-600 font-medium' : isToday ? 'text-amber-700 font-medium' : 'text-stone-500'}`}>
+              <Calendar className="w-2.5 h-2.5" />
+              {new Date(task.echeance).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}
+            </span>
+          )}
+          {task.assignee && <span className="text-[10px] text-stone-400">· {task.assignee}</span>}
+        </div>
+      </div>
+
+      <button onClick={deleteTask} className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded flex-shrink-0" title="Supprimer">
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
+// QuickAddTask : ajout rapide de tâche en 1 ligne
+function QuickAddTask({ lienType = null, lienId = null, defaultAssignee, defaultUserId, onAdd }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState({ titre: '', echeance: '', priorite: 'Moyenne' });
+
+  async function save() {
+    if (!data.titre.trim()) return;
+    await supabase.from('todos').insert({
+      titre: data.titre,
+      priorite: data.priorite,
+      statut: 'À faire',
+      echeance: data.echeance || null,
+      assignee: defaultAssignee || null,
+      assigned_to_user_id: defaultUserId || null,
+      lien_type: lienType,
+      lien_id: lienId,
+    });
+    setData({ titre: '', echeance: '', priorite: 'Moyenne' });
+    setOpen(false);
+    if (onAdd) onAdd();
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-stone-500 hover:text-stone-900 hover:bg-stone-50 border border-dashed border-stone-300 rounded-lg">
+        <Plus className="w-4 h-4" /> Ajouter une tâche
+      </button>
+    );
+  }
+
+  return (
+    <div className="p-3 bg-white border border-stone-300 rounded-lg space-y-2">
+      <input type="text" placeholder="Titre de la tâche..." value={data.titre} onChange={e => setData({ ...data, titre: e.target.value })}
+        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setOpen(false); }}
+        className="w-full px-2 py-1.5 border border-stone-200 rounded text-sm" autoFocus />
+      <div className="grid grid-cols-2 gap-2">
+        <input type="date" value={data.echeance} onChange={e => setData({ ...data, echeance: e.target.value })}
+          className="px-2 py-1.5 border border-stone-200 rounded text-sm" />
+        <select value={data.priorite} onChange={e => setData({ ...data, priorite: e.target.value })}
+          className="px-2 py-1.5 border border-stone-200 rounded text-sm bg-white">
+          <option>Haute</option>
+          <option>Moyenne</option>
+          <option>Basse</option>
+        </select>
+      </div>
+      <div className="flex gap-2">
+        <button onClick={save} disabled={!data.titre.trim()} className="flex-1 px-3 py-1.5 bg-stone-900 text-white rounded text-sm hover:bg-stone-800 disabled:opacity-50">Ajouter</button>
+        <button onClick={() => { setOpen(false); setData({ titre: '', echeance: '', priorite: 'Moyenne' }); }} className="px-3 py-1.5 bg-white border border-stone-200 text-stone-700 rounded text-sm hover:bg-stone-100">Annuler</button>
+      </div>
+    </div>
+  );
+}
+
 function DetailItem({ label, value, highlight }) {
   return (
     <div>
