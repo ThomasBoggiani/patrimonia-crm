@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════
 // components/DocumentsModal.jsx
-// Modal documents - upload DIRECT vers Supabase (bypass Vercel 4.5MB)
+// Modal documents avec analyse IA
 // ═══════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef } from 'react';
@@ -52,11 +52,6 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
   const [uploadCategory, setUploadCategory] = useState('autre');
   const [analyzingDocId, setAnalyzingDocId] = useState(null);
   const [analyzeResult, setAnalyzeResult] = useState(null);
-      });
-      // Rafraîchir la fiche mandat si au moins 1 champ a été mis à jour
-      if ((data.filled || []).length > 0 && typeof onUpdate === 'function') {
-        onUpdate();
-      }
   const fileInputRef = useRef(null);
 
   async function loadDocuments() {
@@ -164,7 +159,7 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      if (!token) { alert('Session expir\u00e9e'); return; }
+      if (!token) { alert('Session expirée'); return; }
 
       const res = await fetch('/api/mandats/' + mandat.id + '/analyze-document', {
         method: 'POST',
@@ -180,12 +175,17 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
         filled: data.filled || [],
         count: (data.filled || []).length,
       });
+      if ((data.filled || []).length > 0 && typeof onUpdate === 'function') {
+        onUpdate();
+      }
     } catch (e) {
       setAnalyzeResult({ error: e.message });
     } finally {
       setAnalyzingDocId(null);
     }
-  }async function handleDelete(docId) {
+  }
+
+  async function handleDelete(docId) {
     if (!confirm('Supprimer ce document définitivement ?')) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -233,10 +233,10 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
                 {analyzeResult.error ? (
                   <span className="text-red-700">Erreur : {analyzeResult.error}</span>
                 ) : analyzeResult.count === 0 ? (
-                  <span className="text-stone-700">L'IA a analys\u00e9 le document mais tous les champs concern\u00e9s sont d\u00e9j\u00e0 remplis dans le mandat.</span>
+                  <span className="text-stone-700">L'IA a analysé le document mais tous les champs concernés sont déjà remplis.</span>
                 ) : (
                   <span className="text-sage-darker font-medium">
-                    {analyzeResult.count} champ{analyzeResult.count > 1 ? 's' : ''} mis \u00e0 jour : {analyzeResult.filled.join(', ')}
+                    {analyzeResult.count} champ{analyzeResult.count > 1 ? 's' : ''} mis à jour : {analyzeResult.filled.join(', ')}
                   </span>
                 )}
               </div>
@@ -245,7 +245,9 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
               </button>
             </div>
           </div>
-        )}<div className="px-6 py-3 border-b border-stone-100 bg-stone-50">
+        )}
+
+        <div className="px-6 py-3 border-b border-stone-100 bg-stone-50">
           <div className="flex items-center gap-2 flex-wrap">
             <select value={uploadCategory} onChange={e => setUploadCategory(e.target.value)} className="px-3 py-2 border border-stone-200 rounded-lg text-sm bg-white">
               {CATEGORIES.map(c => (
@@ -313,6 +315,11 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
                             </div>
                           </div>
                           <div className="flex items-center gap-1">
+                            {doc.type === 'file' && doc.storage_path && (
+                              <button onClick={() => handleAnalyze(doc)} disabled={analyzingDocId === doc.id} className="p-2 text-stone-500 hover:text-sage-dark hover:bg-sage-50 rounded disabled:opacity-50" title="Analyser avec l'IA">
+                                {analyzingDocId === doc.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                              </button>
+                            )}
                             {doc.type === 'file' && doc.signedUrl && (
                               <a href={doc.signedUrl} target="_blank" rel="noopener noreferrer" className="p-2 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded" title="Télécharger / Ouvrir">
                                 <Download className="w-4 h-4" />
@@ -323,16 +330,7 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
                                 <ExternalLink className="w-4 h-4" />
                               </a>
                             )}
-                            {doc.type === 'file' && doc.storage_path && (
-                              <button
-                                onClick={() => handleAnalyze(doc)}
-                                disabled={analyzingDocId === doc.id}
-                                className="p-2 text-stone-500 hover:text-sage-dark hover:bg-sage-50 rounded disabled:opacity-50"
-                                title="Analyser avec l'IA"
-                              >
-                                {analyzingDocId === doc.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                              </button>
-                            )}<button onClick={() => handleDelete(doc.id)} className="p-2 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded" title="Supprimer">
+                            <button onClick={() => handleDelete(doc.id)} className="p-2 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded" title="Supprimer">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
