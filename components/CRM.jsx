@@ -370,7 +370,7 @@ export default function CRM() {
 
 function Dashboard({ mandats, clients, deals, todos }) {
   const { user, profile } = useAuth();
-  const myInitials = getCurrentUserInitials();
+  const myInitials = getCurrentUserInitials(profile);
   const myFirstName = profile?.prenom || (profile?.nom ? profile.nom.split(' ')[0] : 'utilisateur');
 
   const today = new Date();
