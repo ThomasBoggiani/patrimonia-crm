@@ -136,6 +136,38 @@ export async function POST(request, { params }) {
       return new Response(JSON.stringify({ ok: false, error: 'Impossible de parser la réponse de l\'IA', raw: text }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
 
+    // ⚠️ Vérification adresse : si l'IA détecte une adresse différente, on alerte
+    const extractedAddress = (extracted.adresse || '').trim().toLowerCase();
+    const currentAddress = (currentMandat.adresse || '').trim().toLowerCase();
+
+    if (extractedAddress && currentAddress && extractedAddress !== currentAddress) {
+      // Comparaison flexible : on tolère petites différences (numéro de rue, casse, accents)
+      const normalize = (s) => s
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]/g, '');
+      const normExtracted = normalize(extractedAddress);
+      const normCurrent = normalize(currentAddress);
+      const isDifferent = !normExtracted.includes(normCurrent) && !normCurrent.includes(normExtracted);
+
+      if (isDifferent) {
+        // Vérifier si un autre mandat existe déjà avec cette adresse
+        const { data: existingMandats } = await supabaseAdmin
+          .from('mandats')
+          .select('id, nom, adresse')
+          .ilike('adresse', '%' + extractedAddress.split(' ').slice(0, 3).join(' ') + '%')
+          .limit(5);
+
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'address_mismatch',
+          message: 'L\'adresse extraite ne correspond pas à l\'adresse du mandat',
+          extractedAddress: extracted.adresse,
+          currentAddress: currentMandat.adresse,
+          extractedData: extracted,
+          potentialDuplicates: existingMandats || [],
+        }), { status: 409, headers: { 'Content-Type': 'application/json' } });
+      }
+    }
     // Charger le mandat actuel
     const { data: currentMandat } = await supabaseAdmin.from('mandats').select('*').eq('id', mandatId).maybeSingle();
     if (!currentMandat) {
