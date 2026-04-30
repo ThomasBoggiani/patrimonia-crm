@@ -1373,9 +1373,9 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
             <div className="grid grid-cols-5 gap-4 mt-4 pt-4 border-t border-cream">
               <DetailItem label="Surface" value={mandat.surface ? `${mandat.surface} m²` : '—'} />
               <DetailItem label="Type" value={mandat.type} />
-              <DetailItem label="DPE" value={mandat.dpe_consommation ? <span className="text-2xl font-bold" style={{color: getDPEColor(mandat.dpe_consommation)}}>{getDPEClass(mandat.dpe_consommation)}</span> : '—'} />
-              <DetailItem label="Taxe foncière" value={mandat.taxe_fonciere ? `${parseFloat(mandat.taxe_fonciere).toLocaleString('fr')} €` : '—'} />
-              <DetailItem label="Charges annuelles" value={mandat.charges_annuelles ? `${parseFloat(mandat.charges_annuelles).toLocaleString('fr')} €` : '—'} />
+              <DetailItem label="DPE" value={mandat.dpeConsommation ? <span className="text-2xl font-bold" style={{color: getDPEColor(mandat.dpeConsommation)}}>{getDPEClass(mandat.dpeConsommation)}</span> : '—'} />
+              <DetailItem label="Taxe foncière" value={mandat.taxeFonciere ? `${parseFloat(mandat.taxeFonciere).toLocaleString('fr')} €` : '—'} />
+              <DetailItem label="Charges annuelles" value={mandat.chargesAnnuelles ? `${parseFloat(mandat.chargesAnnuelles).toLocaleString('fr')} €` : '—'} />
             </div>
           </div>
 
