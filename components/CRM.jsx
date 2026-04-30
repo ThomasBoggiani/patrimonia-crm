@@ -1392,26 +1392,7 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
           const { error: uploadErr } = await supabase.storage.from('mandat-docs').upload(storagePath, compressed, {
             contentType: compressed.type || 'application/octet-stream', upsert: false,
           });
-          {/* ═══ TÂCHES LIÉES AU MANDAT ═══ */}
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-            <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
-              <CheckSquare className="w-5 h-5 text-sage-dark" />Tâches liées au mandat
-              {mandatTodos.length > 0 && (
-                <span className="text-sm text-stone-500 font-normal">({mandatTodos.filter(t => t.statut !== 'Terminé').length} en cours)</span>
-              )}
-            </h2>
-            <div className="space-y-2">
-              {mandatTodos.map(t => (
-                <TaskInline key={t.id} task={t} mandats={[mandat]} clients={clients} onUpdate={reload} />
-              ))}
-              <QuickAddTask
-                lienType="mandat"
-                lienId={mandat.id}
-                defaultAssignee={mandat.owner === 'TB' ? 'Thomas Boggiani' : null}
-                onAdd={reload}
-              />
-            </div>
-          </div>
+          
           if (newData.prix && newData.surface && !newData.prixM2) {
           newData.prixM2 = Math.round(newData.prix / newData.surface);
           newFilled.add('prixM2');
