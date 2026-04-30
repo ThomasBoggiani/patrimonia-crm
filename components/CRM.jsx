@@ -276,7 +276,7 @@ export default function CRM() {
 
         <main className="flex-1 overflow-y-auto scrollbar-thin">
           <div className="fade-in" key={activeTab}>
-            {activeTab === 'dashboard' && <Dashboard mandats={mandats} clients={clients} deals={deals} todos={todos} />}
+            {activeTab === 'dashboard' && <Dashboard mandats={mandats} clients={clients} deals={deals} todos={todos} reload={loadAll} />}
             {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} clients={clients} deals={deals} interactions={interactions} todos={todos} annonces={annonces} />}
             {activeTab === 'clients' && <ClientsTab clients={clients} reload={loadAll} mandats={mandats} deals={deals} interactions={interactions} />}
             {activeTab === 'deals' && <DealsTab deals={deals} reload={loadAll} mandats={mandats} clients={clients} />}
@@ -368,7 +368,7 @@ export default function CRM() {
 // Lignes ~365-446 dans l'original
 // ═══════════════════════════════════════════════════════════════════
 
-function Dashboard({ mandats, clients, deals, todos }) {
+function Dashboard({ mandats, clients, deals, todos, reload }) {
   const { user, profile } = useAuth();
   const myInitials = getCurrentUserInitials(profile);
   const myFirstName = profile?.prenom || (profile?.nom ? profile.nom.split(' ')[0] : 'utilisateur');
@@ -516,7 +516,7 @@ function Dashboard({ mandats, clients, deals, todos }) {
             </div>
             <div className="space-y-1.5">
               {tasksRetard.slice(0, 5).map(t => (
-                <TaskRow key={t.id} task={t} mandats={mandats} variant="late" />
+                <TaskInline key={t.id} task={t} mandats={mandats} clients={clients} onUpdate={() => window.location.reload()} />
               ))}
             </div>
           </div>
