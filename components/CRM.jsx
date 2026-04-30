@@ -733,25 +733,174 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces }) {
       </div>
 
       {(editingMandat || showNew) && (
-        <MandatForm mandat={editingMandat} onSave={handleSave} onClose={() => { setEditingMandat(null); setShowNew(false); }} />
+        <MandatForm mandat={editingMandat} onSave={handleSave} onClose={() => { setEditingMandat(null); setShowNew(false); }} clients={clients} mandats={mandats} />
       )}
     </div>
   );
 }
 
 // === FORMULAIRE MANDAT avec IMPORT IA ===
-function MandatForm({ mandat, onSave, onClose }) {
+// ═══════════════════════════════════════════════════════════════════
+// MandatForm v2 — sections + ClientSelector + import dossier
+// À coller dans components/CRM.jsx en remplacement de la fonction MandatForm actuelle
+// ═══════════════════════════════════════════════════════════════════
+
+// Composant : sélecteur de client mandant (recherche + suggestions)
+function ClientSelector({ clients, mandats, value, onChange, onCreateNew }) {
+  const [search, setSearch] = useState('');
+  const [showList, setShowList] = useState(false);
+
+  // 5 derniers clients utilisés comme mandants (en regardant les mandats)
+  const recentMandants = useMemo(() => {
+    const seen = new Set();
+    const recent = [];
+    const sorted = [...mandats].sort((a, b) => new Date(b.createdAt || b.created_at || 0) - new Date(a.createdAt || a.created_at || 0));
+    for (const m of sorted) {
+      const cid = m.mandantClientId || m.mandant_client_id;
+      if (cid && !seen.has(cid)) {
+        seen.add(cid);
+        const client = clients.find(c => c.id === cid);
+        if (client) recent.push(client);
+        if (recent.length >= 5) break;
+      }
+    }
+    return recent;
+  }, [mandats, clients]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return [];
+    const q = search.toLowerCase();
+    return clients.filter(c => {
+      const fullText = `${c.prenom || ''} ${c.nom || ''} ${c.societe || ''} ${c.email || ''} ${c.tel || ''}`.toLowerCase();
+      return fullText.includes(q);
+    }).slice(0, 8);
+  }, [search, clients]);
+
+  const selectedClient = value ? clients.find(c => c.id === value) : null;
+
+  if (selectedClient) {
+    return (
+      <div className="flex items-center justify-between gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+            <UserIcon className="w-4 h-4 text-emerald-700" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium text-stone-900 truncate">
+              {selectedClient.prenom} {selectedClient.nom}
+              {selectedClient.societe && <span className="text-stone-500 font-normal"> · {selectedClient.societe}</span>}
+            </div>
+            <div className="text-xs text-stone-500 truncate">
+              {selectedClient.tel && <span>{selectedClient.tel}</span>}
+              {selectedClient.tel && selectedClient.email && <span> · </span>}
+              {selectedClient.email && <span>{selectedClient.email}</span>}
+            </div>
+          </div>
+        </div>
+        <button onClick={() => onChange(null)} className="p-1.5 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded flex-shrink-0" title="Retirer">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="relative">
+        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+        <input
+          type="text"
+          placeholder="Rechercher un client (nom, société, email...)"
+          value={search}
+          onChange={e => { setSearch(e.target.value); setShowList(true); }}
+          onFocus={() => setShowList(true)}
+          className="w-full pl-9 pr-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900"
+        />
+        {showList && search.trim() && (
+          <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-luxe max-h-64 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="p-3 text-sm text-stone-500 text-center">
+                Aucun client trouvé.
+                <button onClick={() => { onCreateNew(search); setSearch(''); setShowList(false); }} className="block mx-auto mt-2 text-xs text-sage-dark hover:underline">
+                  + Créer "{search}" comme nouveau client
+                </button>
+              </div>
+            ) : (
+              <>
+                {filtered.map(c => (
+                  <button key={c.id} onClick={() => { onChange(c.id); setSearch(''); setShowList(false); }}
+                    className="w-full flex items-center gap-3 p-2.5 hover:bg-stone-50 border-b border-stone-100 last:border-0 text-left">
+                    <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center flex-shrink-0">
+                      <UserIcon className="w-3.5 h-3.5 text-stone-500" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-stone-900 truncate">
+                        {c.prenom} {c.nom}{c.societe && <span className="text-stone-500 font-normal"> · {c.societe}</span>}
+                      </div>
+                      <div className="text-xs text-stone-500 truncate">
+                        {c.typologie || 'Client'} · {c.tel || c.email || '—'}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+                <button onClick={() => { onCreateNew(search); setSearch(''); setShowList(false); }}
+                  className="w-full p-2.5 text-sm text-sage-dark hover:bg-sage-50 text-left flex items-center gap-2">
+                  <Plus className="w-4 h-4" /> Créer "{search}" comme nouveau client
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {!search.trim() && recentMandants.length > 0 && (
+        <div>
+          <div className="text-xs text-stone-500 mb-1.5">Mandants récents :</div>
+          <div className="flex flex-wrap gap-1.5">
+            {recentMandants.map(c => (
+              <button key={c.id} onClick={() => onChange(c.id)}
+                className="px-3 py-1.5 bg-white border border-stone-200 rounded-lg text-xs hover:bg-stone-50 hover:border-sage-light flex items-center gap-1.5">
+                <UserIcon className="w-3 h-3 text-stone-400" />
+                {c.prenom} {c.nom}{c.societe ? ` · ${c.societe}` : ''}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!search.trim() && (
+        <button onClick={() => onCreateNew('')}
+          className="text-xs text-sage-dark hover:underline flex items-center gap-1">
+          <Plus className="w-3 h-3" /> Créer un nouveau client
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MandatForm v2 — 4 sections empilées + ClientSelector
+// ═══════════════════════════════════════════════════════════════════
+function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   const [data, setData] = useState(mandat || {
     nom: '', adresse: '', ville: '', type: "Immeuble d'habitation", sousType: '', prix: 0, prixM2: 0,
     surface: 0, loyersAnnuels: 0, rendement: 0, nbLots: 1,
     commercialisation: 'Off-market', dateSignature: null,
     statut: 'Sourcing', owner: 'JD', description: '',
-    contact: '', tel: '', docs: [], alerts: [], highlights: []
+    contact: '', tel: '', docs: [], alerts: [], highlights: [],
+    nbPieces: 0, nbChambres: 0, etage: 0, anneeConstruction: 0,
+    chargesAnnuelles: 0, taxeFonciere: 0,
+    dpeConsommation: 0, dpeEmissions: 0, dpeDate: null,
+    mandatNumero: '', mandatType: '', mandatDateEcheance: null,
+    honorairesTaux: 0, honorairesMontant: 0, honorairesCharge: '',
+    mandantClientId: null,
   });
 
   const [importProgress, setImportProgress] = useState(null);
   const [importResult, setImportResult] = useState(null);
   const [filledFields, setFilledFields] = useState(new Set());
+  const [showNewClient, setShowNewClient] = useState(false);
+  const [newClientPrefill, setNewClientPrefill] = useState('');
   const folderInputRef = React.useRef(null);
 
   const update = (k, v) => setData({ ...data, [k]: v });
@@ -759,11 +908,8 @@ function MandatForm({ mandat, onSave, onClose }) {
   const REQUIRED_FIELDS = {
     nom: 'Nom du bien', adresse: 'Adresse', type: "Type d'actif",
     prix: 'Prix net vendeur', surface: 'Surface totale',
-    loyersAnnuels: 'Loyers annuels', rendement: 'Rendement',
-    nbLots: 'Nombre de lots', contact: 'Contact propriétaire'
   };
 
-  // Compresse une image côté client (max 1920px / qualité 80%)
   async function compressImage(file) {
     if (!file.type.startsWith('image/')) return file;
     return new Promise((resolve) => {
@@ -773,13 +919,9 @@ function MandatForm({ mandat, onSave, onClose }) {
         img.onload = () => {
           const MAX_WIDTH = 1920;
           let { width, height } = img;
-          if (width > MAX_WIDTH) {
-            height = (MAX_WIDTH / width) * height;
-            width = MAX_WIDTH;
-          }
+          if (width > MAX_WIDTH) { height = (MAX_WIDTH / width) * height; width = MAX_WIDTH; }
           const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
+          canvas.width = width; canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
           canvas.toBlob((blob) => {
@@ -796,45 +938,24 @@ function MandatForm({ mandat, onSave, onClose }) {
     });
   }
 
-  // Mappage snake_case (BDD/API) -> camelCase (state local)
   const FIELD_MAP = {
-    nom: 'nom',
-    adresse: 'adresse',
-    ville: 'ville',
-    type: 'type',
-    sous_type: 'sousType',
-    surface: 'surface',
-    nb_pieces: 'nbPieces',
-    nb_chambres: 'nbChambres',
-    etage: 'etage',
+    nom: 'nom', adresse: 'adresse', ville: 'ville', type: 'type',
+    sous_type: 'sousType', surface: 'surface',
+    nb_pieces: 'nbPieces', nb_chambres: 'nbChambres', etage: 'etage',
     annee_construction: 'anneeConstruction',
-    prix: 'prix',
-    prix_net_vendeur: 'prix',
-    prix_m2: 'prixM2',
-    honoraires_charge: 'honorairesCharge',
-    honoraires_taux: 'honorairesTaux',
-    honoraires_montant: 'honorairesMontant',
-    loyers_annuels: 'loyersAnnuels',
-    rendement: 'rendement',
-    charges_annuelles: 'chargesAnnuelles',
-    taxe_fonciere: 'taxeFonciere',
-    dpe_consommation: 'dpeConsommation',
-    dpe_emissions: 'dpeEmissions',
-    dpe_date: 'dpeDate',
-    mandat_numero: 'mandatNumero',
-    mandat_type: 'mandatType',
-    date_signature: 'dateSignature',
-    mandat_date_echeance: 'mandatDateEcheance',
-    nb_lots: 'nbLots',
-    description: 'description',
-    commercialisation: 'commercialisation',
+    prix: 'prix', prix_net_vendeur: 'prix', prix_m2: 'prixM2',
+    honoraires_charge: 'honorairesCharge', honoraires_taux: 'honorairesTaux', honoraires_montant: 'honorairesMontant',
+    loyers_annuels: 'loyersAnnuels', rendement: 'rendement',
+    charges_annuelles: 'chargesAnnuelles', taxe_fonciere: 'taxeFonciere',
+    dpe_consommation: 'dpeConsommation', dpe_emissions: 'dpeEmissions', dpe_date: 'dpeDate',
+    mandat_numero: 'mandatNumero', mandat_type: 'mandatType',
+    date_signature: 'dateSignature', mandat_date_echeance: 'mandatDateEcheance',
+    nb_lots: 'nbLots', description: 'description', commercialisation: 'commercialisation',
   };
 
-  // Importer un dossier complet : crée le mandat si besoin, puis upload + analyse chaque fichier
   async function handleFolderImport(event) {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
-
     setImportResult(null);
     setImportProgress({ current: 0, total: files.length, fileName: 'Préparation...' });
 
@@ -843,25 +964,16 @@ function MandatForm({ mandat, onSave, onClose }) {
       const token = session?.access_token;
       if (!token) { alert('Session expirée'); setImportProgress(null); return; }
 
-      // Étape 1 : si on est en création (pas encore d'ID), créer un mandat brouillon en BDD
-      let mandatId = mandat?.id;
+      let mandatId = mandat?.id || data.id;
       if (!mandatId) {
-        const { data: created, error: createErr } = await supabase
-          .from('mandats')
-          .insert({
-            nom: data.nom || 'Nouveau mandat (import en cours)',
-            type: data.type || "Immeuble d'habitation",
-            statut: 'Sourcing',
-            owner: data.owner || 'JD',
-            commercialisation: data.commercialisation || 'Off-market',
-          })
-          .select()
-          .single();
-        if (createErr || !created) {
-          alert('Erreur création mandat : ' + (createErr?.message || 'inconnue'));
-          setImportProgress(null);
-          return;
-        }
+        const { data: created, error: createErr } = await supabase.from('mandats').insert({
+          nom: data.nom || 'Nouveau mandat (import en cours)',
+          type: data.type || "Immeuble d'habitation",
+          statut: 'Sourcing',
+          owner: data.owner || 'JD',
+          commercialisation: data.commercialisation || 'Off-market',
+        }).select().single();
+        if (createErr || !created) { alert('Erreur création mandat : ' + (createErr?.message || 'inconnue')); setImportProgress(null); return; }
         mandatId = created.id;
         setData(d => ({ ...d, id: mandatId }));
       }
@@ -878,54 +990,33 @@ function MandatForm({ mandat, onSave, onClose }) {
         const results = await Promise.all(batch.map(async (file) => {
           const compressed = await compressImage(file);
           setImportProgress({ current: processed + 1, total: files.length, fileName: file.name });
-
-          // Upload sur Storage
           const cleanName = (file.name || 'file').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
           const storagePath = mandatId + '/' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '_' + cleanName;
           const { error: uploadErr } = await supabase.storage.from('mandat-docs').upload(storagePath, compressed, {
-            contentType: compressed.type || 'application/octet-stream',
-            upsert: false,
+            contentType: compressed.type || 'application/octet-stream', upsert: false,
           });
-          if (uploadErr) {
-            processed++;
-            return { ok: false, error: uploadErr.message };
-          }
+          if (uploadErr) { processed++; return { ok: false, error: uploadErr.message }; }
 
-          // Appel à l'API import-folder pour catégoriser + analyser + auto-fill BDD
           let category = 'autre';
           let extractedData = {};
           let filledKeys = [];
           try {
             const aiRes = await fetch('/api/mandats/' + mandatId + '/import-folder', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ token, storage_path: storagePath, applyToMandat: true }),
             });
             const aiData = await aiRes.json();
-            if (aiData.ok) {
-              category = aiData.category || 'autre';
-              extractedData = aiData.data || {};
-              filledKeys = aiData.filled || [];
-            }
-          } catch (e) {
-            console.warn('[import] AI failed:', e.message);
-          }
+            if (aiData.ok) { category = aiData.category || 'autre'; extractedData = aiData.data || {}; filledKeys = aiData.filled || []; }
+          } catch (e) { console.warn('[import] AI failed:', e.message); }
 
-          // Enregistrer dans mandat_documents
           await fetch('/api/mandats/' + mandatId + '/documents', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              token,
-              type: 'file_meta',
-              category,
-              nom: file.name,
-              storage_path: storagePath,
-              taille_bytes: compressed.size,
+              token, type: 'file_meta', category, nom: file.name,
+              storage_path: storagePath, taille_bytes: compressed.size,
               mime_type: compressed.type || 'application/octet-stream',
             }),
           });
-
           processed++;
           return { ok: true, category, extracted: extractedData, filled: filledKeys };
         }));
@@ -933,31 +1024,16 @@ function MandatForm({ mandat, onSave, onClose }) {
         for (const r of results) {
           if (r.ok) {
             totalFilled += (r.filled?.length || 0);
-            const label = ({
-              mandat: 'Mandat',
-              diagnostics: 'Diagnostics',
-              plans_photos: 'Plans & photos',
-              notes: 'Notes',
-              mandant: 'Mandant',
-              autre: 'Autre',
-            })[r.category] || 'Autre';
+            const label = ({ mandat: 'Mandat', diagnostics: 'Diagnostics', plans_photos: 'Plans & photos', notes: 'Notes', mandant: 'Mandant', autre: 'Autre' })[r.category] || 'Autre';
             categoriesByLabel[label] = (categoriesByLabel[label] || 0) + 1;
-            // Fusionner les données extraites
             for (const [k, v] of Object.entries(r.extracted || {})) {
-              if (v !== null && v !== undefined && v !== '') {
-                allExtracted[k] = v;
-              }
+              if (v !== null && v !== undefined && v !== '') allExtracted[k] = v;
             }
-          } else {
-            errors++;
-          }
+          } else { errors++; }
         }
-        if (i + BATCH_SIZE < files.length) {
-          await new Promise(r => setTimeout(r, 500));
-        }
+        if (i + BATCH_SIZE < files.length) await new Promise(r => setTimeout(r, 500));
       }
 
-      // Recharger le mandat depuis la BDD pour avoir les valeurs à jour (l'API a fait les UPDATE)
       const { data: refreshed } = await supabase.from('mandats').select('*').eq('id', mandatId).maybeSingle();
       if (refreshed) {
         const newData = { ...data, id: refreshed.id };
@@ -977,19 +1053,35 @@ function MandatForm({ mandat, onSave, onClose }) {
       }
 
       setImportProgress(null);
-      setImportResult({
-        total: files.length,
-        success: files.length - errors,
-        errors,
-        totalFilled,
-        categoriesByLabel,
-      });
+      setImportResult({ total: files.length, success: files.length - errors, errors, totalFilled, categoriesByLabel });
       if (folderInputRef.current) folderInputRef.current.value = '';
     } catch (e) {
       console.error('[FolderImport] Erreur:', e);
       alert('Erreur : ' + e.message);
       setImportProgress(null);
     }
+  }
+
+  async function handleCreateClient(prefillName) {
+    setNewClientPrefill(prefillName);
+    setShowNewClient(true);
+  }
+
+  async function saveNewClient(clientData) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: created, error } = await supabase.from('clients').insert({
+        nom: clientData.nom, prenom: clientData.prenom || null,
+        societe: clientData.societe || null, tel: clientData.tel || null,
+        email: clientData.email || null, typologie: 'Mandant',
+        created_by: user?.id, owner: data.owner || 'JD',
+      }).select().single();
+      if (error || !created) { alert('Erreur création client : ' + (error?.message || 'inconnue')); return; }
+      update('mandantClientId', created.id);
+      // Ajouter localement à la liste
+      clients.push(created);
+      setShowNewClient(false);
+    } catch (e) { alert('Erreur : ' + e.message); }
   }
 
   const missingFields = Object.entries(REQUIRED_FIELDS).filter(([k]) => {
@@ -1003,6 +1095,9 @@ function MandatForm({ mandat, onSave, onClose }) {
     return base + " border-stone-200";
   };
 
+  const sectionClass = "bg-cream-50/50 rounded-xl p-5 border border-cream-dark/50";
+  const sectionTitleClass = "font-display text-base font-semibold text-stone-900 mb-4 flex items-center gap-2";
+
   return (
     <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-6" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-luxe-hover max-w-3xl w-full max-h-[92vh] overflow-y-auto scrollbar-thin" onClick={e => e.stopPropagation()}>
@@ -1010,7 +1105,7 @@ function MandatForm({ mandat, onSave, onClose }) {
         <div className="flex items-center justify-between p-6 border-b border-stone-200 sticky top-0 bg-white z-10">
           <div>
             <h2 className="font-display text-2xl font-semibold text-stone-900">{mandat ? 'Modifier' : 'Nouveau'} mandat</h2>
-            <p className="text-xs text-stone-500 mt-0.5">Importe un dossier — l'IA catégorise et pré-remplit la fiche</p>
+            <p className="text-xs text-stone-500 mt-0.5">Importe un dossier — l'IA pré-remplit automatiquement</p>
           </div>
           <button onClick={onClose} className="text-stone-500 hover:text-stone-900"><X className="w-5 h-5" /></button>
         </div>
@@ -1018,26 +1113,18 @@ function MandatForm({ mandat, onSave, onClose }) {
         {/* Zone d'import dossier (toujours visible) */}
         <div className="p-6 border-b border-stone-200 bg-gradient-to-br from-sage-50/70 to-cream-50">
           <input type="file" ref={folderInputRef} onChange={handleFolderImport} className="hidden" multiple webkitdirectory="" directory="" />
-          <button
-            type="button"
-            onClick={() => folderInputRef.current?.click()}
-            disabled={importProgress !== null}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-sage-dark text-white rounded-xl hover:bg-sage-darker disabled:opacity-50 transition-colors"
-          >
+          <button type="button" onClick={() => folderInputRef.current?.click()} disabled={importProgress !== null}
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-sage-dark text-white rounded-xl hover:bg-sage-darker disabled:opacity-50 transition-colors">
             <Wand2 className="w-5 h-5" />
             <span className="font-medium">{importProgress ? 'Import en cours...' : 'Importer un dossier ✨'}</span>
           </button>
-          <p className="text-xs text-stone-600 text-center mt-2">
-            L'IA lira tous les fichiers, les classera et pré-remplira la fiche
-          </p>
+          <p className="text-xs text-stone-600 text-center mt-2">L'IA lira tous les fichiers, les classera et pré-remplira la fiche</p>
 
           {importProgress && (
             <div className="mt-3 p-3 bg-white rounded-xl border border-sage-light">
               <div className="flex items-center gap-2 text-sm">
                 <Loader2 className="w-4 h-4 animate-spin text-sage-dark flex-shrink-0" />
-                <span className="text-sage-darker font-medium">
-                  {importProgress.current}/{importProgress.total}
-                </span>
+                <span className="text-sage-darker font-medium">{importProgress.current}/{importProgress.total}</span>
                 <span className="text-stone-600 truncate">— {importProgress.fileName}</span>
               </div>
               <div className="mt-2 h-1.5 bg-sage-100 rounded-full overflow-hidden">
@@ -1051,26 +1138,12 @@ function MandatForm({ mandat, onSave, onClose }) {
               <div className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 mt-0.5 text-emerald-600 flex-shrink-0" />
                 <div className="flex-1 text-sm">
-                  <div className="font-medium text-stone-900">
-                    Import terminé : {importResult.success}/{importResult.total} fichiers
-                  </div>
-                  <div className="text-stone-700 mt-0.5">
-                    {Object.entries(importResult.categoriesByLabel).map(([label, count]) => label + ' (' + count + ')').join(' · ')}
-                  </div>
-                  {importResult.totalFilled > 0 && (
-                    <div className="text-emerald-700 font-medium mt-1">
-                      ✨ {importResult.totalFilled} champ(s) pré-remplis
-                    </div>
-                  )}
-                  {importResult.errors > 0 && (
-                    <div className="text-red-600 mt-0.5">
-                      {importResult.errors} fichier(s) en erreur
-                    </div>
-                  )}
+                  <div className="font-medium text-stone-900">Import terminé : {importResult.success}/{importResult.total} fichiers</div>
+                  <div className="text-stone-700 mt-0.5">{Object.entries(importResult.categoriesByLabel).map(([label, count]) => label + ' (' + count + ')').join(' · ')}</div>
+                  {importResult.totalFilled > 0 && (<div className="text-emerald-700 font-medium mt-1">✨ {importResult.totalFilled} champ(s) pré-remplis</div>)}
+                  {importResult.errors > 0 && (<div className="text-red-600 mt-0.5">{importResult.errors} fichier(s) en erreur</div>)}
                 </div>
-                <button onClick={() => setImportResult(null)} className="text-stone-400 hover:text-stone-700">
-                  <X className="w-4 h-4" />
-                </button>
+                <button onClick={() => setImportResult(null)} className="text-stone-400 hover:text-stone-700"><X className="w-4 h-4" /></button>
               </div>
             </div>
           )}
@@ -1080,61 +1153,116 @@ function MandatForm({ mandat, onSave, onClose }) {
           {filledFields.size > 0 && (
             <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5" />
-              Les champs en <span className="font-semibold">vert</span> ont été remplis automatiquement par l'IA — vérifie-les avant d'enregistrer.
+              Les champs en <span className="font-semibold">vert</span> ont été remplis automatiquement par l'IA.
             </div>
           )}
 
-          <Field label="Nom du bien"><input type="text" value={data.nom} onChange={e => update('nom', e.target.value)} className={fieldClass('nom')} /></Field>
-          <Field label="Adresse"><input type="text" value={data.adresse} onChange={e => update('adresse', e.target.value)} className={fieldClass('adresse')} /></Field>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Type d'actif">
-              <select value={data.type} onChange={e => update('type', e.target.value)} className={fieldClass('type')}>
-                {TYPES_ACTIF.map(t => <option key={t}>{t}</option>)}
-              </select>
-            </Field>
-            <Field label="Sous-catégorie"><input type="text" value={data.sousType || ''} onChange={e => update('sousType', e.target.value)} className={fieldClass('sousType')} /></Field>
+          {/* SECTION 1 : IDENTITÉ */}
+          <div className={sectionClass}>
+            <h3 className={sectionTitleClass}>🏠 Identité du bien</h3>
+            <div className="space-y-3">
+              <Field label="Nom du bien"><input type="text" value={data.nom} onChange={e => update('nom', e.target.value)} className={fieldClass('nom')} /></Field>
+              <Field label="Adresse"><input type="text" value={data.adresse} onChange={e => update('adresse', e.target.value)} className={fieldClass('adresse')} /></Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Ville"><input type="text" value={data.ville || ''} onChange={e => update('ville', e.target.value)} className={fieldClass('ville')} /></Field>
+                <Field label="Surface (m²)"><input type="number" value={data.surface} onChange={e => update('surface', +e.target.value)} className={fieldClass('surface')} /></Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Type d'actif">
+                  <select value={data.type} onChange={e => update('type', e.target.value)} className={fieldClass('type')}>
+                    {TYPES_ACTIF.map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </Field>
+                <Field label="Sous-catégorie"><input type="text" value={data.sousType || ''} onChange={e => update('sousType', e.target.value)} className={fieldClass('sousType')} /></Field>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <Field label="Prix net (€)"><input type="number" value={data.prix} onChange={e => update('prix', +e.target.value)} className={fieldClass('prix')} /></Field>
-            <Field label="Prix/m²"><input type="number" value={data.prixM2} onChange={e => update('prixM2', +e.target.value)} className={fieldClass('prixM2')} /></Field>
-            <Field label="Surface (m²)"><input type="number" value={data.surface} onChange={e => update('surface', +e.target.value)} className={fieldClass('surface')} /></Field>
+          {/* SECTION 2 : MANDAT & FINANCES */}
+          <div className={sectionClass}>
+            <h3 className={sectionTitleClass}>💰 Mandat & Finances</h3>
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <Field label="N° mandat"><input type="text" value={data.mandatNumero || ''} onChange={e => update('mandatNumero', e.target.value)} className={fieldClass('mandatNumero')} /></Field>
+                <Field label="Type de mandat">
+                  <select value={data.mandatType || ''} onChange={e => update('mandatType', e.target.value)} className={fieldClass('mandatType')}>
+                    <option value="">—</option>
+                    <option>EXCLUSIF</option>
+                    <option>SEMI EXCLUSIF</option>
+                    <option>SIMPLE</option>
+                  </select>
+                </Field>
+                <Field label="Échéance"><input type="date" value={data.mandatDateEcheance || ''} onChange={e => update('mandatDateEcheance', e.target.value)} className={fieldClass('mandatDateEcheance')} /></Field>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <Field label="Prix (€)"><input type="number" value={data.prix} onChange={e => update('prix', +e.target.value)} className={fieldClass('prix')} /></Field>
+                <Field label="Prix/m² (€)"><input type="number" value={data.prixM2} onChange={e => update('prixM2', +e.target.value)} className={fieldClass('prixM2')} /></Field>
+                <Field label="Loyers/an (€)"><input type="number" value={data.loyersAnnuels} onChange={e => update('loyersAnnuels', +e.target.value)} className={fieldClass('loyersAnnuels')} /></Field>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <Field label="Rendement (%)"><input type="number" step="0.01" value={data.rendement} onChange={e => update('rendement', +e.target.value)} className={fieldClass('rendement')} /></Field>
+                <Field label="Honoraires (%)"><input type="number" step="0.01" value={data.honorairesTaux || 0} onChange={e => update('honorairesTaux', +e.target.value)} className={fieldClass('honorairesTaux')} /></Field>
+                <Field label="Honoraires (€)"><input type="number" value={data.honorairesMontant || 0} onChange={e => update('honorairesMontant', +e.target.value)} className={fieldClass('honorairesMontant')} /></Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Type de commercialisation">
+                  <select value={data.commercialisation} onChange={e => update('commercialisation', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
+                    <option>Off-market</option>
+                    <option>Mandat exclusif</option>
+                    <option>Mandat simple</option>
+                  </select>
+                </Field>
+                <Field label="Statut pipeline">
+                  <select value={data.statut} onChange={e => update('statut', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
+                    {STATUTS_MANDAT.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </Field>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <Field label="Loyers annuels"><input type="number" value={data.loyersAnnuels} onChange={e => update('loyersAnnuels', +e.target.value)} className={fieldClass('loyersAnnuels')} /></Field>
-            <Field label="Rendement (%)"><input type="number" step="0.01" value={data.rendement} onChange={e => update('rendement', +e.target.value)} className={fieldClass('rendement')} /></Field>
-            <Field label="Nb lots"><input type="number" value={data.nbLots} onChange={e => update('nbLots', +e.target.value)} className={fieldClass('nbLots')} /></Field>
+          {/* SECTION 3 : CARACTÉRISTIQUES TECHNIQUES */}
+          <div className={sectionClass}>
+            <h3 className={sectionTitleClass}>🔧 Caractéristiques techniques</h3>
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <Field label="Pièces"><input type="number" value={data.nbPieces || 0} onChange={e => update('nbPieces', +e.target.value)} className={fieldClass('nbPieces')} /></Field>
+                <Field label="Chambres"><input type="number" value={data.nbChambres || 0} onChange={e => update('nbChambres', +e.target.value)} className={fieldClass('nbChambres')} /></Field>
+                <Field label="Étage"><input type="number" value={data.etage || 0} onChange={e => update('etage', +e.target.value)} className={fieldClass('etage')} /></Field>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <Field label="Année construction"><input type="number" value={data.anneeConstruction || 0} onChange={e => update('anneeConstruction', +e.target.value)} className={fieldClass('anneeConstruction')} /></Field>
+                <Field label="Charges/an (€)"><input type="number" value={data.chargesAnnuelles || 0} onChange={e => update('chargesAnnuelles', +e.target.value)} className={fieldClass('chargesAnnuelles')} /></Field>
+                <Field label="Taxe foncière (€)"><input type="number" value={data.taxeFonciere || 0} onChange={e => update('taxeFonciere', +e.target.value)} className={fieldClass('taxeFonciere')} /></Field>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <Field label="DPE consommation"><input type="number" value={data.dpeConsommation || 0} onChange={e => update('dpeConsommation', +e.target.value)} className={fieldClass('dpeConsommation')} /></Field>
+                <Field label="DPE émissions"><input type="number" value={data.dpeEmissions || 0} onChange={e => update('dpeEmissions', +e.target.value)} className={fieldClass('dpeEmissions')} /></Field>
+                <Field label="DPE date"><input type="date" value={data.dpeDate || ''} onChange={e => update('dpeDate', e.target.value)} className={fieldClass('dpeDate')} /></Field>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Type de commercialisation">
-              <select value={data.commercialisation} onChange={e => update('commercialisation', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
-                <option>Off-market</option>
-                <option>Mandat exclusif</option>
-                <option>Mandat simple</option>
-              </select>
-            </Field>
-            <Field label="Date signature">
-              <input type="date" value={data.dateSignature || ''} onChange={e => update('dateSignature', e.target.value)}
-                disabled={data.commercialisation === 'Off-market'}
-                className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900 disabled:bg-stone-50 disabled:text-stone-400" />
-            </Field>
+          {/* SECTION 4 : CONTACT PROPRIÉTAIRE */}
+          <div className={sectionClass}>
+            <h3 className={sectionTitleClass}>📞 Contact propriétaire</h3>
+            {showNewClient ? (
+              <NewClientMiniForm prefillName={newClientPrefill} onSave={saveNewClient} onCancel={() => setShowNewClient(false)} />
+            ) : (
+              <ClientSelector
+                clients={clients}
+                mandats={mandats}
+                value={data.mandantClientId}
+                onChange={(id) => update('mandantClientId', id)}
+                onCreateNew={handleCreateClient}
+              />
+            )}
           </div>
 
-          <Field label="Statut pipeline">
-            <select value={data.statut} onChange={e => update('statut', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
-              {STATUTS_MANDAT.map(s => <option key={s}>{s}</option>)}
-            </select>
+          {/* DESCRIPTION en bas */}
+          <Field label="Description du bien">
+            <textarea value={data.description || ''} onChange={e => update('description', e.target.value)} rows={4} className={fieldClass('description')} placeholder="Descriptif marketing, points forts..." />
           </Field>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Contact propriétaire"><input type="text" value={data.contact || ''} onChange={e => update('contact', e.target.value)} className={fieldClass('contact')} /></Field>
-            <Field label="Téléphone"><input type="text" value={data.tel || ''} onChange={e => update('tel', e.target.value)} className={fieldClass('tel')} /></Field>
-          </div>
-
-          <Field label="Description"><textarea value={data.description || ''} onChange={e => update('description', e.target.value)} rows={3} className={fieldClass('description')} /></Field>
 
           {missingFields.length > 0 && (
             <div className="p-3 rounded-lg bg-stone-100 border border-cream-dark">
@@ -1152,10 +1280,37 @@ function MandatForm({ mandat, onSave, onClose }) {
 
         <div className="flex gap-2 justify-end p-6 border-t border-stone-200 bg-stone-50 sticky bottom-0">
           <button onClick={onClose} className="px-4 py-2 text-sm text-stone-700 hover:bg-cream-200 rounded-lg">Annuler</button>
-          <button onClick={() => onSave(data, [])} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
-            Enregistrer
-          </button>
+          <button onClick={() => onSave(data, [])} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Enregistrer</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Mini-formulaire pour créer un nouveau client à la volée
+function NewClientMiniForm({ prefillName, onSave, onCancel }) {
+  const guess = (prefillName || '').trim().split(' ');
+  const [c, setC] = useState({
+    prenom: guess.length > 1 ? guess[0] : '',
+    nom: guess.length > 1 ? guess.slice(1).join(' ') : (prefillName || ''),
+    societe: '', tel: '', email: '',
+  });
+  const upd = (k, v) => setC({ ...c, [k]: v });
+  return (
+    <div className="space-y-2 p-3 bg-white border border-stone-200 rounded-lg">
+      <div className="text-xs font-semibold text-stone-700 mb-1">Nouveau client</div>
+      <div className="grid grid-cols-2 gap-2">
+        <input type="text" placeholder="Prénom" value={c.prenom} onChange={e => upd('prenom', e.target.value)} className="px-2 py-1.5 border border-stone-200 rounded text-sm" />
+        <input type="text" placeholder="Nom" value={c.nom} onChange={e => upd('nom', e.target.value)} className="px-2 py-1.5 border border-stone-200 rounded text-sm" />
+      </div>
+      <input type="text" placeholder="Société (optionnel)" value={c.societe} onChange={e => upd('societe', e.target.value)} className="w-full px-2 py-1.5 border border-stone-200 rounded text-sm" />
+      <div className="grid grid-cols-2 gap-2">
+        <input type="text" placeholder="Téléphone" value={c.tel} onChange={e => upd('tel', e.target.value)} className="px-2 py-1.5 border border-stone-200 rounded text-sm" />
+        <input type="email" placeholder="Email" value={c.email} onChange={e => upd('email', e.target.value)} className="px-2 py-1.5 border border-stone-200 rounded text-sm" />
+      </div>
+      <div className="flex gap-2 pt-1">
+        <button onClick={() => onSave(c)} disabled={!c.nom.trim()} className="flex-1 px-3 py-1.5 bg-stone-900 text-white rounded text-sm hover:bg-stone-800 disabled:opacity-50">Créer</button>
+        <button onClick={onCancel} className="px-3 py-1.5 bg-white border border-stone-200 text-stone-700 rounded text-sm hover:bg-stone-100">Annuler</button>
       </div>
     </div>
   );
