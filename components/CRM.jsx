@@ -1130,7 +1130,7 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
     nom: '', adresse: '', ville: '', type: "Immeuble d'habitation", sousType: '', prix: 0, prixM2: 0,
     surface: 0, loyersAnnuels: 0, rendement: 0, nbLots: 1,
     commercialisation: 'Off-market', dateSignature: null,
-    statut: 'Sourcing', owner: 'JD', description: '',
+    statut: 'Sourcing', owner: getCurrentUserInitials(), description: '',
     contact: '', tel: '', docs: [], alerts: [], highlights: [],
     nbPieces: 0, nbChambres: 0, etage: 0, anneeConstruction: 0,
     chargesAnnuelles: 0, taxeFonciere: 0,
