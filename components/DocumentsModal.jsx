@@ -52,10 +52,6 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
   const [uploadCategory, setUploadCategory] = useState('autre');
   const [analyzingDocId, setAnalyzingDocId] = useState(null);
   const [analyzeResult, setAnalyzeResult] = useState(null);
-  const [analyzingDocId, setAnalyzingDocId] = useState(null);
-  setAnalyzeResult({
-        filled: data.filled || [],
-        count: (data.filled || []).length,
       });
       // Rafraîchir la fiche mandat si au moins 1 champ a été mis à jour
       if ((data.filled || []).length > 0 && typeof onUpdate === 'function') {
