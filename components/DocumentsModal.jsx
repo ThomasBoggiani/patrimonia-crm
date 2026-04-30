@@ -62,7 +62,42 @@ export default function DocumentsModal({ mandat, onClose, onUpdate }) {
       if (!token) { setLoading(false); return; }
       const res = await fetch('/api/mandats/' + mandat.id + '/documents?token=' + encodeURIComponent(token));
       const data = await res.json();
-      if (data.ok) { setDocuments(data.documents || []); }
+      if (!data.ok) {
+        // Cas spécial : adresse non concordante
+        if (data.error === 'address_mismatch') {
+          const choice = confirm(
+            'Adresse non concordante !\n\n' +
+            'Adresse du mandat : ' + (data.currentAddress || 'aucune') + '\n' +
+            'Adresse du document : ' + (data.extractedAddress || 'aucune') + '\n\n' +
+            (data.potentialDuplicates?.length > 0
+              ? 'Doublons potentiels trouvés :\n' + data.potentialDuplicates.map(m => '• ' + m.nom + ' (' + m.adresse + ')').join('\n') + '\n\n'
+              : '') +
+            'Veux-tu quand même appliquer les autres données du document à ce mandat ?'
+          );
+          if (choice) {
+            // Renvoyer la requête avec un flag de bypass
+            const res2 = await fetch('/api/mandats/' + mandat.id + '/analyze-document', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token, storage_path: doc.storage_path, document_id: doc.id, force: true }),
+            });
+            const data2 = await res2.json();
+            if (data2.ok) {
+              setAnalyzeResult({
+                filled: data2.filled || [],
+                count: (data2.filled || []).length,
+              });
+            } else {
+              setAnalyzeResult({ error: data2.error || 'Erreur inconnue' });
+            }
+          } else {
+            setAnalyzeResult({ error: 'Analyse annulée (adresse non concordante)' });
+          }
+          return;
+        }
+        setAnalyzeResult({ error: data.error || 'Erreur inconnue' });
+        return;
+      }
     } catch (e) {
       console.error('[Docs] load error:', e);
     } finally {
