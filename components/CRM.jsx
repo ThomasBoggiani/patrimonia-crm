@@ -9,11 +9,12 @@ import {
   Circle, CheckCircle2, Eye, Copy, Sparkles,
   FileUp, Loader2, AlertTriangle, Info, Wand2, Mic,
   User as UserIcon, LogOut, Shield, Menu,
-  Image as ImageIcon, Camera, Plug, FolderOpen
+  Image as ImageIcon, Camera, Plug, FolderOpen, Trophy
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
 import AICreateModal from './AICreateModal';
+import MarkAsSoldModal from './MarkAsSoldModal';
 import VoiceNoteModal from './VoiceNoteModal';
 import MandatAIAssistant from './MandatAIAssistant';
 import DocumentsModal from './DocumentsModal';
@@ -932,6 +933,7 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces }) {
   const [editingMandat, setEditingMandat] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [selectedMandat, setSelectedMandat] = useState(null);
+  const [sellingMandat, setSellingMandat] = useState(null);
 
   const filtered = mandats.filter(m => {
     if (search && !m.nom.toLowerCase().includes(search.toLowerCase()) && !(m.adresse || '').toLowerCase().includes(search.toLowerCase())) return false;
@@ -1093,7 +1095,7 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces }) {
                   <td className="px-3 py-2">
                     <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
                       <button onClick={() => setEditingMandat(m)} className="p-1.5 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded"><Edit2 className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => handleDelete(m.id)} className="p-1.5 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); setSellingMandat(m); }} className="p-1.5 text-stone-500 hover:text-amber-600 hover:bg-amber-50 rounded" title="Marquer comme vendu (par autres)"><Trophy className="w-3.5 h-3.5" /></button>
                     </div>
                   </td>
                 </tr>
@@ -1103,6 +1105,15 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces }) {
         </table>
         {filtered.length === 0 && <div className="p-12 text-center text-stone-500 text-sm">Aucun mandat trouvé</div>}
       </div>
+
+      {sellingMandat && (
+        <MarkAsSoldModal
+          mandat={sellingMandat}
+          clients={clients}
+          onClose={() => setSellingMandat(null)}
+          onSuccess={() => { setSellingMandat(null); reload(); }}
+        />
+      )}
 
       {(editingMandat || showNew) && (
         <MandatForm mandat={editingMandat} onSave={handleSave} onClose={() => { setEditingMandat(null); setShowNew(false); }} clients={clients} mandats={mandats} />
