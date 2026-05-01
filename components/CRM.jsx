@@ -1400,7 +1400,6 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
         }
         setData(newData);
         setFilledFields(newFilled);
-      }
 
       setImportProgress(null);
       setImportResult({ total: files.length, success: files.length - errors, errors, totalFilled, categoriesByLabel });
