@@ -1912,43 +1912,17 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
                 <span className="text-sm text-stone-500 font-normal">({mandatTodos.filter(t => t.statut !== 'Terminé').length} en cours)</span>
               )}
             </h2>
-            {mandatTodos.length === 0 ? (
-              <p className="text-sm text-stone-500 italic">Aucune tâche liée à ce mandat</p>
-            ) : (
-              <div className="space-y-2">
-                {mandatTodos.slice(0, 8).map(t => {
-                  const enRetard = t.echeance && new Date(t.echeance) < new Date() && t.statut !== 'Terminé';
-                  return (
-                    <div key={t.id} className={`flex items-start gap-3 p-3 rounded-lg ${
-                      t.statut === 'Terminé' ? 'bg-stone-50 opacity-60' : 'bg-cream-50/50 hover:bg-cream-50'
-                    }`}>
-                      <div className={`w-4 h-4 rounded border-2 flex-shrink-0 mt-0.5 ${
-                        t.statut === 'Terminé' ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'
-                      }`}>
-                        {t.statut === 'Terminé' && <Check className="w-2.5 h-2.5 text-white mx-auto" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className={`text-sm font-medium ${t.statut === 'Terminé' ? 'line-through text-stone-500' : 'text-stone-900'}`}>{t.titre}</div>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                            t.priorite === 'Haute' ? 'bg-red-50 text-red-700' : t.priorite === 'Moyenne' ? 'bg-sage-50 text-sage-dark' : 'bg-cream-100 text-ink/80'
-                          }`}>{t.priorite}</span>
-                          {t.echeance && (
-                            <span className={`text-xs flex items-center gap-1 ${enRetard ? 'text-red-600 font-medium' : 'text-stone-500'}`}>
-                              <Calendar className="w-3 h-3" />{new Date(t.echeance).toLocaleDateString('fr-FR')}
-                            </span>
-                          )}
-                          {t.assignee && <span className="text-xs text-stone-500">· {t.assignee}</span>}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                {mandatTodos.length > 8 && (
-                  <p className="text-xs text-stone-500 text-center pt-2">... et {mandatTodos.length - 8} de plus</p>
-                )}
-              </div>
-            )}
+            <div className="space-y-2">
+              {mandatTodos.filter(t => t.statut !== 'Terminé').map(t => (
+                <TaskInline key={t.id} task={t} mandats={[mandat]} clients={clients} onUpdate={reload} />
+              ))}
+              <QuickAddTask
+                lienType="mandat"
+                lienId={mandat.id}
+                defaultAssignee={mandat.owner === 'TB' ? 'Thomas Boggiani' : null}
+                onAdd={reload}
+              />
+            </div>
           </div>
 
           {/* ═══ ALERTES (si existantes) ═══ */}
