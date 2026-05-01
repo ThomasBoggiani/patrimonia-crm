@@ -994,12 +994,12 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces }) {
 
   return (
     <div className="p-8 max-w-7xl">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="font-display text-4xl font-semibold text-stone-900 mb-1">Mandats</h1>
-          <p className="text-stone-500">{filtered.length} bien{filtered.length > 1 ? 's' : ''} • Portefeuille {formatPrixCompact(mandats.reduce((s,m)=>s+(parseFloat(m.prix)||0),0))}</p>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-baseline gap-3">
+          <h1 className="font-display text-2xl font-semibold text-stone-900">Mandats</h1>
+          <span className="text-stone-500 text-sm">{filtered.length} bien{filtered.length > 1 ? 's' : ''} · Portefeuille {formatPrixCompact(mandats.reduce((s,m)=>s+(parseFloat(m.prix)||0),0))}</span>
         </div>
-        <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-4 py-2.5 bg-ink-deep text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
+        <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-3 py-2 bg-ink-deep text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
           <Plus className="w-4 h-4" /> Nouveau mandat
         </button>
       </div>
@@ -1026,16 +1026,14 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces }) {
         <table className="w-full">
           <thead className="bg-stone-50 border-b border-cream-dark">
             <tr>
-              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide w-24">Photo</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Bien</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Type</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Prix</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Rdt</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Potentiel</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">État</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Situation</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-600 uppercase tracking-wide">Mandat</th>
-              <th className="w-20"></th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide w-24">Photo</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Bien</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Type</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Prix</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Rdt</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Mandat</th>
+              <th className="text-center px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide w-12">Owner</th>
+              <th className="w-12"></th>
             </tr>
           </thead>
           <tbody>
@@ -1074,13 +1072,15 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces }) {
                       <span className="text-stone-400 text-sm">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-3 text-sm text-stone-400">—</td>
-                  <td className="px-3 py-3 text-sm text-stone-400">—</td>
-                  <td className="px-3 py-3 text-sm text-stone-400">—</td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-2">
                     <CommerceBadge comm={m.commercialisation} dateSignature={m.dateSignature} />
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-2 text-center">
+                    <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-sage-100 text-sage-darker text-xs font-semibold border border-sage-light" title={'Owner: ' + (m.owner || '—')}>
+                      {m.owner || '?'}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
                     <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
                       <button onClick={() => setEditingMandat(m)} className="p-1.5 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded"><Edit2 className="w-3.5 h-3.5" /></button>
                       <button onClick={() => handleDelete(m.id)} className="p-1.5 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
