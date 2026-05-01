@@ -735,7 +735,7 @@ function Field({ label, children }) {
 // ═══════════════════════════════════════════════════════════════════
 function TaskInline({ task, mandats = [], clients = [], onUpdate }) {
   const [editing, setEditing] = useState(false);
-  const [editData, setEditData] = useState({ titre: task.titre, echeance: task.echeance || '', priorite: task.priorite || 'Moyenne' });
+  const [editData, setEditData] = useState({ titre: task.titre, echeance: task.echeance || '', priorite: task.priorite || 'Moyenne', statut: task.statut || 'À faire' });
 
   const isLate = task.echeance && new Date(task.echeance) < new Date(new Date().toDateString()) && task.statut !== 'Terminé';
   const isToday = task.echeance && new Date(task.echeance).toDateString() === new Date().toDateString();
@@ -757,6 +757,7 @@ function TaskInline({ task, mandats = [], clients = [], onUpdate }) {
       titre: editData.titre,
       echeance: editData.echeance || null,
       priorite: editData.priorite,
+      statut: editData.statut,
     }).eq('id', task.id);
     setEditing(false);
     if (onUpdate) onUpdate();
@@ -783,6 +784,12 @@ function TaskInline({ task, mandats = [], clients = [], onUpdate }) {
             <option>Basse</option>
           </select>
         </div>
+        <select value={editData.statut} onChange={e => setEditData({ ...editData, statut: e.target.value })}
+          className="w-full px-2 py-1.5 border border-stone-200 rounded text-sm bg-white">
+          <option>À faire</option>
+          <option>En cours</option>
+          <option>Terminé</option>
+        </select>
         <div className="flex gap-2">
           <button onClick={saveEdit} className="flex-1 px-3 py-1.5 bg-stone-900 text-white rounded text-sm hover:bg-stone-800">Enregistrer</button>
           <button onClick={() => setEditing(false)} className="px-3 py-1.5 bg-white border border-stone-200 text-stone-700 rounded text-sm hover:bg-stone-100">Annuler</button>
@@ -2786,7 +2793,7 @@ function TodosTab({ todos, reload, mandats, clients, deals }) {
   const [filter, setFilter] = useState('all');
   const [showNew, setShowNew] = useState(false);
   const [newTodo, setNewTodo] = useState({ titre: '', priorite: 'Moyenne', statut: 'À faire', echeance: '', assignee: '', assignedToUserId: null, lienType: null, lienId: null });
-  const [filterPerson, setFilterPerson] = useState('all'); // all | me | <userId>
+  const [filterPerson, setFilterPerson] = useState('me'); // 'me' par défaut (mes tâches uniquement)
 
   useEffect(() => {
     supabase.from('profiles').select('id, prenom, nom').eq('actif', true).then(({ data }) => {
