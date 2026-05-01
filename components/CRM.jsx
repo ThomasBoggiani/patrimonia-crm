@@ -692,7 +692,7 @@ function CommRow({ label, value, color }) {
 
 function CommerceBadge({ comm, dateSignature }) {
   const config = {
-    'Off-market': { dot: 'bg-red-500', bg: 'bg-red-50', text: 'text-red-700', label: 'Off-market' },
+    'Off-market': { dot: 'bg-amber-400', bg: 'bg-stone-900', text: 'text-amber-300', label: 'Off-market' },
     'Mandat exclusif': { dot: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Exclusif' },
     'Mandat simple': { dot: 'bg-blue-500', bg: 'bg-blue-50', text: 'text-blue-700', label: 'Simple' }
   };
@@ -1969,7 +1969,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
   const commColor = {
     'Mandat exclusif': 'bg-emerald-50 text-emerald-700 border-emerald-200',
     'Mandat simple': 'bg-blue-50 text-blue-700 border-blue-200',
-    'Off-market': 'bg-stone-100 text-stone-700 border-stone-200'
+    'Off-market': 'bg-stone-900 text-amber-300 border-amber-500/30'
   }[mandat.commercialisation] || 'bg-stone-100 text-stone-700 border-stone-200';
 
   return (
