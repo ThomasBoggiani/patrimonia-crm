@@ -52,7 +52,7 @@ function formatPrixCompact(n) {
   return eurFormatter.format(num);
 }
 // === CONSTANTES ===
-const STATUTS_MANDAT = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisation', 'Offre', 'Promesse', 'Acte', 'Perdu'];
+const STATUTS_MANDAT = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisation', 'Offre', 'Promesse', 'Acte', 'Vendu par autres', 'Perdu'];
 const STATUTS_DEAL = ['À proposer', 'Envoyé', 'En étude', 'Visite', 'Offre', 'Refusé', 'Gagné', 'Perdu'];
 const TYPES_ACTIF = ['Immeuble d\'habitation', 'Immeuble mixte', 'Immeuble tertiaire', 'Local commercial', 'Local d\'activité', 'Hôtel', 'Hébergement hôtelier', 'Appartement', 'Maison', 'Studio', 'Terrain', 'Bureau', 'Promotion immobilière'];
 const TYPOLOGIES_CLIENT = ['Foncières', 'Marchands de biens', 'Particuliers', 'Fonds', 'Promoteurs', 'Family Office'];
@@ -714,6 +714,7 @@ function StatutBadge({ statut }) {
     'Offre': 'bg-purple-50 text-purple-700',
     'Promesse': 'bg-indigo-50 text-indigo-700',
     'Acte': 'bg-green-100 text-green-800',
+    'Vendu par autres': 'bg-amber-50 text-amber-800',
     'Perdu': 'bg-red-50 text-red-700'
   };
   return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors[statut] || 'bg-cream-100 text-ink'}`}>{statut}</span>;
@@ -930,6 +931,7 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces }) {
   const [search, setSearch] = useState('');
   const [filterComm, setFilterComm] = useState('Tous');
   const [filterType, setFilterType] = useState('Tous');
+  const [filterStatut, setFilterStatut] = useState('Actifs'); // 'Actifs' = exclut Perdu/Vendu par autres
   const [editingMandat, setEditingMandat] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [selectedMandat, setSelectedMandat] = useState(null);
@@ -939,6 +941,8 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces }) {
     if (search && !m.nom.toLowerCase().includes(search.toLowerCase()) && !(m.adresse || '').toLowerCase().includes(search.toLowerCase())) return false;
     if (filterComm !== 'Tous' && m.commercialisation !== filterComm) return false;
     if (filterType !== 'Tous' && m.type !== filterType) return false;
+    if (filterStatut === 'Actifs' && ['Perdu', 'Vendu par autres', 'Acte'].includes(m.statut)) return false;
+    if (filterStatut !== 'Tous' && filterStatut !== 'Actifs' && m.statut !== filterStatut) return false;
     return true;
   });
 
@@ -1021,6 +1025,11 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces }) {
         <select value={filterType} onChange={e => setFilterType(e.target.value)} className="px-4 py-2.5 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
           <option>Tous</option>
           {TYPES_ACTIF.map(t => <option key={t}>{t}</option>)}
+        </select>
+        <select value={filterStatut} onChange={e => setFilterStatut(e.target.value)} className="px-4 py-2.5 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
+          <option value="Actifs">En cours</option>
+          <option value="Tous">Tous</option>
+          {STATUTS_MANDAT.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
 
