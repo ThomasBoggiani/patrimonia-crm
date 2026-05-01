@@ -1350,66 +1350,155 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
     nb_lots: 'nbLots', description: 'description', commercialisation: 'commercialisation',
   };
 
-  async function handleFolderImport(event) {
-    const files = Array.from(event.target.files || []);
-    if (files.length === 0) return;
-    setImportResult(null);
-    setImportProgress({ current: 0, total: files.length, fileName: 'Préparation...' });
+  // ═══════════════════════════════════════════════════════════════════
+// FIX : Fonction handleFolderImport COMPLÈTE corrigée
+// À COPIER ENTIÈREMENT dans MandatForm pour remplacer la version cassée
+// ═══════════════════════════════════════════════════════════════════
 
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) { alert('Session expirée'); setImportProgress(null); return; }
+async function handleFolderImport(event) {
+  const files = Array.from(event.target.files || []);
+  if (files.length === 0) return;
+  setImportResult(null);
+  setImportProgress({ current: 0, total: files.length, fileName: 'Préparation...' });
 
-      let mandatId = mandat?.id || data.id;
-      if (!mandatId) {
-        const { data: created, error: createErr } = await supabase.from('mandats').insert({
-          nom: data.nom || 'Nouveau mandat (import en cours)',
-          type: data.type || "Immeuble d'habitation",
-          statut: 'Sourcing',
-          owner: data.owner || 'JD',
-          commercialisation: data.commercialisation || 'Off-market',
-        }).select().single();
-        if (createErr || !created) { alert('Erreur création mandat : ' + (createErr?.message || 'inconnue')); setImportProgress(null); return; }
-        mandatId = created.id;
-        setData(d => ({ ...d, id: mandatId }));
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) { alert('Session expirée'); setImportProgress(null); return; }
+
+    let mandatId = mandat?.id || data.id;
+    if (!mandatId) {
+      const { data: created, error: createErr } = await supabase.from('mandats').insert({
+        nom: data.nom || 'Nouveau mandat (import en cours)',
+        type: data.type || "Immeuble d'habitation",
+        statut: 'Sourcing',
+        owner: data.owner || 'JD',
+        commercialisation: data.commercialisation || 'Off-market',
+      }).select().single();
+      if (createErr || !created) {
+        alert('Erreur création mandat : ' + (createErr?.message || 'inconnue'));
+        setImportProgress(null);
+        return;
       }
-
-      let totalFilled = 0;
-      const allExtracted = {};
-      const categoriesByLabel = {};
-      let errors = 0;
-      const BATCH_SIZE = 3;
-      let processed = 0;
-
-      for (let i = 0; i < files.length; i += BATCH_SIZE) {
-        const batch = files.slice(i, i + BATCH_SIZE);
-        const results = await Promise.all(batch.map(async (file) => {
-          const compressed = await compressImage(file);
-          setImportProgress({ current: processed + 1, total: files.length, fileName: file.name });
-          const cleanName = (file.name || 'file').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
-          const storagePath = mandatId + '/' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '_' + cleanName;
-          const { error: uploadErr } = await supabase.storage.from('mandat-docs').upload(storagePath, compressed, {
-            contentType: compressed.type || 'application/octet-stream', upsert: false,
-          });
-          
-          
-        if (newData.prix && newData.surface && !newData.prixM2) {
-          newData.prixM2 = Math.round(newData.prix / newData.surface);
-          newFilled.add('prixM2');
-        }
-        setData(newData);
-        setFilledFields(newFilled);
-
-      setImportProgress(null);
-      setImportResult({ total: files.length, success: files.length - errors, errors, totalFilled, categoriesByLabel });
-      if (folderInputRef.current) folderInputRef.current.value = '';
-    } catch (e) {
-      console.error('[FolderImport] Erreur:', e);
-      alert('Erreur : ' + e.message);
-      setImportProgress(null);
+      mandatId = created.id;
+      setData(d => ({ ...d, id: mandatId }));
     }
+
+    let totalFilled = 0;
+    const allExtracted = {};
+    const categoriesByLabel = {};
+    let errors = 0;
+    const BATCH_SIZE = 3;
+    let processed = 0;
+
+    for (let i = 0; i < files.length; i += BATCH_SIZE) {
+      const batch = files.slice(i, i + BATCH_SIZE);
+      const results = await Promise.all(batch.map(async (file) => {
+        const compressed = await compressImage(file);
+        setImportProgress({ current: processed + 1, total: files.length, fileName: file.name });
+
+        const cleanName = (file.name || 'file').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const storagePath = mandatId + '/' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '_' + cleanName;
+        const { error: uploadErr } = await supabase.storage.from('mandat-docs').upload(storagePath, compressed, {
+          contentType: compressed.type || 'application/octet-stream',
+          upsert: false,
+        });
+        if (uploadErr) {
+          processed++;
+          return { ok: false, error: uploadErr.message };
+        }
+
+        let category = 'autre';
+        let extractedData = {};
+        let filledKeys = [];
+        try {
+          const aiRes = await fetch('/api/mandats/' + mandatId + '/import-folder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token, storage_path: storagePath, applyToMandat: true }),
+          });
+          const aiData = await aiRes.json();
+          if (aiData.ok) {
+            category = aiData.category || 'autre';
+            extractedData = aiData.data || {};
+            filledKeys = aiData.filled || [];
+          }
+        } catch (e) {
+          console.warn('[import] AI failed:', e.message);
+        }
+
+        await fetch('/api/mandats/' + mandatId + '/documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token,
+            type: 'file_meta',
+            category,
+            nom: file.name,
+            storage_path: storagePath,
+            taille_bytes: compressed.size,
+            mime_type: compressed.type || 'application/octet-stream',
+          }),
+        });
+
+        processed++;
+        return { ok: true, category, extracted: extractedData, filled: filledKeys };
+      }));
+
+      for (const r of results) {
+        if (r.ok) {
+          totalFilled += (r.filled?.length || 0);
+          const label = ({
+            mandat: 'Mandat', diagnostics: 'Diagnostics', plans_photos: 'Plans & photos',
+            notes: 'Notes', mandant: 'Mandant', autre: 'Autre',
+          })[r.category] || 'Autre';
+          categoriesByLabel[label] = (categoriesByLabel[label] || 0) + 1;
+          for (const [k, v] of Object.entries(r.extracted || {})) {
+            if (v !== null && v !== undefined && v !== '') allExtracted[k] = v;
+          }
+        } else {
+          errors++;
+        }
+      }
+      if (i + BATCH_SIZE < files.length) {
+        await new Promise(r => setTimeout(r, 500));
+      }
+    }
+
+    // Recharger le mandat depuis la BDD pour avoir les valeurs à jour
+    const { data: refreshed } = await supabase.from('mandats').select('*').eq('id', mandatId).maybeSingle();
+    if (refreshed) {
+      const newData = { ...data, id: refreshed.id };
+      const newFilled = new Set();
+      for (const [snake, camel] of Object.entries(FIELD_MAP)) {
+        if (refreshed[snake] !== null && refreshed[snake] !== undefined && refreshed[snake] !== '') {
+          newData[camel] = refreshed[snake];
+          if (allExtracted[snake] !== undefined) newFilled.add(camel);
+        }
+      }
+      if (newData.prix && newData.surface && !newData.prixM2) {
+        newData.prixM2 = Math.round(newData.prix / newData.surface);
+        newFilled.add('prixM2');
+      }
+      setData(newData);
+      setFilledFields(newFilled);
+    }
+
+    setImportProgress(null);
+    setImportResult({
+      total: files.length,
+      success: files.length - errors,
+      errors,
+      totalFilled,
+      categoriesByLabel,
+    });
+    if (folderInputRef.current) folderInputRef.current.value = '';
+  } catch (e) {
+    console.error('[FolderImport] Erreur:', e);
+    alert('Erreur : ' + e.message);
+    setImportProgress(null);
   }
+}
 
   async function handleCreateClient(prefillName) {
     setNewClientPrefill(prefillName);
