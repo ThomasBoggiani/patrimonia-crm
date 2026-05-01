@@ -2039,11 +2039,9 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
 
         <div className="flex-1" />
 
-        <div className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full border text-xs font-medium ${commColor}`}>
+        <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-xs font-medium ${commColor}`}>
+          <div className={`w-1.5 h-1.5 rounded-full ${isPublished ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400'}`} title={isPublished ? 'Publié' : 'Non publié'} />
           <span>{mandat.commercialisation}</span>
-          <div className="flex items-center gap-1" title={isPublished ? 'Publié sur les portails' : 'Non publié'}>
-            <div className={`w-2 h-2 rounded-full ${isPublished ? 'bg-emerald-500 animate-pulse' : 'bg-stone-300'}`} />
-          </div>
         </div>
 
         <OwnerSelector mandat={mandat} reload={reload} />
