@@ -232,12 +232,6 @@ export default function CRM() {
               <Sparkles className="w-4 h-4" />
               <span>Créer avec l'IA</span>
             </button> 
-              onClick={() => { setShowGlobalVoice(true); setSidebarOpen(false); }}
-              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm mb-3 bg-white border border-sage text-sage-dark hover:bg-sage-50 font-medium"
-            >
-              <Mic className="w-4 h-4" />
-              <span>Note vocale</span>
-            </button>
             {tabs.map(tab => {
               const Icon = tab.icon;
               const active = activeTab === tab.id;
