@@ -9,7 +9,7 @@ import {
   Circle, CheckCircle2, Eye, Copy, Sparkles,
   FileUp, Loader2, AlertTriangle, Info, Wand2, Mic,
   User as UserIcon, LogOut, Shield, Menu,
-  Image as ImageIcon, Camera, Plug, FolderOpen, Trophy
+  Image as ImageIcon, Camera, Plug, FolderOpen, Trophy, TrendingUp
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
@@ -32,8 +32,6 @@ const eurFormatter = new Intl.NumberFormat('fr-FR', {
   style: 'currency',
   currency: 'EUR',
   maximumFractionDigits: 0,
-  Image as ImageIcon, Camera, Plug, FolderOpen, Trophy, TrendingUp
-} from 'lucide-react';
 });
 
 function formatPrix(n) {
