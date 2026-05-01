@@ -954,6 +954,7 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces, allProfi
   const [filterComm, setFilterComm] = useState('Tous');
   const [filterType, setFilterType] = useState('Tous');
   const [filterStatut, setFilterStatut] = useState('Actifs'); // 'Actifs' = exclut Perdu/Vendu par autres
+  const [view, setView] = useState('list'); // 'list' | 'kanban'
   const [editingMandat, setEditingMandat] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [selectedMandat, setSelectedMandat] = useState(null);
@@ -1027,6 +1028,14 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces, allProfi
           <h1 className="font-display text-2xl font-semibold text-stone-900">Mandats</h1>
           <span className="text-stone-500 text-sm">{filtered.length} bien{filtered.length > 1 ? 's' : ''} · Portefeuille {formatPrixCompact(mandats.reduce((s,m)=>s+(parseFloat(m.prix)||0),0))}</span>
         </div>
+        <div className="flex items-center bg-stone-100 rounded-lg p-0.5 mr-2">
+          <button onClick={() => setView('list')} className={`px-3 py-1.5 text-xs font-medium rounded-md ${view === 'list' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'}`}>
+            Liste
+          </button>
+          <button onClick={() => setView('kanban')} className={`px-3 py-1.5 text-xs font-medium rounded-md ${view === 'kanban' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'}`}>
+            Kanban
+          </button>
+        </div>
         <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-3 py-2 bg-ink-deep text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
           <Plus className="w-4 h-4" /> Nouveau mandat
         </button>
@@ -1055,7 +1064,7 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces, allProfi
         </select>
       </div>
 
-      <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden">
+      {view === 'kanban' ? (         <MandatsKanban mandats={filtered} onSelectMandat={setSelectedMandat} reload={reload} />       ) : (       <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden">
         <table className="w-full">
               <colgroup>
                 <col style={{ width: '80px' }} />
@@ -1136,6 +1145,7 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces, allProfi
         </table>
         {filtered.length === 0 && <div className="p-12 text-center text-stone-500 text-sm">Aucun mandat trouvé</div>}
       </div>
+      )}
 
       {sellingMandat && (
         <MarkAsSoldModal
@@ -1295,6 +1305,145 @@ function ClientSelector({ clients, mandats, value, onChange, onCreateNew }) {
 // ═══════════════════════════════════════════════════════════════════
 // MandatForm v2 — 4 sections empilées + ClientSelector
 // ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+// MandatsKanban — vue Kanban des mandats avec drag & drop natif HTML5
+// À ajouter dans components/CRM.jsx (avant la fonction MandatForm)
+// ═══════════════════════════════════════════════════════════════════
+
+function MandatsKanban({ mandats, onSelectMandat, reload }) {
+  const [draggingId, setDraggingId] = useState(null);
+  const [dragOverCol, setDragOverCol] = useState(null);
+  const [updating, setUpdating] = useState(false);
+
+  // Colonnes Kanban — on exclut "Vendu par autres" et "Perdu" (consultables via filtre)
+  const KANBAN_STATUTS = [
+    { id: 'Sourcing',          label: 'Sourcing',       border: '#B4B2A9' },
+    { id: 'Analyse',           label: 'Analyse',        border: '#5DCAA5' },
+    { id: 'Mandat signé',      label: 'Mandat signé',   border: '#85B7EB' },
+    { id: 'Commercialisation', label: 'Commercia.',     border: '#97C459' },
+    { id: 'Offre',             label: 'Offre',          border: '#AFA9EC' },
+    { id: 'Promesse',          label: 'Promesse',       border: '#7F77DD' },
+    { id: 'Acte',              label: 'Acte',           border: '#639922' },
+  ];
+
+  // Group mandats par statut (exclut Vendu par autres + Perdu)
+  const grouped = {};
+  for (const c of KANBAN_STATUTS) grouped[c.id] = [];
+  for (const m of mandats) {
+    if (KANBAN_STATUTS.find(c => c.id === m.statut)) {
+      grouped[m.statut].push(m);
+    }
+  }
+
+  function handleDragStart(e, mandat) {
+    setDraggingId(mandat.id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', mandat.id);
+  }
+
+  function handleDragOver(e, statut) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverCol(statut);
+  }
+
+  function handleDragLeave() {
+    setDragOverCol(null);
+  }
+
+  async function handleDrop(e, newStatut) {
+    e.preventDefault();
+    const mandatId = e.dataTransfer.getData('text/plain');
+    if (!mandatId || updating) { setDragOverCol(null); return; }
+
+    const mandat = mandats.find(m => m.id === mandatId);
+    if (!mandat || mandat.statut === newStatut) {
+      setDragOverCol(null);
+      setDraggingId(null);
+      return;
+    }
+
+    setUpdating(true);
+    setDragOverCol(null);
+    setDraggingId(null);
+    try {
+      const { error } = await supabase.from('mandats').update({ statut: newStatut }).eq('id', mandatId);
+      if (error) {
+        alert('Erreur changement statut : ' + error.message);
+      } else {
+        if (reload) reload();
+      }
+    } catch (e) {
+      alert('Erreur : ' + e.message);
+    }
+    setUpdating(false);
+  }
+
+  function handleDragEnd() {
+    setDraggingId(null);
+    setDragOverCol(null);
+  }
+
+  return (
+    <div className="overflow-x-auto pb-4">
+      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${KANBAN_STATUTS.length}, minmax(160px, 1fr))` }}>
+        {KANBAN_STATUTS.map(col => {
+          const mandatsInCol = grouped[col.id] || [];
+          const isOver = dragOverCol === col.id;
+          return (
+            <div
+              key={col.id}
+              onDragOver={e => handleDragOver(e, col.id)}
+              onDragLeave={handleDragLeave}
+              onDrop={e => handleDrop(e, col.id)}
+              className={`bg-cream-50/70 rounded-lg p-2 min-h-[280px] transition-colors ${isOver ? 'bg-sage-100 ring-2 ring-sage-dark' : ''}`}
+              style={{ borderLeft: `2px solid ${col.border}` }}
+            >
+              <div className="flex items-center justify-between px-1 mb-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-stone-600">{col.label}</span>
+                <span className="bg-white rounded-full px-1.5 py-0.5 text-[10px] text-stone-700 border border-stone-200">{mandatsInCol.length}</span>
+              </div>
+
+              <div className="space-y-1.5">
+                {mandatsInCol.map(m => (
+                  <div
+                    key={m.id}
+                    draggable
+                    onDragStart={e => handleDragStart(e, m)}
+                    onDragEnd={handleDragEnd}
+                    onClick={() => !draggingId && onSelectMandat && onSelectMandat(m)}
+                    className={`bg-white border border-stone-200 rounded-lg p-2 cursor-grab active:cursor-grabbing hover:shadow-luxe transition-shadow ${draggingId === m.id ? 'opacity-50' : ''}`}
+                  >
+                    <div className="text-xs font-medium text-stone-900 line-clamp-2 leading-tight mb-1">{m.nom}</div>
+                    {m.adresse && (
+                      <div className="text-[10px] text-stone-500 truncate flex items-center gap-1">
+                        <MapPin className="w-2.5 h-2.5 flex-shrink-0" /><span className="truncate">{m.adresse}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between mt-1.5">
+                      <span className="text-[11px] font-medium text-stone-900">{formatPrixCompact(parseFloat(m.prix) || 0)}</span>
+                      <div className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-sage-100 text-sage-darker text-[9px] font-semibold border border-sage-light" title={'Owner: ' + (m.owner || '—')}>
+                        {m.owner || '?'}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {mandatsInCol.length === 0 && (
+                  <div className="text-[10px] text-stone-400 text-center py-4 italic">—</div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {updating && (
+        <div className="mt-2 text-xs text-stone-500 flex items-center gap-1.5">
+          <Loader2 className="w-3 h-3 animate-spin" />Mise à jour du statut...
+        </div>
+      )}
+    </div>
+  );
+}
 function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   const [data, setData] = useState(mandat || {
     nom: '', adresse: '', ville: '', type: "Immeuble d'habitation", sousType: '', prix: 0, prixM2: 0,
