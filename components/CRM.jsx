@@ -1976,26 +1976,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
     <div className="p-8 max-w-7xl">
 
       {/* ═══ EN-TÊTE ═══ */}
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex-1">
-          <h1 className="font-display text-3xl font-semibold text-stone-900 mb-1">{mandat.nom}</h1>
-          <p className="text-stone-500 flex items-center gap-2 text-sm mb-3">
-            <MapPin className="w-4 h-4" />{mandat.adresse}
-          </p>
-          {/* Highlights remontés en badges */}
-          {highlights.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {highlights.slice(0, 5).map((h, i) => (
-                <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium rounded-full">
-                  <Sparkles className="w-3 h-3 text-amber-600" />{h}
-                </span>
-              ))}
-              {highlights.length > 5 && (
-                <span className="inline-flex items-center px-2.5 py-1 bg-cream-100 text-stone-600 text-xs rounded-full">
-                  +{highlights.length - 5}
-                </span>
-              )}
-            </div>
           )}
         </div>
         <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink flex-shrink-0">
