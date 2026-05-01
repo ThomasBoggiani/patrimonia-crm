@@ -993,7 +993,7 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces }) {
   }
 
   return (
-    <div className="p-8 max-w-7xl">
+    <div className="p-6 max-w-none">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-baseline gap-3">
           <h1 className="font-display text-2xl font-semibold text-stone-900">Mandats</h1>
@@ -1024,6 +1024,16 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces }) {
 
       <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden">
         <table className="w-full">
+              <colgroup>
+                <col style={{ width: '80px' }} />
+                <col />
+                <col style={{ width: '180px' }} />
+                <col style={{ width: '160px' }} />
+                <col style={{ width: '80px' }} />
+                <col style={{ width: '180px' }} />
+                <col style={{ width: '60px' }} />
+                <col style={{ width: '80px' }} />
+              </colgroup>
           <thead className="bg-stone-50 border-b border-cream-dark">
             <tr>
               <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide w-24">Photo</th>
@@ -1041,8 +1051,8 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces }) {
               const photoUrl = (m.photos && m.photos[0]) ? (m.photos[0].url || m.photos[0]) : null;
               return (
                 <tr key={m.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer group" onClick={() => setSelectedMandat(m)}>
-                  <td className="px-3 py-3">
-                    <div className="w-16 h-16 rounded-lg overflow-hidden bg-cream-100 flex-shrink-0">
+                  <td className="px-3 py-2">
+                    <div className="w-14 h-14 rounded-lg overflow-hidden bg-cream-100 flex-shrink-0">
                       {photoUrl ? (
                         <img src={photoUrl} alt={m.nom} className="w-full h-full object-cover" />
                       ) : (
