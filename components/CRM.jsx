@@ -275,7 +275,7 @@ export default function CRM() {
             {activeTab === 'clients' && <ClientsTab clients={clients} reload={loadAll} mandats={mandats} deals={deals} interactions={interactions} />}
             {activeTab === 'deals' && <DealsTab deals={deals} reload={loadAll} mandats={mandats} clients={clients} />}
             {activeTab === 'matching' && <MatchingTab mandats={mandats} clients={clients} deals={deals} reload={loadAll} />}
-            {activeTab === 'todos' && <TodosTab todos={todos} reload={loadAll} mandats={mandats} clients={clients} deals={deals} />}
+            {activeTab === 'todos' && <TodosTab todos={todos} reload={loadAll} mandats={mandats} clients={clients} deals={deals} allProfiles={allProfiles} />}
             {activeTab === 'agenda' && <AgendaTab />}
             {activeTab === 'integrations' && <IntegrationsTab />}
             {activeTab === 'team' && <TeamTab />}
@@ -2802,19 +2802,12 @@ function MatchingTab({ mandats, clients, deals, reload }) {
 }
 
 // === TODOS ===
-function TodosTab({ todos, reload, mandats, clients, deals }) {
+function TodosTab({ todos, reload, mandats, clients, deals, allProfiles = [] }) {
   const { user, profile } = useAuth();
-  const [allProfiles, setAllProfiles] = useState([]);
   const [filter, setFilter] = useState('all');
   const [showNew, setShowNew] = useState(false);
   const [newTodo, setNewTodo] = useState({ titre: '', priorite: 'Moyenne', statut: 'À faire', echeance: '', assignee: '', assignedToUserId: null, lienType: null, lienId: null });
   const [filterPerson, setFilterPerson] = useState('me'); // 'me' par défaut (mes tâches uniquement)
-
-  useEffect(() => {
-    supabase.from('profiles').select('id, prenom, nom').eq('actif', true).then(({ data }) => {
-      setAllProfiles(data || []);
-    });
-  }, []);
 
   useEffect(() => {
     if (profile && !newTodo.assignee) {
@@ -2975,44 +2968,9 @@ function TodosTab({ todos, reload, mandats, clients, deals }) {
       )}
 
       <div className="space-y-2">
-        {filtered.map(t => {
-          const lien = getLienLabel(t);
-          const enRetard = t.echeance && new Date(t.echeance) < new Date() && t.statut !== 'Terminé';
-          return (
-            <div key={t.id} className={`bg-white rounded-xl p-4 shadow-luxe border group ${
-              t.statut === 'Terminé' ? 'border-stone-200 opacity-60' : enRetard ? 'border-red-200' : 'border-stone-200 hover:shadow-luxe-hover'
-            }`}>
-              <div className="flex items-start gap-3">
-                <button onClick={() => updateTodo(t.id, { statut: t.statut === 'Terminé' ? 'À faire' : 'Terminé' })}
-                  className={`w-5 h-5 rounded-md border-2 flex-shrink-0 mt-0.5 ${t.statut === 'Terminé' ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300 hover:border-stone-500'}`}>
-                  {t.statut === 'Terminé' && <Check className="w-3 h-3 text-white mx-auto" />}
-                </button>
-                <div className="flex-1 min-w-0">
-                  <div className={`text-sm font-medium ${t.statut === 'Terminé' ? 'line-through text-stone-500' : 'text-stone-900'}`}>{t.titre}</div>
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      t.priorite === 'Haute' ? 'bg-red-50 text-red-700' : t.priorite === 'Moyenne' ? 'bg-sage-50 text-sage-dark' : 'bg-cream-100 text-ink/80'
-                    }`}>{t.priorite}</span>
-                    <select value={t.statut} onChange={e => updateTodo(t.id, { statut: e.target.value })} className="text-xs px-2 py-0.5 border border-stone-200 rounded-md bg-white focus:outline-none">
-                      <option>À faire</option><option>En cours</option><option>Terminé</option>
-                    </select>
-                    {t.echeance && <span className={`text-xs flex items-center gap-1 ${enRetard ? 'text-red-600 font-medium' : 'text-stone-500'}`}><Calendar className="w-3 h-3" />{new Date(t.echeance).toLocaleDateString('fr-FR')}</span>}
-                    {lien && <span className="text-xs text-stone-600 bg-stone-100 px-2 py-0.5 rounded-full">{lien}</span>}
-                    {t.assignee && (
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1 ${
-                        t.assignedToUserId === user?.id ? 'bg-sage-100 text-sage-darker' : 'bg-cream-100 text-ink/70'
-                      }`}>
-                        <UserIcon className="w-3 h-3" />
-                        {t.assignedToUserId === user?.id ? 'Moi' : t.assignee}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <button onClick={() => deleteTodo(t.id)} className="opacity-0 group-hover:opacity-100 text-cream-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
-              </div>
-            </div>
-          );
-        })}
+        {filtered.map(t => (
+          <TaskInline key={t.id} task={t} mandats={mandats} clients={clients} allProfiles={allProfiles} onUpdate={reload} />
+        ))}
         {filtered.length === 0 && (
           <div className="text-center py-12 text-stone-500 text-sm bg-white rounded-xl border border-cream-dark">Aucune tâche</div>
         )}
