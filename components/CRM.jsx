@@ -17,8 +17,6 @@ import AICreateModal from './AICreateModal';
 import VoiceNoteModal from './VoiceNoteModal';
 import MandatAIAssistant from './MandatAIAssistant';
 import DocumentsModal from './DocumentsModal';
-import SmartImportModal from './SmartImportModal';
-import GlobalVoiceModal from './GlobalVoiceModal';
 import AgendaTab from './AgendaTab';
 import TeamTab from './TeamTab';
 import NotificationBell from './NotificationBell';
@@ -91,8 +89,6 @@ export default function CRM() {
   const [showAICreate, setShowAICreate] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(true);
-  const [showSmartImport, setShowSmartImport] = useState(false);
-  const [showGlobalVoice, setShowGlobalVoice] = useState(false);
   const [importToast, setImportToast] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
@@ -326,26 +322,6 @@ export default function CRM() {
           setTimeout(() => setImportToast(null), 5000);
         }}
       />
-
-      {/* Modal Note vocale globale */}
-      {showGlobalVoice && (
-        <GlobalVoiceModal
-          mandats={mandats}
-          clients={clients}
-          onClose={() => setShowGlobalVoice(false)}
-          onSuccess={(mode, counts) => {
-            setShowGlobalVoice(false);
-            let msg = '';
-            if (mode === 'taches') msg = `${counts.tachesCount} tâche${counts.tachesCount > 1 ? 's' : ''} créée${counts.tachesCount > 1 ? 's' : ''}`;
-            else if (mode === 'reunion_recurrente') msg = 'Réunion récurrente ajoutée à l\'agenda';
-            else if (mode === 'compte_rendu') msg = `Compte-rendu enregistré${counts.actionsCount ? ` avec ${counts.actionsCount} action${counts.actionsCount > 1 ? 's' : ''}` : ''}`;
-            else msg = 'Note enregistrée';
-            setImportToast(msg);
-            loadAll();
-            setTimeout(() => setImportToast(null), 5000);
-          }}
-        />
-      )}
     </div>
   );
 }
