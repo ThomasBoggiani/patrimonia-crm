@@ -1976,8 +1976,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
     <div className="p-8 max-w-7xl">
 
       {/* ═══ EN-TÊTE ═══ */}
-          )}
-        </div>
         <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink flex-shrink-0">
           <Edit2 className="w-4 h-4" /> Modifier
         </button>
