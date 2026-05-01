@@ -1979,65 +1979,75 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1 min-w-0">
           <h1 className="font-display text-3xl font-semibold text-stone-900 mb-1">{mandat.nom}</h1>
-          <p className="text-stone-500 flex items-center gap-2 text-sm mb-3">
+          <p className="text-stone-500 flex items-center gap-2 text-sm">
             <MapPin className="w-4 h-4" />{mandat.adresse}
           </p>
-          {highlights.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {highlights.slice(0, 5).map((h, i) => (
-                <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium rounded-full">
-                  <Sparkles className="w-3 h-3 text-amber-600" />{h}
-                </span>
-              ))}
-              {highlights.length > 5 && (
-                <span className="inline-flex items-center px-2.5 py-1 bg-cream-100 text-stone-600 text-xs rounded-full">
-                  +{highlights.length - 5}
-                </span>
-              )}
-            </div>
-          )}
         </div>
         <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink flex-shrink-0">
           <Edit2 className="w-4 h-4" /> Modifier
         </button>
       </div>
 
-      {/* ═══ BARRE D'ACTIONS ═══ */}
-      <div className="mb-6 pb-6 border-b border-stone-200 flex items-center gap-4 flex-wrap">
-        {/* Boutons PDF + actions */}
-        <div className="flex-1 min-w-0">
-          <h3 className="text-xs font-medium text-stone-500 uppercase tracking-wide mb-2">Dossier</h3>
-          <div className="flex flex-wrap gap-2 items-center">
-            <PdfExportButtons mandatId={mandat.id} mandatNom={mandat.nom} isOffMarket={mandat.is_off_market} />
-            <button onClick={() => setOpenModal('photos')} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
-              <ImageIcon className="w-4 h-4" /> Photos {(mandat.photos || []).length > 0 && <span className="text-[10px] bg-sage-100 text-sage-dark px-1.5 py-0.5 rounded-full ml-0.5">{mandat.photos.length}</span>}
-            </button>
-            <button onClick={() => setOpenModal('visite')} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
-              <Eye className="w-4 h-4" /> Visite {(mandat.visiteInfo || mandat.visite_info) && Object.values(mandat.visiteInfo || mandat.visite_info).some(v => v) && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
-            </button>
-            <button onClick={() => setOpenModal('mandant')} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
-              <UserIcon className="w-4 h-4" /> Mandant {(mandat.mandantInfo || mandat.mandant_info) && Object.values(mandat.mandantInfo || mandat.mandant_info).some(v => v) && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
-            </button>
-            <button onClick={() => setOpenModal('documents')} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
-              <FolderOpen className="w-4 h-4" /> Documents
-            </button>
-          </div>
-        </div>
+      {/* ═══ PHOTO + TAGS IA (côte à côte) ═══ */}
+      <div className="flex items-stretch gap-4 mb-4">
+        {(mandat.photos && mandat.photos.length > 0) ? (
+          <button onClick={() => setOpenModal('photos')} className="flex-shrink-0 w-48 h-32 rounded-lg overflow-hidden bg-cream-100 border border-cream-dark hover:opacity-90 relative">
+            <img src={mandat.photos[0]} alt={mandat.nom} className="w-full h-full object-cover" />
+            {mandat.photos.length > 1 && (
+              <div className="absolute bottom-1.5 right-1.5 bg-stone-900/70 text-white text-[10px] px-1.5 py-0.5 rounded-full">+{mandat.photos.length - 1}</div>
+            )}
+          </button>
+        ) : (
+          <button onClick={() => setOpenModal('photos')} className="flex-shrink-0 w-48 h-32 rounded-lg bg-cream-100 border border-dashed border-cream-dark hover:bg-cream-200 flex flex-col items-center justify-center text-stone-400 text-xs gap-1">
+            <ImageIcon className="w-6 h-6" />
+            <span>Ajouter photos</span>
+          </button>
+        )}
 
-        {/* Badge mandat avec lumière publié */}
-        <div className="flex items-center gap-2">
-          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium ${commColor}`}>
-            <span>{mandat.commercialisation}</span>
-            <div className="flex items-center gap-1" title={isPublished ? 'Publié sur les portails' : 'Non publié'}>
-              <div className={`w-2 h-2 rounded-full ${isPublished ? 'bg-emerald-500 animate-pulse' : 'bg-stone-300'}`} />
+        <div className="flex-1 min-w-0 bg-amber-50/30 border border-amber-100 rounded-lg p-3">
+          {highlights.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5 max-h-[120px] overflow-y-auto scrollbar-thin">
+              {highlights.map((h, i) => (
+                <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium rounded-full">
+                  <Sparkles className="w-3 h-3 text-amber-600 flex-shrink-0" />{h}
+                </span>
+              ))}
             </div>
-          </div>
+          ) : (
+            <div className="text-xs text-stone-400 italic flex items-center gap-2 h-full">
+              <Sparkles className="w-4 h-4" />Aucun point fort identifié — L'IA en générera lors de l'analyse du dossier
+            </div>
+          )}
         </div>
-
-        {/* Avatar owner avec dropdown de réassignement */}
-        <OwnerSelector mandat={mandat} reload={reload} />
       </div>
 
+      {/* ═══ BARRE D'ACTIONS COMPACTE (1 ligne) ═══ */}
+      <div className="mb-6 pb-4 border-b border-stone-200 flex items-center gap-2 flex-wrap">
+        <PdfExportButtons mandatId={mandat.id} mandatNom={mandat.nom} isOffMarket={mandat.is_off_market} />
+        <button onClick={() => setOpenModal('photos')} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
+          <ImageIcon className="w-3.5 h-3.5" /> Photos {(mandat.photos || []).length > 0 && <span className="text-[10px] bg-sage-100 text-sage-dark px-1.5 py-0.5 rounded-full">{mandat.photos.length}</span>}
+        </button>
+        <button onClick={() => setOpenModal('visite')} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
+          <Eye className="w-3.5 h-3.5" /> Visite {(mandat.visiteInfo || mandat.visite_info) && Object.values(mandat.visiteInfo || mandat.visite_info).some(v => v) && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
+        </button>
+        <button onClick={() => setOpenModal('mandant')} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
+          <UserIcon className="w-3.5 h-3.5" /> Mandant {(mandat.mandantInfo || mandat.mandant_info) && Object.values(mandat.mandantInfo || mandat.mandant_info).some(v => v) && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
+        </button>
+        <button onClick={() => setOpenModal('documents')} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
+          <FolderOpen className="w-3.5 h-3.5" /> Documents
+        </button>
+
+        <div className="flex-1" />
+
+        <div className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full border text-xs font-medium ${commColor}`}>
+          <span>{mandat.commercialisation}</span>
+          <div className="flex items-center gap-1" title={isPublished ? 'Publié sur les portails' : 'Non publié'}>
+            <div className={`w-2 h-2 rounded-full ${isPublished ? 'bg-emerald-500 animate-pulse' : 'bg-stone-300'}`} />
+          </div>
+        </div>
+
+        <OwnerSelector mandat={mandat} reload={reload} />
+      </div>
       <div className="space-y-4">
         <div className="col-span-3 space-y-4">
           {/* ═══ ANALYSE FINANCIÈRE — REMONTÉE EN PREMIÈRE POSITION ═══ */}
