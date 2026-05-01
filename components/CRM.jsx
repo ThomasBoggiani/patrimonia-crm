@@ -106,6 +106,7 @@ export default function CRM() {
   const [clients, setClients] = useState([]);
   const [deals, setDeals] = useState([]);
   const [todos, setTodos] = useState([]);
+  const [allProfiles, setAllProfiles] = useState([]);
   const [annonces, setAnnonces] = useState([]);
   const [campagnes, setCampagnes] = useState([]);
   const [questionnaires, setQuestionnaires] = useState([]);
@@ -133,6 +134,8 @@ export default function CRM() {
       setClients((c.data || []).map(toCamel));
       setDeals((d.data || []).map(toCamel));
       setTodos((t.data || []).map(toCamel));
+      const profiles = await supabase.from('profiles').select('id, prenom, nom, role, actif').eq('actif', true);
+    setAllProfiles(profiles.data || []);
       setAnnonces((a.data || []).map(toCamel));
       setCampagnes((cp.data || []).map(toCamel));
       setQuestionnaires((q.data || []).map(toCamel));
@@ -267,8 +270,8 @@ export default function CRM() {
 
         <main className="flex-1 overflow-y-auto scrollbar-thin">
           <div className="fade-in" key={activeTab}>
-            {activeTab === 'dashboard' && <Dashboard mandats={mandats} clients={clients} deals={deals} todos={todos} reload={loadAll} />}
-            {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} clients={clients} deals={deals} interactions={interactions} todos={todos} annonces={annonces} />}
+            {activeTab === 'dashboard' && <Dashboard mandats={mandats} clients={clients} deals={deals} todos={todos} reload={loadAll} allProfiles={allProfiles} />}
+            {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} clients={clients} deals={deals} interactions={interactions} todos={todos} annonces={annonces} allProfiles={allProfiles} />}
             {activeTab === 'clients' && <ClientsTab clients={clients} reload={loadAll} mandats={mandats} deals={deals} interactions={interactions} />}
             {activeTab === 'deals' && <DealsTab deals={deals} reload={loadAll} mandats={mandats} clients={clients} />}
             {activeTab === 'matching' && <MatchingTab mandats={mandats} clients={clients} deals={deals} reload={loadAll} />}
@@ -334,7 +337,7 @@ export default function CRM() {
 // Lignes ~365-446 dans l'original
 // ═══════════════════════════════════════════════════════════════════
 
-function Dashboard({ mandats, clients, deals, todos, reload }) {
+function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [] }) {
   const { user, profile } = useAuth();
   const myInitials = getCurrentUserInitials(profile);
   const myFirstName = profile?.prenom || (profile?.nom ? profile.nom.split(' ')[0] : 'utilisateur');
@@ -733,9 +736,9 @@ function Field({ label, children }) {
 // TaskInline : composant réutilisable pour afficher + modifier une tâche
 // Utilisé dans le Dashboard, fiche Mandat, fiche Client
 // ═══════════════════════════════════════════════════════════════════
-function TaskInline({ task, mandats = [], clients = [], onUpdate }) {
+function TaskInline({ task, mandats = [], clients = [], allProfiles = [], onUpdate }) {
   const [editing, setEditing] = useState(false);
-  const [editData, setEditData] = useState({ titre: task.titre, echeance: task.echeance || '', priorite: task.priorite || 'Moyenne', statut: task.statut || 'À faire' });
+  const [editData, setEditData] = useState({ titre: task.titre, echeance: task.echeance || '', priorite: task.priorite || 'Moyenne', statut: task.statut || 'À faire', assignedToUserId: task.assignedToUserId || null, assignee: task.assignee || '' });
 
   const isLate = task.echeance && new Date(task.echeance) < new Date(new Date().toDateString()) && task.statut !== 'Terminé';
   const isToday = task.echeance && new Date(task.echeance).toDateString() === new Date().toDateString();
@@ -758,6 +761,8 @@ function TaskInline({ task, mandats = [], clients = [], onUpdate }) {
       echeance: editData.echeance || null,
       priorite: editData.priorite,
       statut: editData.statut,
+      assigned_to_user_id: editData.assignedToUserId || null,
+      assignee: editData.assignee || null,
     }).eq('id', task.id);
     setEditing(false);
     if (onUpdate) onUpdate();
@@ -789,6 +794,16 @@ function TaskInline({ task, mandats = [], clients = [], onUpdate }) {
           <option>À faire</option>
           <option>En cours</option>
           <option>Terminé</option>
+        </select>
+        <select value={editData.assignedToUserId || ''} onChange={e => {
+          const userId = e.target.value || null;
+          const profile = allProfiles.find(p => p.id === userId);
+          setEditData({ ...editData, assignedToUserId: userId, assignee: profile ? `${profile.prenom} ${profile.nom}` : '' });
+        }} className="w-full px-2 py-1.5 border border-stone-200 rounded text-sm bg-white">
+          <option value="">Non assigné</option>
+          {allProfiles.map(p => (
+            <option key={p.id} value={p.id}>{p.prenom} {p.nom}</option>
+          ))}
         </select>
         <div className="flex gap-2">
           <button onClick={saveEdit} className="flex-1 px-3 py-1.5 bg-stone-900 text-white rounded text-sm hover:bg-stone-800">Enregistrer</button>
@@ -933,7 +948,7 @@ function TypeInteractionBadge({ type }) {
 }
 
 // === MANDATS ===
-function MandatsTab({ mandats, reload, clients, deals, todos, annonces }) {
+function MandatsTab({ mandats, reload, clients, deals, todos, annonces, allProfiles = [] }) {
   const { user, profile } = useAuth();
   const [search, setSearch] = useState('');
   const [filterComm, setFilterComm] = useState('Tous');
@@ -1002,7 +1017,7 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces }) {
 
   if (selectedMandat) {
     const currentMandat = mandats.find(m => m.id === selectedMandat.id) || selectedMandat;
-    return <MandatDetail mandat={currentMandat} onBack={() => setSelectedMandat(null)} onEdit={() => { setEditingMandat(currentMandat); setSelectedMandat(null); }} deals={deals} clients={clients} reload={reload} todos={todos} annonces={annonces} />;
+    return <MandatDetail mandat={currentMandat} onBack={() => setSelectedMandat(null)} onEdit={() => { setEditingMandat(currentMandat); setSelectedMandat(null); }} deals={deals} clients={clients} reload={reload} todos={todos} annonces={annonces} allProfiles={allProfiles} />;
   }
 
   return (
@@ -1781,7 +1796,7 @@ function getDPEColor(conso) {
   }[cls] || '#9CA3AF';
 }
 
-function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, annonces }) {
+function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, annonces, allProfiles = [] }) {
   const [openModal, setOpenModal] = useState(null); // 'photos' | 'visite' | 'mandant' | null
   const mandatDeals = deals.filter(d => d.mandatId === mandat.id);
   const alerts = mandat.alerts || [];
@@ -1921,7 +1936,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
             </h2>
             <div className="space-y-2">
               {mandatTodos.filter(t => t.statut !== 'Terminé').map(t => (
-                <TaskInline key={t.id} task={t} mandats={[mandat]} clients={clients} onUpdate={reload} />
+                <TaskInline key={t.id} task={t} mandats={[mandat]} clients={clients} allProfiles={allProfiles} onUpdate={reload} />
               ))}
               <QuickAddTask
                 lienType="mandat"
