@@ -347,7 +347,7 @@ function Dashboard({ mandats, clients, deals, todos, reload }) {
   endOfWeek.setDate(endOfWeek.getDate() + (7 - today.getDay()));
 
   // ─── KPIs personnalisés ───
-  const myMandats = mandats.filter(m => m.owner === myInitials && !['Perdu', 'Acte'].includes(m.statut));
+  const myMandats = mandats.filter(m => m.owner === myInitials && !['Perdu', 'Acte', 'Vendu par autres'].includes(m.statut));
   
   const isToday = (dateStr) => {
     if (!dateStr) return false;
@@ -400,7 +400,7 @@ function Dashboard({ mandats, clients, deals, todos, reload }) {
   });
 
   const mandatsSansDPE = mandats.filter(m => 
-    !['Perdu', 'Acte'].includes(m.statut) 
+    !['Perdu', 'Acte', 'Vendu par autres'].includes(m.statut) 
     && !m.dpeConsommation 
     && !m.dpe_consommation
   );
@@ -434,7 +434,7 @@ function Dashboard({ mandats, clients, deals, todos, reload }) {
           value={myMandats.length}
           icon={Building2}
           accent="sage"
-          sublabel={`Sur ${mandats.filter(m => !['Perdu', 'Acte'].includes(m.statut)).length} actifs au total`}
+          sublabel={`Sur ${mandats.filter(m => !['Perdu', 'Acte', 'Vendu par autres'].includes(m.statut)).length} actifs au total`}
         />
         <KpiCard
           label="Mes tâches du jour"
@@ -560,12 +560,12 @@ function Dashboard({ mandats, clients, deals, todos, reload }) {
           <div className="text-2xl font-display font-semibold text-stone-900">
             {formatPrixCompact(mandats.filter(m => m.statut !== 'Perdu').reduce((s, m) => s + (parseFloat(m.prix) || 0), 0))}
           </div>
-          <div className="text-xs text-stone-500 mt-1">{mandats.filter(m => !['Perdu', 'Acte'].includes(m.statut)).length} mandats actifs</div>
+          <div className="text-xs text-stone-500 mt-1">{mandats.filter(m => !['Perdu', 'Acte', 'Vendu par autres'].includes(m.statut)).length} mandats actifs</div>
         </div>
         <div className="bg-white rounded-xl p-5 shadow-luxe border border-cream-dark">
           <div className="text-xs uppercase tracking-wide text-stone-500 mb-1">Off-market</div>
           <div className="text-2xl font-display font-semibold text-stone-900">
-            {mandats.filter(m => m.commercialisation === 'Off-market' && !['Perdu', 'Acte'].includes(m.statut)).length}
+            {mandats.filter(m => m.commercialisation === 'Off-market' && !['Perdu', 'Acte', 'Vendu par autres'].includes(m.statut)).length}
           </div>
           <div className="text-xs text-stone-500 mt-1">Mandats discrets</div>
         </div>
