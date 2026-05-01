@@ -699,11 +699,11 @@ function CommerceBadge({ comm, dateSignature }) {
   const c = config[comm] || config['Off-market'];
   return (
     <div className="inline-flex flex-col items-start gap-0.5">
-      <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full ${c.bg}`}>
-        <div className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
-        <span className={`text-xs font-medium ${c.text}`}>{c.label}</span>
+      <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full ${c.bg}`}>
+        <div className={`w-1 h-1 rounded-full ${c.dot}`} />
+        <span className={`text-[10px] font-medium ${c.text}`}>{c.label}</span>
       </div>
-      {dateSignature && <span className="text-[10px] text-stone-500 ml-2">Signé {new Date(dateSignature).toLocaleDateString('fr-FR')}</span>}
+      {dateSignature && <span className="text-[9px] text-stone-500 ml-1.5">Signé {new Date(dateSignature).toLocaleDateString('fr-FR')}</span>}
     </div>
   );
 }
