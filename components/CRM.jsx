@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
+import AICreateModal from './AICreateModal';
 import VoiceNoteModal from './VoiceNoteModal';
 import MandatAIAssistant from './MandatAIAssistant';
 import DocumentsModal from './DocumentsModal';
@@ -87,6 +88,7 @@ const toSnake = (obj) => {
 // === COMPOSANT PRINCIPAL ===
 export default function CRM() {
   const { profile, signOut } = useAuth();
+  const [showAICreate, setShowAICreate] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(true);
   const [showSmartImport, setShowSmartImport] = useState(false);
@@ -222,16 +224,14 @@ export default function CRM() {
             </div>
           </div>
           <nav className="flex-1 p-3 overflow-y-auto scrollbar-thin">
-            {/* Bouton Import intelligent - accessible partout */}
+            {/* Bouton ✨ Créer avec l'IA - unifié */}
             <button 
-              onClick={() => { setShowSmartImport(true); setSidebarOpen(false); }}
-              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm mb-2 gradient-sage-dark text-white hover:opacity-90 shadow-luxe font-medium"
+              onClick={() => { setShowAICreate(true); setSidebarOpen(false); }}
+              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm mb-3 gradient-sage-dark text-white hover:opacity-90 shadow-luxe font-medium"
             >
               <Sparkles className="w-4 h-4" />
-              <span>Import intelligent</span>
-            </button>
-            {/* Bouton Note vocale globale */}
-            <button 
+              <span>Créer avec l'IA</span>
+            </button> 
               onClick={() => { setShowGlobalVoice(true); setSidebarOpen(false); }}
               className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm mb-3 bg-white border border-sage text-sage-dark hover:bg-sage-50 font-medium"
             >
@@ -319,24 +319,19 @@ export default function CRM() {
         </div>
       )}
 
-      {/* Modal Import intelligent */}
-      {showSmartImport && (
-        <SmartImportModal
-          mandats={mandats}
-          clients={clients}
-          onClose={() => setShowSmartImport(false)}
-          onSuccess={({ mandatId, clientId, tasksCreated }) => {
-            setShowSmartImport(false);
-            const parts = [];
-            if (mandatId) parts.push('1 mandat');
-            if (clientId) parts.push('1 client');
-            if (tasksCreated > 0) parts.push(`${tasksCreated} tâche${tasksCreated > 1 ? 's' : ''}`);
-            setImportToast(parts.length > 0 ? parts.join(' · ') + ' enregistré' + (parts.length > 1 || tasksCreated > 1 ? 's' : '') : 'Import terminé');
-            loadAll();
-            setTimeout(() => setImportToast(null), 5000);
-          }}
-        />
-      )}
+      {/* Modal ✨ Créer avec l'IA */}
+      <AICreateModal
+        open={showAICreate}
+        onClose={() => setShowAICreate(false)}
+        onCreated={({ mandat, client }) => {
+          const parts = [];
+          if (mandat) parts.push('Mandat créé');
+          if (client) parts.push('Client créé');
+          setImportToast(parts.join(' · '));
+          loadAll();
+          setTimeout(() => setImportToast(null), 5000);
+        }}
+      />
 
       {/* Modal Note vocale globale */}
       {showGlobalVoice && (
