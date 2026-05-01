@@ -1992,7 +1992,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
       <div className="flex items-stretch gap-4 mb-4">
         {(mandat.photos && mandat.photos.length > 0) ? (
           <button onClick={() => setOpenModal('photos')} className="flex-shrink-0 w-48 h-32 rounded-lg overflow-hidden bg-cream-100 border border-cream-dark hover:opacity-90 relative">
-            <img src={mandat.photos[0]} alt={mandat.nom} className="w-full h-full object-cover" />
+            <img src={mandat.photos[0].url || mandat.photos[0]} alt={mandat.nom} className="w-full h-full object-cover" />
             {mandat.photos.length > 1 && (
               <div className="absolute bottom-1.5 right-1.5 bg-stone-900/70 text-white text-[10px] px-1.5 py-0.5 rounded-full">+{mandat.photos.length - 1}</div>
             )}
