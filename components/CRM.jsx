@@ -236,7 +236,7 @@ export default function CRM() {
               const Icon = tab.icon;
               const active = activeTab === tab.id;
               return (
-                <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSidebarOpen(false); }}
+                <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSidebarOpen(false); setSelectedMandat(null); setSelectedClient(null); }}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all mb-1 ${
                     active 
                       ? 'bg-sage-50 text-sage-darker font-medium border border-sage-light' 
@@ -1974,9 +1974,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
 
   return (
     <div className="p-8 max-w-7xl">
-      <button onClick={onBack} className="flex items-center gap-2 text-sm text-stone-600 hover:text-stone-900 mb-6">
-        <ChevronRight className="w-4 h-4 rotate-180" /> Retour aux mandats
-      </button>
 
       {/* ═══ EN-TÊTE ═══ */}
       <div className="flex items-start justify-between mb-4">
