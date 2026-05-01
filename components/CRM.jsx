@@ -32,6 +32,8 @@ const eurFormatter = new Intl.NumberFormat('fr-FR', {
   style: 'currency',
   currency: 'EUR',
   maximumFractionDigits: 0,
+  Image as ImageIcon, Camera, Plug, FolderOpen, Trophy, TrendingUp
+} from 'lucide-react';
 });
 
 function formatPrix(n) {
@@ -152,7 +154,7 @@ export default function CRM() {
     { id: 'clients', label: 'Clients', icon: Users },
     { id: 'deals', label: 'Deals', icon: Handshake },
     { id: 'matching', label: 'Matching auto', icon: Sparkles },
-    { id: 'todos', label: 'To-do perso', icon: CheckSquare },
+    { id: 'todos', label: 'To-do perso', icon: CheckSquare },     { id: 'remuneration', label: 'Rémunération', icon: TrendingUp },
     { id: 'agenda', label: 'Agenda', icon: Calendar },
     { id: 'annonces', label: 'Annonces', icon: Megaphone },
     { id: 'questionnaires', label: 'Questionnaires', icon: FileQuestion },
@@ -276,6 +278,7 @@ export default function CRM() {
             {activeTab === 'deals' && <DealsTab deals={deals} reload={loadAll} mandats={mandats} clients={clients} />}
             {activeTab === 'matching' && <MatchingTab mandats={mandats} clients={clients} deals={deals} reload={loadAll} />}
             {activeTab === 'todos' && <TodosTab todos={todos} reload={loadAll} mandats={mandats} clients={clients} deals={deals} allProfiles={allProfiles} />}
+            {activeTab === 'remuneration' && <RemunerationTab mandats={mandats} allProfiles={allProfiles} />}
             {activeTab === 'agenda' && <AgendaTab />}
             {activeTab === 'integrations' && <IntegrationsTab />}
             {activeTab === 'team' && <TeamTab />}
@@ -2975,6 +2978,223 @@ function MatchingTab({ mandats, clients, deals, reload }) {
 }
 
 // === TODOS ===
+// ═══════════════════════════════════════════════════════════════════
+// RemunerationTab v2 — page "📈 Rémunération" : commissions par commercial
+// Calcul : prix_HT = prix_TTC / 1.20
+//          commission_agence = prix_HT * 5%  (la base à partager)
+//          part pourvoyeur = commission * 30%
+//          part vendeur = commission * 30%
+//          part agence = commission * 40%
+// ═══════════════════════════════════════════════════════════════════
+
+function RemunerationTab({ mandats, allProfiles = [] }) {
+  const { user, profile } = useAuth();
+  const [rates, setRates] = useState({ pourvoyeur: 30, vendeur: 30, agence: 40, taux_commission: 5, tva: 20 });
+  const [selectedUserId, setSelectedUserId] = useState(null);
+
+  // Manager ou pas
+  const isManager = profile?.role === 'admin' || profile?.role === 'directeur' ||
+    (profile?.prenom === 'Thomas' && (profile?.nom === 'Ezquerra' || profile?.nom === 'Boggiani'));
+
+  // Charger les taux depuis settings
+  useEffect(() => {
+    supabase.from('settings').select('value').eq('key', 'commission_rates').single().then(({ data }) => {
+      if (data?.value) {
+        setRates(prev => ({ ...prev, ...data.value }));
+      }
+    });
+  }, []);
+
+  // Par défaut : on affiche la fiche de l'utilisateur connecté
+  useEffect(() => {
+    if (user && !selectedUserId) setSelectedUserId(user.id);
+  }, [user, selectedUserId]);
+
+  if (!selectedUserId) return <div className="p-8">Chargement...</div>;
+
+  // Identité du commercial affiché
+  const targetProfile = allProfiles.find(p => p.id === selectedUserId);
+  const isMe = selectedUserId === user?.id;
+
+  // Filtrer les mandats où je suis pourvoyeur OU vendeur
+  const myMandats = mandats.filter(m =>
+    m.pourvoyeurId === selectedUserId || m.vendeurId === selectedUserId
+  );
+
+  // Calcul commission par mandat
+  function computeCommission(m) {
+    const prixTTC = parseFloat(m.prix) || 0;
+    const prixHT = prixTTC / (1 + rates.tva / 100);
+    const commissionAgence = prixHT * (rates.taux_commission / 100); // 5% du HT
+
+    const isPourvoyeur = m.pourvoyeurId === selectedUserId;
+    const isVendeur = m.vendeurId === selectedUserId;
+
+    let partPerso = 0;
+    if (isPourvoyeur) partPerso += commissionAgence * (rates.pourvoyeur / 100);
+    if (isVendeur) partPerso += commissionAgence * (rates.vendeur / 100);
+
+    return { prixTTC, prixHT, commissionAgence, partPerso, isPourvoyeur, isVendeur };
+  }
+
+  // KPIs agrégés
+  const STATUTS_ENCAISSE = ['Acte'];
+  const STATUTS_EN_COURS = ['Promesse'];
+  const STATUTS_POTENTIEL = ['Offre'];
+  const STATUTS_ALL = [...STATUTS_ENCAISSE, ...STATUTS_EN_COURS, ...STATUTS_POTENTIEL];
+
+  const filteredMandats = myMandats.filter(m => STATUTS_ALL.includes(m.statut));
+
+  let caTotal = 0;           // Somme prix TTC des mandats où j'interviens
+  let commissionAgence = 0;  // 5% du HT (la base à partager)
+  let partEncaisse = 0;
+  let partEnCours = 0;
+  let partPotentiel = 0;
+
+  for (const m of filteredMandats) {
+    const calc = computeCommission(m);
+    caTotal += calc.prixTTC;
+    commissionAgence += calc.commissionAgence;
+    if (STATUTS_ENCAISSE.includes(m.statut)) partEncaisse += calc.partPerso;
+    if (STATUTS_EN_COURS.includes(m.statut)) partEnCours += calc.partPerso;
+    if (STATUTS_POTENTIEL.includes(m.statut)) partPotentiel += calc.partPerso;
+  }
+
+  const partTotal = partEncaisse + partEnCours + partPotentiel;
+
+  // Couleur statut
+  const statutColor = {
+    'Acte': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    'Promesse': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    'Offre': 'bg-purple-50 text-purple-700 border-purple-200',
+  };
+
+  return (
+    <div className="p-6 max-w-none">
+
+      {/* En-tête */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-baseline gap-3">
+          <h1 className="font-display text-2xl font-semibold text-stone-900">📈 Rémunération</h1>
+          {targetProfile && (
+            <span className="text-stone-500 text-sm">
+              {isMe ? 'Mes commissions' : `${targetProfile.prenom} ${targetProfile.nom}`}
+            </span>
+          )}
+        </div>
+
+        {/* Sélecteur de commercial pour les managers */}
+        {isManager && (
+          <select
+            value={selectedUserId}
+            onChange={e => setSelectedUserId(e.target.value)}
+            className="px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900"
+          >
+            {allProfiles.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.prenom} {p.nom}{p.id === user?.id ? ' (moi)' : ''}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {/* Bandeau info taux */}
+      <div className="mb-4 p-3 bg-stone-50 border border-stone-200 rounded-lg flex items-center gap-4 text-xs text-stone-600 flex-wrap">
+        <span>💡 Calcul :</span>
+        <span>Prix TTC ÷ {(1 + rates.tva / 100).toFixed(2)} = HT</span>
+        <span>· Commission agence = HT × {rates.taux_commission}%</span>
+        <span>· Répartition : Pourvoyeur {rates.pourvoyeur}% + Vendeur {rates.vendeur}% + Agence {rates.agence}%</span>
+      </div>
+
+      {/* 3 KPI Cards */}
+      <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="bg-white rounded-xl p-5 border border-stone-200 shadow-luxe">
+          <div className="text-xs uppercase tracking-wide text-stone-500 mb-1">CA total participé</div>
+          <div className="text-2xl font-semibold text-stone-900">{formatPrixCompact(caTotal)}</div>
+          <div className="text-xs text-stone-500 mt-1">{filteredMandats.length} mandat{filteredMandats.length > 1 ? 's' : ''} · TTC</div>
+        </div>
+        <div className="bg-white rounded-xl p-5 border border-stone-200 shadow-luxe">
+          <div className="text-xs uppercase tracking-wide text-stone-500 mb-1">Commission agence ({rates.taux_commission}% HT)</div>
+          <div className="text-2xl font-semibold text-stone-900">{formatPrixCompact(commissionAgence)}</div>
+          <div className="text-xs text-stone-500 mt-1">à partager 30/30/40</div>
+        </div>
+        <div className="bg-gradient-to-br from-sage-50 to-sage-100 rounded-xl p-5 border border-sage-200 shadow-luxe">
+          <div className="text-xs uppercase tracking-wide text-sage-darker mb-1">Ma part (total)</div>
+          <div className="text-2xl font-semibold text-sage-darker">{formatPrixCompact(partTotal)}</div>
+          <div className="text-xs text-sage-dark mt-1">
+            <span className="text-emerald-700 font-medium">{formatPrixCompact(partEncaisse)} encaissé</span>
+            {' · '}
+            <span>{formatPrixCompact(partEnCours)} en cours</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Tableau des mandats */}
+      <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-stone-50 border-b border-stone-200">
+            <tr>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Mandat</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Statut</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Mon rôle</th>
+              <th className="text-right px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Prix TTC</th>
+              <th className="text-right px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Commission ({rates.taux_commission}% HT)</th>
+              <th className="text-right px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Ma part</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredMandats.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="p-12 text-center text-stone-500 text-sm">Aucun mandat éligible (Acte / Promesse / Offre)</td>
+              </tr>
+            ) : (
+              filteredMandats.map(m => {
+                const calc = computeCommission(m);
+                const isPotentiel = STATUTS_POTENTIEL.includes(m.statut);
+                const isEncaisse = STATUTS_ENCAISSE.includes(m.statut);
+                return (
+                  <tr key={m.id} className="border-b border-stone-100 hover:bg-stone-50/50">
+                    <td className="px-3 py-2">
+                      <div className="text-sm font-medium text-stone-900 truncate max-w-md">{m.nom}</div>
+                      <div className="text-xs text-stone-500 truncate">{m.adresse}</div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${statutColor[m.statut] || 'bg-stone-100 text-stone-700 border-stone-200'}`}>{m.statut}</span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex gap-1 flex-wrap">
+                        {calc.isPourvoyeur && <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-full border border-blue-200">🤝 Pourvoyeur</span>}
+                        {calc.isVendeur && <span className="text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-800 rounded-full border border-amber-200">🎯 Vendeur</span>}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-right text-sm text-stone-700">{formatPrixCompact(calc.prixTTC)}</td>
+                    <td className="px-3 py-2 text-right text-sm text-stone-700">{formatPrixCompact(calc.commissionAgence)}</td>
+                    <td className="px-3 py-2 text-right">
+                      <div className={`text-sm font-semibold ${isEncaisse ? 'text-emerald-700' : isPotentiel ? 'text-stone-400' : 'text-stone-900'}`}>
+                        {formatPrixCompact(calc.partPerso)}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+          {filteredMandats.length > 0 && (
+            <tfoot className="bg-stone-50 border-t-2 border-stone-200">
+              <tr>
+                <td colSpan={3} className="px-3 py-2 text-sm font-semibold text-stone-900">TOTAL</td>
+                <td className="px-3 py-2 text-right text-sm font-semibold text-stone-900">{formatPrixCompact(caTotal)}</td>
+                <td className="px-3 py-2 text-right text-sm font-semibold text-stone-900">{formatPrixCompact(commissionAgence)}</td>
+                <td className="px-3 py-2 text-right text-sm font-semibold text-sage-darker">{formatPrixCompact(partTotal)}</td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+    </div>
+  );
+}
 function TodosTab({ todos, reload, mandats, clients, deals, allProfiles = [] }) {
   const { user, profile } = useAuth();
   const [filter, setFilter] = useState('all');
