@@ -22,7 +22,6 @@ export default function PdfExportButtons({ mandatId, mandatNom, isOffMarket }) {
     setError(null);
     
     try {
-      // 1. Récupère le token Supabase actuel
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session?.access_token) {
@@ -31,7 +30,6 @@ export default function PdfExportButtons({ mandatId, mandatNom, isOffMarket }) {
         return;
       }
       
-      // 2. Construit l'URL avec le token
       const queryString = new URLSearchParams({
         template,
         token: session.access_token,
@@ -39,11 +37,7 @@ export default function PdfExportButtons({ mandatId, mandatNom, isOffMarket }) {
       }).toString();
       
       const url = `/api/mandats/${mandatId}/pdf?${queryString}`;
-      
-      // 3. Ouvre dans un nouvel onglet
       window.open(url, '_blank');
-      
-      // 4. Reset le loading après 1 sec
       setTimeout(() => setLoading(null), 1000);
     } catch (err) {
       console.error('[PdfExportButtons] Erreur:', err);
@@ -66,50 +60,43 @@ export default function PdfExportButtons({ mandatId, mandatNom, isOffMarket }) {
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap gap-2 items-center">
-        {/* Bouton Plaquette Acheteur */}
-        <button
-          onClick={handlePlaquette}
-          disabled={loading !== null}
-          className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded border border-stone-300 bg-white text-stone-900 hover:bg-stone-50 disabled:opacity-50 transition"
-        >
-          {loading === 'plaquette' ? <Spinner /> : <span>📄</span>}
-          <span>Plaquette acheteur</span>
-          {isOffMarket && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-stone-900 text-amber-200 font-semibold tracking-wider">
-              OFF-MARKET
-            </span>
-          )}
-        </button>
+    <>
+      <button
+        onClick={handlePlaquette}
+        disabled={loading !== null}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-cream-50 disabled:opacity-50 transition"
+      >
+        {loading === 'plaquette' ? <Spinner /> : <span>📄</span>}
+        <span>Plaquette</span>
+        {isOffMarket && (
+          <span className="text-[9px] px-1 py-0.5 rounded bg-stone-900 text-amber-200 font-semibold tracking-wider">
+            OFF
+          </span>
+        )}
+      </button>
 
-        {/* Bouton Rapport Vendeur */}
-        <button
-          onClick={() => setShowPeriodModal(true)}
-          disabled={loading !== null}
-          className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded border border-stone-300 bg-white text-stone-900 hover:bg-stone-50 disabled:opacity-50 transition"
-        >
-          {loading === 'rapport' ? <Spinner /> : <span>📊</span>}
-          <span>Rapport vendeur</span>
-        </button>
+      <button
+        onClick={() => setShowPeriodModal(true)}
+        disabled={loading !== null}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-cream-50 disabled:opacity-50 transition"
+      >
+        {loading === 'rapport' ? <Spinner /> : <span>📊</span>}
+        <span>Rapport</span>
+      </button>
 
-        {/* Bouton Fiche Interne */}
-        <button
-          onClick={handleInterne}
-          disabled={loading !== null}
-          className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded border border-stone-300 bg-white text-stone-900 hover:bg-stone-50 disabled:opacity-50 transition"
-        >
-          {loading === 'interne' ? <Spinner /> : <span>🗂️</span>}
-          <span>Fiche interne</span>
-        </button>
-      </div>
+      <button
+        onClick={handleInterne}
+        disabled={loading !== null}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-cream-50 disabled:opacity-50 transition"
+      >
+        {loading === 'interne' ? <Spinner /> : <span>🗂️</span>}
+        <span>Fiche interne</span>
+      </button>
 
-      {/* Erreur éventuelle */}
       {error && (
-        <p className="text-xs text-red-600">{error}</p>
+        <p className="text-xs text-red-600 w-full">{error}</p>
       )}
 
-      {/* Modal de choix période */}
       {showPeriodModal && (
         <PeriodPickerModal
           mandatNom={mandatNom}
@@ -117,7 +104,7 @@ export default function PdfExportButtons({ mandatId, mandatNom, isOffMarket }) {
           onCancel={() => setShowPeriodModal(false)}
         />
       )}
-    </div>
+    </>
   );
 }
 
