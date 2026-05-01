@@ -1457,8 +1457,14 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
     mandatNumero: '', mandatType: '', mandatDateEcheance: null,
     honorairesTaux: 0, honorairesMontant: 0, honorairesCharge: '',
     mandantClientId: null,
+    pourvoyeurId: null,
+    vendeurId: null,
   });
 
+  const [allProfiles, setAllProfiles] = useState([]);
+  useEffect(() => {
+    supabase.from('profiles').select('id, prenom, nom').eq('actif', true).then(({ data }) => setAllProfiles(data || []));
+  }, []);
   const [importProgress, setImportProgress] = useState(null);
   const [importResult, setImportResult] = useState(null);
   const [filledFields, setFilledFields] = useState(new Set());
@@ -1507,7 +1513,7 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
     nb_pieces: 'nbPieces', nb_chambres: 'nbChambres', etage: 'etage',
     annee_construction: 'anneeConstruction',
     prix: 'prix', prix_net_vendeur: 'prix', prix_m2: 'prixM2',
-    honoraires_charge: 'honorairesCharge', honoraires_taux: 'honorairesTaux', honoraires_montant: 'honorairesMontant',
+    honoraires_charge: 'honorairesCharge', honoraires_taux: 'honorairesTaux', honoraires_montant: 'honorairesMontant',     pourvoyeur_id: 'pourvoyeurId', vendeur_id: 'vendeurId',
     loyers_annuels: 'loyersAnnuels', rendement: 'rendement',
     charges_annuelles: 'chargesAnnuelles', taxe_fonciere: 'taxeFonciere',
     dpe_consommation: 'dpeConsommation', dpe_emissions: 'dpeEmissions', dpe_date: 'dpeDate',
@@ -1538,7 +1544,7 @@ async function handleFolderImport(event) {
         nom: data.nom || 'Nouveau mandat (import en cours)',
         type: data.type || "Immeuble d'habitation",
         statut: 'Sourcing',
-        owner: data.owner || 'JD',
+        owner: data.owner || 'JD',         pourvoyeur_id: data.pourvoyeurId || null,         vendeur_id: data.vendeurId || null,
         commercialisation: data.commercialisation || 'Off-market',
       }).select().single();
       if (createErr || !created) {
@@ -1678,7 +1684,7 @@ async function handleFolderImport(event) {
         nom: clientData.nom, prenom: clientData.prenom || null,
         societe: clientData.societe || null, tel: clientData.tel || null,
         email: clientData.email || null, typologie: 'Mandant',
-        created_by: user?.id, owner: data.owner || 'JD',
+        created_by: user?.id, owner: data.owner || 'JD',         pourvoyeur_id: data.pourvoyeurId || null,         vendeur_id: data.vendeurId || null,
       }).select().single();
       if (error || !created) { alert('Erreur création client : ' + (error?.message || 'inconnue')); return; }
       update('mandantClientId', created.id);
@@ -1819,6 +1825,20 @@ async function handleFolderImport(event) {
                 <Field label="Statut pipeline">
                   <select value={data.statut} onChange={e => update('statut', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
                     {STATUTS_MANDAT.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="🤝 Pourvoyeur (apporteur du mandat)">
+                  <select value={data.pourvoyeurId || ''} onChange={e => update('pourvoyeurId', e.target.value || null)} className={fieldClass('pourvoyeurId')}>
+                    <option value="">—</option>
+                    {allProfiles.map(p => <option key={p.id} value={p.id}>{p.prenom} {p.nom}</option>)}
+                  </select>
+                </Field>
+                <Field label="🎯 Vendeur (closer de la vente)">
+                  <select value={data.vendeurId || ''} onChange={e => update('vendeurId', e.target.value || null)} className={fieldClass('vendeurId')}>
+                    <option value="">—</option>
+                    {allProfiles.map(p => <option key={p.id} value={p.id}>{p.prenom} {p.nom}</option>)}
                   </select>
                 </Field>
               </div>
