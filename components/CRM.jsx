@@ -244,7 +244,7 @@ export default function CRM() {
               const Icon = tab.icon;
               const active = activeTab === tab.id;
               return (
-                <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSidebarOpen(false); setSelectedMandat(null); setSelectedClient(null); }}
+                <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all mb-1 ${
                     active 
                       ? 'bg-sage-50 text-sage-darker font-medium border border-sage-light' 
