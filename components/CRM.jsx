@@ -284,6 +284,7 @@ export default function CRM() {
             {activeTab === 'deals' && <DealsTab deals={deals} reload={loadAll} mandats={mandats} clients={clients} />}
             {activeTab === 'matching' && <MatchingTab mandats={mandats} clients={clients} deals={deals} reload={loadAll} />}
             {activeTab === 'todos' && <TodosTab todos={todos} reload={loadAll} mandats={mandats} clients={clients} deals={deals} allProfiles={allProfiles} />}
+            {activeTab === 'direction' && <DashboardDirection mandats={mandats} deals={deals} clients={clients} todos={todos} allProfiles={allProfiles} />}
             {activeTab === 'remuneration' && <RemunerationTab mandats={mandats} allProfiles={allProfiles} />}
             {activeTab === 'agenda' && <AgendaTab />}
             {activeTab === 'integrations' && <IntegrationsTab />}
