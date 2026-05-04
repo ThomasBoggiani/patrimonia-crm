@@ -9,7 +9,7 @@ import {
   Circle, CheckCircle2, Eye, Copy, Sparkles,
   FileUp, Loader2, AlertTriangle, Info, Wand2, Mic,
   User as UserIcon, LogOut, Shield, Menu,
-  Image as ImageIcon, Camera, Plug, FolderOpen, Trophy, TrendingUp
+  Image as ImageIcon, Camera, Plug, FolderOpen, Trophy, TrendingUp, Building2
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
@@ -34,6 +34,12 @@ const eurFormatter = new Intl.NumberFormat('fr-FR', {
   maximumFractionDigits: 0,
 });
 
+function isManager(profile) {
+  if (!profile) return false;
+  if (profile.role === 'admin' || profile.role === 'directeur') return true;
+  if (profile.prenom === 'Thomas' && (profile.nom === 'Ezquerra' || profile.nom === 'Boggiani')) return true;
+  return false;
+}
 function formatPrix(n) {
   const num = parseFloat(n);
   if (!Number.isFinite(num) || num === 0) return '—';
@@ -152,7 +158,9 @@ export default function CRM() {
     { id: 'clients', label: 'Clients', icon: Users },
     { id: 'deals', label: 'Deals', icon: Handshake },
     { id: 'matching', label: 'Matching auto', icon: Sparkles },
-    { id: 'todos', label: 'To-do perso', icon: CheckSquare },     { id: 'remuneration', label: 'Rémunération', icon: TrendingUp },
+    { id: 'todos', label: 'To-do perso', icon: CheckSquare },
+    ...(isManager(profile) ? [{ id: 'direction', label: 'Direction', icon: Building2 }] : []),
+    { id: 'remuneration', label: 'Rémunération', icon: TrendingUp },
     { id: 'agenda', label: 'Agenda', icon: Calendar },
     { id: 'annonces', label: 'Annonces', icon: Megaphone },
     { id: 'questionnaires', label: 'Questionnaires', icon: FileQuestion },
@@ -2985,6 +2993,287 @@ function MatchingTab({ mandats, clients, deals, reload }) {
 //          part agence = commission * 40%
 // ═══════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════
+// DashboardDirection — Vue manager pour TE/TB
+// Sprint A : structure de base + onglet conditionnel
+// À COLLER dans components/CRM.jsx avant la fonction TodosTab
+// ═══════════════════════════════════════════════════════════════════
+
+function DashboardDirection({ mandats, deals, clients, todos, allProfiles = [] }) {
+  const { user, profile } = useAuth();
+  const [rates, setRates] = useState({ pourvoyeur: 30, vendeur: 30, agence: 40, taux_commission: 5, tva: 20 });
+
+  // Charger les taux commission
+  useEffect(() => {
+    supabase.from('settings').select('value').eq('key', 'commission_rates').single().then(({ data }) => {
+      if (data?.value) setRates(prev => ({ ...prev, ...data.value }));
+    });
+  }, []);
+
+  // Liste des commerciaux actifs (excluant les profils techniques)
+  const commerciaux = allProfiles.filter(p => 
+    ['Thomas', 'Lucas', 'Philippe'].includes(p.prenom)
+  );
+
+  // ═══════════════════════════════════════════════════════════════
+  // CALCULS GLOBAUX
+  // ═══════════════════════════════════════════════════════════════
+
+  // Mandats actifs (hors Perdu et Vendu par autres)
+  const mandatsActifs = mandats.filter(m => 
+    !['Perdu', 'Vendu par autres'].includes(m.statut)
+  );
+
+  // Commission totale par mandat (5% du HT)
+  function commissionMandat(m) {
+    const prixTTC = parseFloat(m.prix) || 0;
+    const prixHT = prixTTC / (1 + rates.tva / 100);
+    return prixHT * (rates.taux_commission / 100);
+  }
+
+  // CA total participé (somme des prix TTC)
+  const caGlobal = mandatsActifs.reduce((sum, m) => sum + (parseFloat(m.prix) || 0), 0);
+
+  // Commission encaissée (Acte uniquement)
+  const commissionEncaissee = mandats
+    .filter(m => m.statut === 'Acte')
+    .reduce((sum, m) => sum + commissionMandat(m), 0);
+
+  // Commission en cours (Promesse)
+  const commissionEnCours = mandats
+    .filter(m => m.statut === 'Promesse')
+    .reduce((sum, m) => sum + commissionMandat(m), 0);
+
+  // Commission potentielle (Offre)
+  const commissionPotentielle = mandats
+    .filter(m => m.statut === 'Offre')
+    .reduce((sum, m) => sum + commissionMandat(m), 0);
+
+  // ═══════════════════════════════════════════════════════════════
+  // PIPELINE PAR STATUT
+  // ═══════════════════════════════════════════════════════════════
+
+  const STATUTS_PIPELINE = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisation', 'Offre', 'Promesse', 'Acte'];
+  const pipelineParStatut = STATUTS_PIPELINE.map(statut => {
+    const m = mandats.filter(m => m.statut === statut);
+    return {
+      statut,
+      count: m.length,
+      ca: m.reduce((sum, x) => sum + (parseFloat(x.prix) || 0), 0),
+      commission: m.reduce((sum, x) => sum + commissionMandat(x), 0),
+    };
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // PERFORMANCES PAR COMMERCIAL
+  // ═══════════════════════════════════════════════════════════════
+
+  const perfParCommercial = commerciaux.map(p => {
+    const mandatsAsPourvoyeur = mandatsActifs.filter(m => m.pourvoyeurId === p.id);
+    const mandatsAsVendeur = mandatsActifs.filter(m => m.vendeurId === p.id);
+    
+    // Pour chaque mandat, calculer la part de ce commercial
+    let partTotal = 0;
+    let partEncaissee = 0;
+    
+    mandatsActifs.forEach(m => {
+      const comm = commissionMandat(m);
+      const isPourvoyeur = m.pourvoyeurId === p.id;
+      const isVendeur = m.vendeurId === p.id;
+      let partMandat = 0;
+      if (isPourvoyeur) partMandat += comm * (rates.pourvoyeur / 100);
+      if (isVendeur) partMandat += comm * (rates.vendeur / 100);
+      partTotal += partMandat;
+      if (m.statut === 'Acte') partEncaissee += partMandat;
+    });
+
+    // Tâches en cours assignées à ce commercial
+    const tachesEnCours = (todos || []).filter(t => 
+      t.assignedToUserId === p.id && t.statut !== 'Fait'
+    ).length;
+
+    return {
+      profile: p,
+      nbMandatsPourvoyeur: mandatsAsPourvoyeur.length,
+      nbMandatsVendeur: mandatsAsVendeur.length,
+      partTotal,
+      partEncaissee,
+      tachesEnCours,
+    };
+  });
+
+  // Tri par part totale (top performer en haut)
+  perfParCommercial.sort((a, b) => b.partTotal - a.partTotal);
+
+  // ═══════════════════════════════════════════════════════════════
+  // TOP AFFAIRES (Promesse + Offre)
+  // ═══════════════════════════════════════════════════════════════
+
+  const topAffaires = mandats
+    .filter(m => ['Promesse', 'Offre'].includes(m.statut))
+    .map(m => ({
+      ...m,
+      commission: commissionMandat(m),
+      pourvoyeurNom: allProfiles.find(p => p.id === m.pourvoyeurId)?.prenom + ' ' + allProfiles.find(p => p.id === m.pourvoyeurId)?.nom || '—',
+      vendeurNom: m.vendeurId ? allProfiles.find(p => p.id === m.vendeurId)?.prenom + ' ' + allProfiles.find(p => p.id === m.vendeurId)?.nom : null,
+    }))
+    .sort((a, b) => b.commission - a.commission)
+    .slice(0, 5);
+
+  // ═══════════════════════════════════════════════════════════════
+  // RENDU
+  // ═══════════════════════════════════════════════════════════════
+
+  const STATUT_COLORS = {
+    'Sourcing': 'bg-stone-100 text-stone-700',
+    'Analyse': 'bg-blue-50 text-blue-700',
+    'Mandat signé': 'bg-cyan-50 text-cyan-700',
+    'Commercialisation': 'bg-amber-50 text-amber-700',
+    'Offre': 'bg-purple-50 text-purple-700',
+    'Promesse': 'bg-indigo-50 text-indigo-700',
+    'Acte': 'bg-emerald-50 text-emerald-700',
+  };
+
+  return (
+    <div className="p-6 max-w-none">
+
+      {/* En-tête */}
+      <div className="mb-6">
+        <h1 className="font-display text-3xl font-semibold text-stone-900 mb-1">🏛️ Dashboard Direction</h1>
+        <p className="text-stone-500 text-sm">Vue 360° de l'activité — {commerciaux.length} commerciaux · {mandatsActifs.length} mandats actifs</p>
+      </div>
+
+      {/* ═══ KPIs GLOBAUX ═══ */}
+      <div className="grid grid-cols-4 gap-3 mb-6">
+        <div className="bg-white rounded-xl p-5 border border-stone-200 shadow-luxe">
+          <div className="text-xs uppercase tracking-wide text-stone-500 mb-1">CA portefeuille</div>
+          <div className="text-2xl font-semibold text-stone-900">{formatPrixCompact(caGlobal)}</div>
+          <div className="text-xs text-stone-500 mt-1">{mandatsActifs.length} mandats actifs · TTC</div>
+        </div>
+        <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-5 border border-emerald-200 shadow-luxe">
+          <div className="text-xs uppercase tracking-wide text-emerald-700 mb-1">Encaissé</div>
+          <div className="text-2xl font-semibold text-emerald-900">{formatPrixCompact(commissionEncaissee)}</div>
+          <div className="text-xs text-emerald-700 mt-1">Mandats à l'Acte</div>
+        </div>
+        <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl p-5 border border-indigo-200 shadow-luxe">
+          <div className="text-xs uppercase tracking-wide text-indigo-700 mb-1">En cours</div>
+          <div className="text-2xl font-semibold text-indigo-900">{formatPrixCompact(commissionEnCours)}</div>
+          <div className="text-xs text-indigo-700 mt-1">Mandats à la Promesse</div>
+        </div>
+        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-5 border border-purple-200 shadow-luxe">
+          <div className="text-xs uppercase tracking-wide text-purple-700 mb-1">Potentiel</div>
+          <div className="text-2xl font-semibold text-purple-900">{formatPrixCompact(commissionPotentielle)}</div>
+          <div className="text-xs text-purple-700 mt-1">Mandats à l'Offre</div>
+        </div>
+      </div>
+
+      {/* ═══ PIPELINE ═══ */}
+      <div className="bg-white rounded-xl shadow-luxe border border-stone-200 p-5 mb-6">
+        <h2 className="font-display text-lg font-semibold text-stone-900 mb-4">📊 Pipeline commercial</h2>
+        <div className="grid grid-cols-7 gap-2">
+          {pipelineParStatut.map(({ statut, count, ca, commission }) => (
+            <div key={statut} className={`rounded-lg p-3 ${STATUT_COLORS[statut] || 'bg-stone-100'}`}>
+              <div className="text-[10px] uppercase tracking-wide opacity-70">{statut}</div>
+              <div className="text-2xl font-semibold mt-0.5">{count}</div>
+              {count > 0 && (
+                <div className="text-[10px] mt-1 opacity-70">
+                  {formatPrixCompact(ca)}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ═══ PERFORMANCES COMMERCIAUX ═══ */}
+      <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden mb-6">
+        <div className="p-5 border-b border-stone-200">
+          <h2 className="font-display text-lg font-semibold text-stone-900">🏆 Performances commerciaux</h2>
+          <p className="text-xs text-stone-500 mt-1">Triés par part personnelle (encaissée + en cours + potentielle)</p>
+        </div>
+        <table className="w-full">
+          <thead className="bg-stone-50">
+            <tr>
+              <th className="text-left px-4 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Commercial</th>
+              <th className="text-center px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Pourvoyeur</th>
+              <th className="text-center px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Vendeur</th>
+              <th className="text-center px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Tâches</th>
+              <th className="text-right px-4 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Encaissé</th>
+              <th className="text-right px-4 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {perfParCommercial.map((perf, i) => (
+              <tr key={perf.profile.id} className="border-t border-stone-100 hover:bg-stone-50/50">
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    {i === 0 && perf.partTotal > 0 && <span className="text-amber-500">🥇</span>}
+                    {i === 1 && perf.partTotal > 0 && <span className="text-stone-400">🥈</span>}
+                    {i === 2 && perf.partTotal > 0 && <span className="text-orange-700">🥉</span>}
+                    <div>
+                      <div className="text-sm font-medium text-stone-900">{perf.profile.prenom} {perf.profile.nom}</div>
+                    </div>
+                  </div>
+                </td>
+                <td className="text-center px-3 py-3 text-sm text-stone-700">{perf.nbMandatsPourvoyeur}</td>
+                <td className="text-center px-3 py-3 text-sm text-stone-700">{perf.nbMandatsVendeur}</td>
+                <td className="text-center px-3 py-3 text-sm">
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${perf.tachesEnCours > 5 ? 'bg-red-50 text-red-700' : perf.tachesEnCours > 2 ? 'bg-amber-50 text-amber-700' : 'bg-stone-100 text-stone-600'}`}>
+                    {perf.tachesEnCours}
+                  </span>
+                </td>
+                <td className="text-right px-4 py-3 text-sm font-medium text-emerald-700">{formatPrixCompact(perf.partEncaissee)}</td>
+                <td className="text-right px-4 py-3 text-sm font-semibold text-stone-900">{formatPrixCompact(perf.partTotal)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ═══ TOP AFFAIRES ═══ */}
+      <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden">
+        <div className="p-5 border-b border-stone-200">
+          <h2 className="font-display text-lg font-semibold text-stone-900">🎯 Top affaires en cours</h2>
+          <p className="text-xs text-stone-500 mt-1">Mandats à l'Offre ou à la Promesse, triés par commission attendue</p>
+        </div>
+        {topAffaires.length === 0 ? (
+          <div className="p-12 text-center text-stone-400 text-sm">Aucune affaire en cours pour l'instant</div>
+        ) : (
+          <table className="w-full">
+            <thead className="bg-stone-50">
+              <tr>
+                <th className="text-left px-4 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Mandat</th>
+                <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Statut</th>
+                <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Pourvoyeur</th>
+                <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Vendeur</th>
+                <th className="text-right px-4 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Prix TTC</th>
+                <th className="text-right px-4 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Commission</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topAffaires.map(m => (
+                <tr key={m.id} className="border-t border-stone-100 hover:bg-stone-50/50">
+                  <td className="px-4 py-3">
+                    <div className="text-sm font-medium text-stone-900 truncate max-w-md">{m.nom}</div>
+                    <div className="text-xs text-stone-500">{m.adresse}</div>
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${STATUT_COLORS[m.statut]}`}>{m.statut}</span>
+                  </td>
+                  <td className="px-3 py-3 text-sm text-stone-700">{m.pourvoyeurNom}</td>
+                  <td className="px-3 py-3 text-sm text-stone-700">{m.vendeurNom || <span className="text-stone-400 italic">—</span>}</td>
+                  <td className="text-right px-4 py-3 text-sm text-stone-700">{formatPrixCompact(parseFloat(m.prix) || 0)}</td>
+                  <td className="text-right px-4 py-3 text-sm font-semibold text-emerald-700">{formatPrixCompact(m.commission)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+    </div>
+  );
+}
 function RemunerationTab({ mandats, allProfiles = [] }) {
   const { user, profile } = useAuth();
   const [rates, setRates] = useState({ pourvoyeur: 30, vendeur: 30, agence: 40, taux_commission: 5, tva: 20 });
