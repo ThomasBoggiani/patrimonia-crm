@@ -18,7 +18,6 @@ const TYPE_LABELS = {
 
 export default function AICreateModal({ open, onClose, defaultType, onCreated }) {
   const { profile } = useAuth();
-  const myInitials = profile ? getCurrentUserInitials(profile) : 'TB';
   const [tab, setTab] = useState('text'); // 'files' | 'text' | 'audio'
   const [text, setText] = useState('');
   const [files, setFiles] = useState([]);
@@ -116,7 +115,7 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
           ...mandatFields,
           description: description || null,
           statut: 'Sourcing',
-          owner: myInitials,
+          owner: profile ? getCurrentUserInitials(profile) : 'TB',
           created_by: user?.id,
         }).select().single();
         if (mErr) {
@@ -135,7 +134,7 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
           typologies_recherchees: typologies_recherchees || [],
           statut: 'Actif',
           created_by: user?.id,
-          owner: myInitials,
+          owner: profile ? getCurrentUserInitials(profile) : 'TB',
         }).select().single();
         if (cErr) {
           console.error('Erreur création client:', cErr);
