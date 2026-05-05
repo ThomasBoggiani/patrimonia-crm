@@ -3197,6 +3197,148 @@ function DashboardDirection({ mandats, deals, clients, todos, allProfiles = [] }
         </div>
       </div>
 
+      // ═══════════════════════════════════════════════════════════════════
+// SECTION ALERTES — à insérer dans DashboardDirection
+// Juste après le </div> de l'en-tête (avec les filtres)
+// Et avant la section "═══ KPIs GLOBAUX ═══"
+// ═══════════════════════════════════════════════════════════════════
+
+      {/* ═══ ALERTES ═══ */}
+      {(() => {
+        const now = new Date();
+        const j30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        const j15 = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000);
+
+        // 1. Mandats sans activité depuis 30 jours
+        const mandatsInactifs = mandatsActifs.filter(m => {
+          // Pas mis à jour récemment ?
+          const updatedAt = m.updatedAt || m.updated_at || m.createdAt || m.created_at;
+          if (!updatedAt) return false;
+          if (new Date(updatedAt) > j30) return false;
+          // A-t-il une tâche récente ?
+          const tachesMandat = (todos || []).filter(t =>
+            t.lienType === 'mandat' && t.lienId === m.id &&
+            t.createdAt && new Date(t.createdAt) > j30
+          );
+          return tachesMandat.length === 0;
+        });
+
+        // 2. Tâches en retard
+        const tachesEnRetard = (todos || []).filter(t => {
+          if (t.statut === 'Fait') return false;
+          if (!t.echeance) return false;
+          return new Date(t.echeance) < now;
+        });
+
+        // 3. Tâches sans échéance
+        const tachesSansEcheance = (todos || []).filter(t =>
+          t.statut !== 'Fait' && !t.echeance
+        );
+
+        // 4. Mandats avec échéance proche (15 jours)
+        const mandatsEcheanceProche = mandatsActifs.filter(m => {
+          const ech = m.mandatDateEcheance || m.mandat_date_echeance;
+          if (!ech) return false;
+          const echDate = new Date(ech);
+          return echDate > now && echDate < j15;
+        });
+
+        // 5. Mandats sans photos ou sans description
+        const mandatsIncomplets = mandatsActifs.filter(m => {
+          const sansPhoto = !m.photos || m.photos.length === 0;
+          const sansDesc = !m.description || m.description.trim().length < 50;
+          return sansPhoto || sansDesc;
+        });
+
+        const alertes = [
+          {
+            count: mandatsInactifs.length,
+            label: 'Mandats sans activité',
+            sub: 'Pas de tâche ni mise à jour depuis 30 jours',
+            color: 'from-amber-50 to-amber-100 border-amber-200 text-amber-900',
+            icon: '⚠️',
+            items: mandatsInactifs.slice(0, 3).map(m => m.nom),
+          },
+          {
+            count: tachesEnRetard.length,
+            label: 'Tâches en retard',
+            sub: 'Échéance dépassée',
+            color: 'from-red-50 to-red-100 border-red-200 text-red-900',
+            icon: '🔴',
+            items: tachesEnRetard.slice(0, 3).map(t => t.titre),
+          },
+          {
+            count: tachesSansEcheance.length,
+            label: 'Tâches sans échéance',
+            sub: 'À planifier',
+            color: 'from-stone-50 to-stone-100 border-stone-200 text-stone-900',
+            icon: '📅',
+            items: tachesSansEcheance.slice(0, 3).map(t => t.titre),
+          },
+          {
+            count: mandatsEcheanceProche.length,
+            label: 'Mandats expirent bientôt',
+            sub: 'Échéance dans moins de 15 jours',
+            color: 'from-orange-50 to-orange-100 border-orange-200 text-orange-900',
+            icon: '⏰',
+            items: mandatsEcheanceProche.slice(0, 3).map(m => m.nom),
+          },
+          {
+            count: mandatsIncomplets.length,
+            label: 'Fiches mandat incomplètes',
+            sub: 'Sans photo ou description courte',
+            color: 'from-blue-50 to-blue-100 border-blue-200 text-blue-900',
+            icon: '📦',
+            items: mandatsIncomplets.slice(0, 3).map(m => m.nom),
+          },
+        ];
+
+        const totalAlertes = alertes.reduce((s, a) => s + a.count, 0);
+
+        if (totalAlertes === 0) {
+          return (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-6 flex items-center gap-3">
+              <span className="text-2xl">✅</span>
+              <div>
+                <div className="font-medium text-emerald-900">Tout est sous contrôle</div>
+                <div className="text-xs text-emerald-700">Aucune alerte active à signaler</div>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div className="mb-6">
+            <h2 className="font-display text-lg font-semibold text-stone-900 mb-3 flex items-center gap-2">
+              ⚠️ Points d'attention
+              <span className="text-xs font-normal bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{totalAlertes}</span>
+            </h2>
+            <div className="grid grid-cols-5 gap-3">
+              {alertes.map((a, i) => (
+                <div
+                  key={i}
+                  className={`bg-gradient-to-br ${a.color} border rounded-xl p-3 ${a.count === 0 ? 'opacity-40' : ''}`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-lg">{a.icon}</span>
+                    <span className="text-2xl font-semibold">{a.count}</span>
+                  </div>
+                  <div className="text-xs font-medium leading-tight">{a.label}</div>
+                  <div className="text-[10px] opacity-70 mt-0.5">{a.sub}</div>
+                  {a.count > 0 && a.items.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-current/10 text-[10px] space-y-0.5 opacity-80">
+                      {a.items.map((item, j) => (
+                        <div key={j} className="truncate">• {item}</div>
+                      ))}
+                      {a.count > 3 && <div className="italic">+ {a.count - 3} autre{a.count - 3 > 1 ? 's' : ''}</div>}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
       {/* ═══ KPIs GLOBAUX ═══ */}
       <div className="grid grid-cols-4 gap-3 mb-6">
         <div className="bg-white rounded-xl p-5 border border-stone-200 shadow-luxe">
