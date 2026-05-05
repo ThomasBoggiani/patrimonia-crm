@@ -95,6 +95,7 @@ export default function CRM() {
   const { profile, signOut } = useAuth();
   const [showAICreate, setShowAICreate] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [tabKey, setTabKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [importToast, setImportToast] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -244,7 +245,7 @@ export default function CRM() {
               const Icon = tab.icon;
               const active = activeTab === tab.id;
               return (
-                <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSidebarOpen(false); }}
+                <button key={tab.id} onClick={() => { setActiveTab(tab.id); setTabKey(k => k + 1); setSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all mb-1 ${
                     active 
                       ? 'bg-sage-50 text-sage-darker font-medium border border-sage-light' 
@@ -277,7 +278,7 @@ export default function CRM() {
         </aside>
 
         <main className="flex-1 overflow-y-auto scrollbar-thin">
-          <div className="fade-in" key={activeTab}>
+          <div className="fade-in" key={`${activeTab}-${tabKey}`}>
             {activeTab === 'dashboard' && <Dashboard mandats={mandats} clients={clients} deals={deals} todos={todos} reload={loadAll} allProfiles={allProfiles} />}
             {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} clients={clients} deals={deals} interactions={interactions} todos={todos} annonces={annonces} allProfiles={allProfiles} />}
             {activeTab === 'clients' && <ClientsTab clients={clients} reload={loadAll} mandats={mandats} deals={deals} interactions={interactions} />}
