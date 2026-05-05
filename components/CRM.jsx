@@ -3000,9 +3000,15 @@ function MatchingTab({ mandats, clients, deals, reload }) {
 // À COLLER dans components/CRM.jsx avant la fonction TodosTab
 // ═══════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════
+// DashboardDirection v2 — avec filtre temporel
+// Filtre sur created_at : Mois en cours / Trimestre / Année / Tout
+// ═══════════════════════════════════════════════════════════════════
+
 function DashboardDirection({ mandats, deals, clients, todos, allProfiles = [] }) {
   const { user, profile } = useAuth();
   const [rates, setRates] = useState({ pourvoyeur: 30, vendeur: 30, agence: 40, taux_commission: 5, tva: 20 });
+  const [periode, setPeriode] = useState('all'); // 'month' | 'quarter' | 'year' | 'all'
 
   // Charger les taux commission
   useEffect(() => {
@@ -3011,52 +3017,74 @@ function DashboardDirection({ mandats, deals, clients, todos, allProfiles = [] }
     });
   }, []);
 
-  // Liste des commerciaux actifs (excluant les profils techniques)
+  // Liste des commerciaux actifs
   const commerciaux = allProfiles.filter(p => 
     ['Thomas', 'Lucas', 'Philippe'].includes(p.prenom)
   );
 
   // ═══════════════════════════════════════════════════════════════
-  // CALCULS GLOBAUX
+  // FILTRE TEMPOREL
   // ═══════════════════════════════════════════════════════════════
-
-  // Mandats actifs (hors Perdu et Vendu par autres)
-  const mandatsActifs = mandats.filter(m => 
+  
+  function isInPeriode(mandatDate, periode) {
+    if (periode === 'all') return true;
+    if (!mandatDate) return false;
+    
+    const date = new Date(mandatDate);
+    const now = new Date();
+    
+    if (periode === 'month') {
+      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+    }
+    if (periode === 'quarter') {
+      const q = Math.floor(now.getMonth() / 3);
+      const dq = Math.floor(date.getMonth() / 3);
+      return dq === q && date.getFullYear() === now.getFullYear();
+    }
+    if (periode === 'year') {
+      return date.getFullYear() === now.getFullYear();
+    }
+    return true;
+  }
+  
+  // Mandats filtrés par période
+  const mandatsFiltres = mandats.filter(m => isInPeriode(m.createdAt || m.created_at, periode));
+  
+  // Mandats actifs (filtrés)
+  const mandatsActifs = mandatsFiltres.filter(m => 
     !['Perdu', 'Vendu par autres'].includes(m.statut)
   );
 
-  // Commission totale par mandat (5% du HT)
+  // Commission totale par mandat
   function commissionMandat(m) {
     const prixTTC = parseFloat(m.prix) || 0;
     const prixHT = prixTTC / (1 + rates.tva / 100);
     return prixHT * (rates.taux_commission / 100);
   }
 
-  // CA total participé (somme des prix TTC)
+  // CA total
   const caGlobal = mandatsActifs.reduce((sum, m) => sum + (parseFloat(m.prix) || 0), 0);
 
-  // Commission encaissée (Acte uniquement)
-  const commissionEncaissee = mandats
+  // Commissions par statut
+  const commissionEncaissee = mandatsFiltres
     .filter(m => m.statut === 'Acte')
     .reduce((sum, m) => sum + commissionMandat(m), 0);
 
-  // Commission en cours (Promesse)
-  const commissionEnCours = mandats
+  const commissionEnCours = mandatsFiltres
     .filter(m => m.statut === 'Promesse')
     .reduce((sum, m) => sum + commissionMandat(m), 0);
 
-  // Commission potentielle (Offre)
-  const commissionPotentielle = mandats
+  const commissionPotentielle = mandatsFiltres
     .filter(m => m.statut === 'Offre')
     .reduce((sum, m) => sum + commissionMandat(m), 0);
 
   // ═══════════════════════════════════════════════════════════════
-  // PIPELINE PAR STATUT
+  // PIPELINE PAR STATUT (sur mandats filtrés)
   // ═══════════════════════════════════════════════════════════════
 
   const STATUTS_PIPELINE = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisation', 'Offre', 'Promesse', 'Acte'];
   const pipelineParStatut = STATUTS_PIPELINE.map(statut => {
-    const m = mandats.filter(m => m.statut === statut);
+    const m = mandatsFiltres.filter(m => m.statut === statut);
     return {
       statut,
       count: m.length,
@@ -3066,14 +3094,13 @@ function DashboardDirection({ mandats, deals, clients, todos, allProfiles = [] }
   });
 
   // ═══════════════════════════════════════════════════════════════
-  // PERFORMANCES PAR COMMERCIAL
+  // PERFORMANCES PAR COMMERCIAL (sur mandats filtrés)
   // ═══════════════════════════════════════════════════════════════
 
   const perfParCommercial = commerciaux.map(p => {
     const mandatsAsPourvoyeur = mandatsActifs.filter(m => m.pourvoyeurId === p.id);
     const mandatsAsVendeur = mandatsActifs.filter(m => m.vendeurId === p.id);
     
-    // Pour chaque mandat, calculer la part de ce commercial
     let partTotal = 0;
     let partEncaissee = 0;
     
@@ -3088,7 +3115,6 @@ function DashboardDirection({ mandats, deals, clients, todos, allProfiles = [] }
       if (m.statut === 'Acte') partEncaissee += partMandat;
     });
 
-    // Tâches en cours assignées à ce commercial
     const tachesEnCours = (todos || []).filter(t => 
       t.assignedToUserId === p.id && t.statut !== 'Fait'
     ).length;
@@ -3103,14 +3129,13 @@ function DashboardDirection({ mandats, deals, clients, todos, allProfiles = [] }
     };
   });
 
-  // Tri par part totale (top performer en haut)
   perfParCommercial.sort((a, b) => b.partTotal - a.partTotal);
 
   // ═══════════════════════════════════════════════════════════════
-  // TOP AFFAIRES (Promesse + Offre)
+  // TOP AFFAIRES (Promesse + Offre, sur mandats filtrés)
   // ═══════════════════════════════════════════════════════════════
 
-  const topAffaires = mandats
+  const topAffaires = mandatsFiltres
     .filter(m => ['Promesse', 'Offre'].includes(m.statut))
     .map(m => ({
       ...m,
@@ -3135,13 +3160,41 @@ function DashboardDirection({ mandats, deals, clients, todos, allProfiles = [] }
     'Acte': 'bg-emerald-50 text-emerald-700',
   };
 
+  const PERIODES = [
+    { id: 'month', label: 'Ce mois' },
+    { id: 'quarter', label: 'Ce trimestre' },
+    { id: 'year', label: 'Cette année' },
+    { id: 'all', label: 'Tout' },
+  ];
+
+  const periodeLabel = PERIODES.find(p => p.id === periode)?.label || 'Tout';
+
   return (
     <div className="p-6 max-w-none">
 
-      {/* En-tête */}
-      <div className="mb-6">
-        <h1 className="font-display text-3xl font-semibold text-stone-900 mb-1">🏛️ Dashboard Direction</h1>
-        <p className="text-stone-500 text-sm">Vue 360° de l'activité — {commerciaux.length} commerciaux · {mandatsActifs.length} mandats actifs</p>
+      {/* En-tête avec filtre temporel */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="font-display text-3xl font-semibold text-stone-900 mb-1">🏛️ Dashboard Direction</h1>
+          <p className="text-stone-500 text-sm">Vue 360° de l'activité — {commerciaux.length} commerciaux · {mandatsActifs.length} mandats actifs · <span className="font-medium text-stone-700">{periodeLabel}</span></p>
+        </div>
+        
+        {/* Boutons de filtre temporel */}
+        <div className="flex items-center gap-1 bg-stone-100 rounded-lg p-1">
+          {PERIODES.map(p => (
+            <button
+              key={p.id}
+              onClick={() => setPeriode(p.id)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${
+                periode === p.id
+                  ? 'bg-white text-stone-900 shadow-sm'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ═══ KPIs GLOBAUX ═══ */}
@@ -3190,7 +3243,7 @@ function DashboardDirection({ mandats, deals, clients, todos, allProfiles = [] }
       <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden mb-6">
         <div className="p-5 border-b border-stone-200">
           <h2 className="font-display text-lg font-semibold text-stone-900">🏆 Performances commerciaux</h2>
-          <p className="text-xs text-stone-500 mt-1">Triés par part personnelle (encaissée + en cours + potentielle)</p>
+          <p className="text-xs text-stone-500 mt-1">Triés par part personnelle (encaissée + en cours + potentielle) · {periodeLabel}</p>
         </div>
         <table className="w-full">
           <thead className="bg-stone-50">
@@ -3235,10 +3288,10 @@ function DashboardDirection({ mandats, deals, clients, todos, allProfiles = [] }
       <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden">
         <div className="p-5 border-b border-stone-200">
           <h2 className="font-display text-lg font-semibold text-stone-900">🎯 Top affaires en cours</h2>
-          <p className="text-xs text-stone-500 mt-1">Mandats à l'Offre ou à la Promesse, triés par commission attendue</p>
+          <p className="text-xs text-stone-500 mt-1">Mandats à l'Offre ou à la Promesse · {periodeLabel}</p>
         </div>
         {topAffaires.length === 0 ? (
-          <div className="p-12 text-center text-stone-400 text-sm">Aucune affaire en cours pour l'instant</div>
+          <div className="p-12 text-center text-stone-400 text-sm">Aucune affaire en cours sur cette période</div>
         ) : (
           <table className="w-full">
             <thead className="bg-stone-50">
