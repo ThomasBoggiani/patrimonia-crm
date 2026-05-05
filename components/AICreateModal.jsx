@@ -16,6 +16,58 @@ const TYPE_LABELS = {
   unknown: { label: 'Indéterminé', icon: AlertCircle, color: 'stone' },
 };
 
+/**
+ * Redimensionne une image côté client via canvas + JPEG compression.
+ * - max 1600x1600 (largement suffisant pour analyse IA et fiches CRM)
+ * - JPEG qualité 0.85 (excellent compromis taille/qualité)
+ * - Préserve le ratio
+ * - Pour photos > 5MB, réduit typiquement de 90-95%
+ *
+ * @param {File} file - Fichier image source
+ * @param {number} maxSize - Côté max en pixels (default 1600)
+ * @param {number} quality - Qualité JPEG entre 0 et 1 (default 0.85)
+ * @returns {Promise<File>} Nouveau File optimisé (extension .jpg)
+ */
+async function resizeImage(file, maxSize = 1600, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxSize || height > maxSize) {
+          if (width > height) {
+            height = Math.round((height * maxSize) / width);
+            width = maxSize;
+          } else {
+            width = Math.round((width * maxSize) / height);
+            height = maxSize;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        // Fond blanc pour éviter les artéfacts en cas de transparence (PNG → JPG)
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (!blob) return reject(new Error('Conversion canvas → blob échouée'));
+          // Construit un nouveau File avec extension .jpg pour cohérence
+          const baseName = file.name.replace(/\.[^.]+$/, '');
+          const newFile = new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' });
+          resolve(newFile);
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = () => reject(new Error('Image invalide ou corrompue'));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error('Lecture fichier impossible'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function AICreateModal({ open, onClose, defaultType, onCreated }) {
   const { profile } = useAuth();
   const [tab, setTab] = useState('text'); // 'files' | 'text' | 'audio'
@@ -25,6 +77,7 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
   const [audioBlob, setAudioBlob] = useState(null);
   const [audioTranscription, setAudioTranscription] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
+  const [progress, setProgress] = useState(null); // { label, current, total }
   const [result, setResult] = useState(null);
   const [creating, setCreating] = useState(false);
   const [forcedType, setForcedType] = useState(null);
@@ -62,18 +115,80 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
         body.audioTranscription = audioTranscription;
       } else if (tab === 'files') {
         if (files.length === 0) { alert('Ajoute au moins 1 fichier'); setAnalyzing(false); return; }
-        // Upload chaque fichier sur storage et récup les paths
+
+        // ─── 1. Optimiser les images côté client (resize 1600px max + JPEG q85) ───
+        // Évite les timeouts Vercel et les limites tokens Anthropic
+        // Les PDFs/Word ne sont pas modifiés
+        setProgress({ label: 'Optimisation des fichiers', current: 0, total: files.length });
+        const optimizedFiles = [];
+        let totalBefore = 0;
+        let totalAfter = 0;
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i];
+          totalBefore += f.size;
+          setProgress({ label: 'Optimisation des fichiers', current: i + 1, total: files.length });
+          if (f.type.startsWith('image/')) {
+            try {
+              const optimized = await resizeImage(f, 1600, 0.85);
+              optimizedFiles.push(optimized);
+              totalAfter += optimized.size;
+            } catch (err) {
+              console.warn('Resize échoué pour', f.name, '— upload tel quel', err);
+              optimizedFiles.push(f);
+              totalAfter += f.size;
+            }
+          } else {
+            // PDF/Word : pas de resize, upload tel quel
+            optimizedFiles.push(f);
+            totalAfter += f.size;
+          }
+        }
+
+        const reductionPct = totalBefore > 0 ? Math.round((1 - totalAfter / totalBefore) * 100) : 0;
+        console.log(`[AICreateModal] Optimisation : ${(totalBefore / 1024 / 1024).toFixed(1)} MB → ${(totalAfter / 1024 / 1024).toFixed(1)} MB (-${reductionPct}%)`);
+
+        // ─── 2. Upload vers Supabase Storage avec tracking erreurs ───
+        setProgress({ label: 'Téléversement vers le cloud', current: 0, total: optimizedFiles.length });
         const paths = [];
-        for (const f of files) {
+        const uploadErrors = [];
+        for (let i = 0; i < optimizedFiles.length; i++) {
+          const f = optimizedFiles[i];
+          setProgress({ label: 'Téléversement vers le cloud', current: i + 1, total: optimizedFiles.length });
           const cleanName = f.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
           const path = '_ai-temp/' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '_' + cleanName;
           const { error: upErr } = await supabase.storage.from('mandat-docs').upload(path, f, {
             contentType: f.type || 'application/octet-stream',
             upsert: false,
           });
-          if (!upErr) paths.push(path);
+          if (upErr) {
+            uploadErrors.push(`${f.name} : ${upErr.message}`);
+          } else {
+            paths.push(path);
+          }
         }
+
+        if (uploadErrors.length > 0) {
+          console.error('[AICreateModal] Échecs upload:', uploadErrors);
+        }
+
+        if (paths.length === 0) {
+          setProgress(null);
+          alert('Aucun fichier n\'a pu être téléversé.\n\nDétails :\n' + uploadErrors.join('\n'));
+          setAnalyzing(false);
+          return;
+        }
+
+        if (uploadErrors.length > 0) {
+          const proceed = confirm(`${uploadErrors.length} fichier(s) en échec, ${paths.length} OK.\n\nContinuer l'analyse avec les fichiers réussis ?`);
+          if (!proceed) {
+            setProgress(null);
+            setAnalyzing(false);
+            return;
+          }
+        }
+
         body.files = paths;
+        setProgress({ label: 'Analyse par l\'IA', current: 0, total: 0 });
       }
 
       if (forcedType) body.forceType = forcedType;
@@ -86,6 +201,7 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
       const data = await res.json();
       if (!data.ok) {
         alert('Erreur analyse : ' + (data.error || 'inconnue'));
+        setProgress(null);
         setAnalyzing(false);
         return;
       }
@@ -93,6 +209,7 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
     } catch (e) {
       alert('Erreur : ' + e.message);
     }
+    setProgress(null);
     setAnalyzing(false);
   }
 
@@ -294,11 +411,35 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
             </div>
 
             <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-stone-200 bg-stone-50">
-              <button onClick={onClose} className="px-4 py-2 text-sm text-stone-700 hover:bg-stone-200 rounded-lg">Annuler</button>
-              <button onClick={handleAnalyze} disabled={analyzing} className="flex items-center gap-2 px-4 py-2 bg-sage-dark text-white rounded-lg hover:bg-sage-darker disabled:opacity-50 text-sm">
-                {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                {analyzing ? 'Analyse...' : 'Analyser avec l\'IA'}
-              </button>
+              {progress ? (
+                <div className="flex items-center gap-3 flex-1">
+                  <Loader2 className="w-4 h-4 animate-spin text-sage-dark flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-stone-700 mb-1 flex items-center justify-between gap-2">
+                      <span className="truncate">{progress.label}</span>
+                      {progress.total > 0 && (
+                        <span className="text-stone-500 flex-shrink-0">{progress.current}/{progress.total}</span>
+                      )}
+                    </div>
+                    {progress.total > 0 && (
+                      <div className="h-1 bg-stone-200 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-sage-dark transition-all duration-200"
+                          style={{ width: `${Math.round((progress.current / progress.total) * 100)}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <button onClick={onClose} className="px-4 py-2 text-sm text-stone-700 hover:bg-stone-200 rounded-lg">Annuler</button>
+                  <button onClick={handleAnalyze} disabled={analyzing} className="flex items-center gap-2 px-4 py-2 bg-sage-dark text-white rounded-lg hover:bg-sage-darker disabled:opacity-50 text-sm">
+                    {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    {analyzing ? 'Analyse...' : 'Analyser avec l\'IA'}
+                  </button>
+                </>
+              )}
             </div>
           </>
         )}
