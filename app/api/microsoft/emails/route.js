@@ -7,6 +7,9 @@ export const dynamic = 'force-dynamic';
 
 // GET /api/microsoft/emails?email=client@...&limit=20
 // Retourne les emails échangés avec une adresse précise (entrants + sortants)
+//
+// FIX : Microsoft Graph rejette les filtres OR complexes entre `from` et
+// `toRecipients/any`. On fait donc 2 requêtes séparées et on merge côté Node.
 export async function GET(request) {
   try {
     const authHeader = request.headers.get('authorization');
@@ -24,7 +27,7 @@ export async function GET(request) {
 
     const url = new URL(request.url);
     const email = url.searchParams.get('email');
-    const limit = url.searchParams.get('limit') || '20';
+    const limit = parseInt(url.searchParams.get('limit') || '20', 10);
     
     if (!email) return NextResponse.json({ error: 'Paramètre email requis' }, { status: 400 });
 
@@ -33,18 +36,46 @@ export async function GET(request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // Filter : emails échangés avec cette adresse (envoyés OU reçus)
-    // On utilise $search qui cherche dans tout le contenu de l'email
-    const filter = `(from/emailAddress/address eq '${email}') or (toRecipients/any(r:r/emailAddress/address eq '${email}'))`;
-    const endpoint = `/me/messages?$filter=${encodeURIComponent(filter)}&$top=${limit}&$orderby=receivedDateTime desc&$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime,isRead,webLink`;
-    
-    const result = await callGraph({
-      supabase: adminSupabase,
-      userId: user.id,
-      endpoint
+    const select = '$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime,isRead,webLink';
+    const safeEmail = email.replace(/'/g, "''");
+
+    // 1) Emails REÇUS de cet email (from = email)
+    const filterFrom = `from/emailAddress/address eq '${safeEmail}'`;
+    const endpointFrom = `/me/messages?$filter=${encodeURIComponent(filterFrom)}&$top=${limit}&$orderby=receivedDateTime desc&${select}`;
+
+    // 2) Emails ENVOYÉS à cet email (dossier SentItems pour optimiser)
+    const filterTo = `toRecipients/any(r:r/emailAddress/address eq '${safeEmail}')`;
+    const endpointTo = `/me/mailFolders/SentItems/messages?$filter=${encodeURIComponent(filterTo)}&$top=${limit}&$orderby=sentDateTime desc&${select}`;
+
+    // Lancer les 2 requêtes en parallèle
+    const [resFrom, resTo] = await Promise.allSettled([
+      callGraph({ supabase: adminSupabase, userId: user.id, endpoint: endpointFrom }),
+      callGraph({ supabase: adminSupabase, userId: user.id, endpoint: endpointTo }),
+    ]);
+
+    const emailsFrom = resFrom.status === 'fulfilled' ? (resFrom.value?.value || []) : [];
+    const emailsTo = resTo.status === 'fulfilled' ? (resTo.value?.value || []) : [];
+
+    // Merge + déduplication par id
+    const seen = new Set();
+    const merged = [];
+    for (const e of [...emailsFrom, ...emailsTo]) {
+      if (e.id && !seen.has(e.id)) {
+        seen.add(e.id);
+        merged.push(e);
+      }
+    }
+
+    // Tri par date décroissante
+    merged.sort((a, b) => {
+      const dateA = new Date(a.receivedDateTime || a.sentDateTime || 0).getTime();
+      const dateB = new Date(b.receivedDateTime || b.sentDateTime || 0).getTime();
+      return dateB - dateA;
     });
 
-    return NextResponse.json({ emails: result.value || [] });
+    const emails = merged.slice(0, limit);
+
+    return NextResponse.json({ emails });
   } catch (err) {
     console.error('List emails error:', err);
     if (err.message === 'NOT_CONNECTED') {
@@ -82,7 +113,6 @@ export async function POST(request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // Envoi via Graph
     const message = {
       message: {
         subject: subject,
@@ -102,7 +132,6 @@ export async function POST(request) {
       body: message
     });
 
-    // Log dans interactions si on a un clientId
     if (clientId) {
       await adminSupabase.from('interactions').insert({
         client_id: clientId,
