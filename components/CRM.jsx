@@ -21,6 +21,7 @@ import DocumentsModal from './DocumentsModal';
 import AgendaTab from './AgendaTab';
 import TeamTab from './TeamTab';
 import MyProfile from './MyProfile';
+import AIEnrichModal from './AIEnrichModal';
 import NotificationBell from './NotificationBell';
 import PhotoUploader from './PhotoUploader';
 import IntegrationsTab from './IntegrationsTab';
@@ -1990,6 +1991,7 @@ function getDPEColor(conso) {
 
 function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, annonces, allProfiles = [] }) {
   const [openModal, setOpenModal] = useState(null); // 'photos' | 'visite' | 'mandant' | null
+  const [aiEnrichOpen, setAiEnrichOpen] = useState(false);
   const mandatDeals = deals.filter(d => d.mandatId === mandat.id);
   const alerts = mandat.alerts || [];
   const highlights = mandat.highlights || [];
@@ -2026,9 +2028,14 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
             <MapPin className="w-4 h-4" />{mandat.adresse}
           </p>
         </div>
-        <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink flex-shrink-0">
-          <Edit2 className="w-4 h-4" /> Modifier
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button onClick={() => setAiEnrichOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-gradient-to-br from-sage-100 to-sage-200 text-sage-darker rounded-lg text-sm hover:from-sage-200 hover:to-sage-300 font-medium border border-sage-light" title="Enrichir avec l'IA">
+            <Sparkles className="w-4 h-4" /> Enrichir IA
+          </button>
+          <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
+            <Edit2 className="w-4 h-4" /> Modifier
+          </button>
+        </div>
       </div>
 
       {/* ═══ PHOTO + TAGS IA (côte à côte) ═══ */}
@@ -2190,6 +2197,16 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
 
       {/* Assistant IA — sidebar fixe en bas à droite */}
       <MandatAIAssistant mandat={mandat} />
+
+      {/* Modal Enrichir avec l'IA (fiche complète existante) */}
+      <AIEnrichModal
+        open={aiEnrichOpen}
+        mandatId={mandat.id}
+        mandatLabel={mandat.nom || mandat.adresse}
+        defaultMode="smart_update"
+        onClose={() => setAiEnrichOpen(false)}
+        onApplied={() => { setAiEnrichOpen(false); reload?.(); }}
+      />
 
     </div>
   );
