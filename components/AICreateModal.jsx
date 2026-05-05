@@ -5,9 +5,10 @@
 
 'use client';
 import { useState, useRef } from 'react';
-import { X, Sparkles, FileText, Mic, MicOff, Upload, Loader2, Check, AlertCircle, Building2, User as UserIcon, ArrowRight } from 'lucide-react';
+import { X, Sparkles, FileText, Mic, MicOff, Upload, Loader2, Check, AlertCircle, Building2, User as UserIcon, ArrowRight, Eye, GitMerge } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, getCurrentUserInitials } from '@/lib/auth';
+import MergeMandatsModal from './MergeMandatsModal';
 
 const TYPE_LABELS = {
   mandat: { label: 'Mandat (bien à vendre)', icon: Building2, color: 'sage' },
@@ -81,6 +82,7 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
   const [result, setResult] = useState(null);
   const [creating, setCreating] = useState(false);
   const [forcedType, setForcedType] = useState(null);
+  const [mergeWith, setMergeWith] = useState(null); // { id, label } du mandat à fusionner
   const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -466,10 +468,21 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
             </div>
 
             {(detectedType === 'mandat' || detectedType === 'both') && result.mandat && (
-              <PreviewBlock title="📋 Mandat à créer" data={result.mandat} duplicates={result.duplicates?.mandat} />
+              <PreviewBlock
+                title="📋 Mandat à créer"
+                data={result.mandat}
+                duplicates={result.duplicates?.mandat}
+                duplicateType="mandat"
+                onMerge={(dupId, dupLabel) => setMergeWith({ id: dupId, label: dupLabel })}
+              />
             )}
             {(detectedType === 'client' || detectedType === 'both') && result.client && (
-              <PreviewBlock title="👤 Client à créer" data={result.client} duplicates={result.duplicates?.client} />
+              <PreviewBlock
+                title="👤 Client à créer"
+                data={result.client}
+                duplicates={result.duplicates?.client}
+                duplicateType="client"
+              />
             )}
 
             <div className="flex items-center justify-end gap-2 mt-4 pt-4 border-t border-stone-200">
@@ -482,6 +495,22 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
           </div>
         )}
       </div>
+
+      {/* Modal de fusion (au-dessus de la modale principale) */}
+      {mergeWith && (
+        <MergeMandatsModal
+          existingMandatId={mergeWith.id}
+          newData={result?.mandat || {}}
+          onClose={() => setMergeWith(null)}
+          onMerged={(mandatId, updates) => {
+            setMergeWith(null);
+            // Notifier le parent qu'un mandat a été MAJ (et pas créé)
+            if (onCreated) onCreated({ mandat: { id: mandatId, ...updates }, client: null, merged: true });
+            reset();
+            onClose();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -494,18 +523,59 @@ function TabButton({ active, onClick, children }) {
   );
 }
 
-function PreviewBlock({ title, data, duplicates }) {
+function PreviewBlock({ title, data, duplicates, duplicateType, onMerge }) {
   const entries = Object.entries(data).filter(([k, v]) => v !== null && v !== undefined && v !== '');
+  const hasDuplicates = Array.isArray(duplicates) && duplicates.length > 0;
+
   return (
     <div className="mb-4">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-semibold text-stone-900">{title}</h3>
-        {duplicates && duplicates.length > 0 && (
+        {hasDuplicates && (
           <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full">
             ⚠️ {duplicates.length} doublon(s) potentiel(s)
           </span>
         )}
       </div>
+
+      {/* Liste des doublons potentiels avec actions (mandat uniquement, fusion non gérée pour clients) */}
+      {hasDuplicates && (
+        <div className="mb-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="text-xs font-semibold text-amber-900 mb-1.5">Fiches déjà en BDD :</div>
+          <div className="space-y-1">
+            {duplicates.map(d => {
+              const isMandat = duplicateType === 'mandat';
+              const label = isMandat
+                ? (d.nom || d.adresse || 'Mandat sans nom')
+                : (`${d.prenom || ''} ${d.nom || ''}`.trim() || d.email || 'Client');
+              const sub = isMandat
+                ? [d.adresse, d.ville, d.prix ? `${(d.prix / 1000).toFixed(0)}k€` : null].filter(Boolean).join(' · ')
+                : [d.societe, d.email, d.tel].filter(Boolean).join(' · ');
+              return (
+                <div key={d.id} className="flex items-center gap-2 p-2 bg-white rounded border border-amber-100 text-xs">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-stone-900 truncate">{label}</div>
+                    {sub && <div className="text-[11px] text-stone-500 truncate">{sub}</div>}
+                  </div>
+                  {isMandat && onMerge && (
+                    <button
+                      onClick={() => onMerge(d.id, label)}
+                      className="flex items-center gap-1 px-2 py-1 bg-sage-dark text-white rounded text-[11px] hover:bg-sage-darker font-medium flex-shrink-0"
+                      title="Fusionner les nouvelles données dans cette fiche existante"
+                    >
+                      <GitMerge className="w-3 h-3" /> Fusionner
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="text-[10px] text-amber-700 mt-1.5">
+            💡 Fusionner = mettre à jour la fiche existante avec les nouvelles infos (pas de doublon créé)
+          </div>
+        </div>
+      )}
+
       <div className="bg-white border border-stone-200 rounded-lg p-3 space-y-1.5">
         {entries.map(([key, value]) => (
           <div key={key} className="flex items-start gap-2 text-xs">
