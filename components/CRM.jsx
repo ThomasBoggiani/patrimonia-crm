@@ -3197,12 +3197,6 @@ function DashboardDirection({ mandats, deals, clients, todos, allProfiles = [] }
         </div>
       </div>
 
-      // ═══════════════════════════════════════════════════════════════════
-// SECTION ALERTES — à insérer dans DashboardDirection
-// Juste après le </div> de l'en-tête (avec les filtres)
-// Et avant la section "═══ KPIs GLOBAUX ═══"
-// ═══════════════════════════════════════════════════════════════════
-
       {/* ═══ ALERTES ═══ */}
       {(() => {
         const now = new Date();
