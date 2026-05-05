@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
-import { usePriceMode, getPriceTTC, getPriceNV, getDisplayPrice, isNVEstimated } from '@/lib/priceDisplay';
+import { getPriceTTC, getPriceNV, isNVEstimated, getCommission, isCommissionEstimated } from '@/lib/priceDisplay';
 import AICreateModal from './AICreateModal';
 import MarkAsSoldModal from './MarkAsSoldModal';
 import VoiceNoteModal from './VoiceNoteModal';
@@ -973,7 +973,7 @@ function TypeInteractionBadge({ type }) {
 // === MANDATS ===
 function MandatsTab({ mandats, reload, clients, deals, todos, annonces, allProfiles = [] }) {
   const { user, profile } = useAuth();
-  const [priceMode, setPriceMode] = usePriceMode();
+  const [secondaryDisplay, setSecondaryDisplay] = useState('m2'); // 'm2' | 'nv_comm'
   const [search, setSearch] = useState('');
   const [filterComm, setFilterComm] = useState('Tous');
   const [filterType, setFilterType] = useState('Tous');
@@ -1051,21 +1051,21 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces, allProfi
         <div className="flex items-baseline gap-3">
           <h1 className="font-display text-2xl font-semibold text-stone-900">Mandats</h1>
           <span className="text-stone-500 text-sm">
-            {filtered.length} bien{filtered.length > 1 ? 's' : ''} · Portefeuille {formatPrixCompact(mandats.reduce((s,m)=>s+(getDisplayPrice(m, priceMode)||0),0))}
+            {filtered.length} bien{filtered.length > 1 ? 's' : ''} · Portefeuille {formatPrixCompact(mandats.reduce((s,m)=>s+(getPriceTTC(m)||0),0))}
           </span>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Toggle TTC / NV */}
-          <div className="flex items-center bg-stone-100 rounded-lg p-0.5" title="Mode d'affichage des prix">
-            <button onClick={() => setPriceMode('TTC')}
-              className={`px-2.5 py-1.5 text-xs font-medium rounded-md ${priceMode === 'TTC' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
-              title="Prix TTC honoraires inclus (= prix annoncé)">
-              💰 TTC
+          {/* Toggle Prix m² / Net Vendeur + Commission */}
+          <div className="flex items-center bg-stone-100 rounded-lg p-0.5" title="Affichage secondaire sous le prix">
+            <button onClick={() => setSecondaryDisplay('m2')}
+              className={`px-2.5 py-1.5 text-xs font-medium rounded-md ${secondaryDisplay === 'm2' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+              title="Afficher le prix au m²">
+              📐 m²
             </button>
-            <button onClick={() => setPriceMode('NV')}
-              className={`px-2.5 py-1.5 text-xs font-medium rounded-md ${priceMode === 'NV' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
-              title="Prix net vendeur">
-              📊 NV
+            <button onClick={() => setSecondaryDisplay('nv_comm')}
+              className={`px-2.5 py-1.5 text-xs font-medium rounded-md ${secondaryDisplay === 'nv_comm' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+              title="Afficher le net vendeur et la commission">
+              💼 NV + Comm.
             </button>
           </div>
           {/* Toggle Liste / Kanban */}
@@ -1106,7 +1106,7 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces, allProfi
         </select>
       </div>
 
-      {view === 'kanban' ? (         <MandatsKanban mandats={filtered} onSelectMandat={setSelectedMandat} reload={reload} priceMode={priceMode} />       ) : (       <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden">
+      {view === 'kanban' ? (         <MandatsKanban mandats={filtered} onSelectMandat={setSelectedMandat} reload={reload} secondaryDisplay={secondaryDisplay} />       ) : (       <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden">
         <table className="w-full">
               <colgroup>
                 <col style={{ width: '80px' }} />
@@ -1154,14 +1154,21 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces, allProfi
                   </td>
                   <td className="px-3 py-3 text-sm text-stone-700">{m.type}</td>
                   <td className="px-3 py-3">
-                    <div className="font-medium text-stone-900 text-sm">
-                      {formatPrix(getDisplayPrice(m, priceMode))}
-                      {priceMode === 'NV' && isNVEstimated(m) && (
-                        <span className="ml-1 text-[10px] text-amber-600 font-normal" title="Net vendeur estimé (honoraires non renseignés)">~</span>
-                      )}
-                    </div>
-                    {m.prixM2 && parseFloat(m.prixM2) > 0 && (
-                      <div className="text-xs text-stone-500">{parseFloat(m.prixM2).toLocaleString('fr')} €/m²</div>
+                    <div className="font-medium text-stone-900 text-sm">{formatPrix(getPriceTTC(m))}</div>
+                    {secondaryDisplay === 'm2' ? (
+                      m.prixM2 && parseFloat(m.prixM2) > 0 ? (
+                        <div className="text-xs text-stone-500">{parseFloat(m.prixM2).toLocaleString('fr')} €/m²</div>
+                      ) : null
+                    ) : (
+                      <div className="text-xs text-stone-500 leading-tight">
+                        <span title={isNVEstimated(m) ? "Net vendeur estimé" : "Net vendeur"}>
+                          NV {formatPrixCompact(getPriceNV(m))}{isNVEstimated(m) && <span className="text-amber-600">~</span>}
+                        </span>
+                        {' · '}
+                        <span className="text-emerald-700 font-medium" title={isCommissionEstimated(m) ? "Commission estimée 5%" : "Commission agence"}>
+                          💰 {formatPrixCompact(getCommission(m))}{isCommissionEstimated(m) && <span className="text-amber-600">~</span>}
+                        </span>
+                      </div>
                     )}
                   </td>
                   <td className="px-3 py-3">
@@ -1357,7 +1364,7 @@ function ClientSelector({ clients, mandats, value, onChange, onCreateNew }) {
 // À ajouter dans components/CRM.jsx (avant la fonction MandatForm)
 // ═══════════════════════════════════════════════════════════════════
 
-function MandatsKanban({ mandats, onSelectMandat, reload, priceMode = 'TTC' }) {
+function MandatsKanban({ mandats, onSelectMandat, reload, secondaryDisplay = 'm2' }) {
   const [draggingId, setDraggingId] = useState(null);
   const [dragOverCol, setDragOverCol] = useState(null);
   const [updating, setUpdating] = useState(false);
@@ -1468,11 +1475,15 @@ function MandatsKanban({ mandats, onSelectMandat, reload, priceMode = 'TTC' }) {
                       </div>
                     )}
                     <div className="flex items-center justify-between mt-1.5">
-                      <span className="text-[11px] font-medium text-stone-900">
-                        {formatPrixCompact(getDisplayPrice(m, priceMode) || 0)}
-                        {priceMode === 'NV' && isNVEstimated(m) && <span className="text-amber-600">~</span>}
-                      </span>
-                      <div className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-sage-100 text-sage-darker text-[9px] font-semibold border border-sage-light" title={'Owner: ' + (m.owner || '—')}>
+                      <div className="flex flex-col leading-tight min-w-0">
+                        <span className="text-[11px] font-medium text-stone-900">{formatPrixCompact(getPriceTTC(m) || 0)}</span>
+                        {secondaryDisplay === 'nv_comm' && (
+                          <span className="text-[9px] text-stone-500 truncate">
+                            NV {formatPrixCompact(getPriceNV(m))} · <span className="text-emerald-700 font-medium">💰 {formatPrixCompact(getCommission(m))}</span>
+                          </span>
+                        )}
+                      </div>
+                      <div className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-sage-100 text-sage-darker text-[9px] font-semibold border border-sage-light flex-shrink-0" title={'Owner: ' + (m.owner || '—')}>
                         {m.owner || '?'}
                       </div>
                     </div>
@@ -2133,9 +2144,12 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
               <div className="col-span-1">
                 <div className="text-xs uppercase tracking-wide text-stone-500 mb-1">Prix annoncé (TTC)</div>
                 <div className="text-2xl font-display font-semibold text-stone-900">{formatPrix(getPriceTTC(mandat))}</div>
-                <div className="text-[11px] text-stone-500 mt-1">
+                <div className="text-[11px] text-stone-500 mt-1 leading-tight">
                   Net vendeur : <span className="font-medium">{formatPrix(getPriceNV(mandat))}</span>
                   {isNVEstimated(mandat) && <span className="text-amber-600 ml-1" title="Honoraires non renseignés, estimation à 5%">~ estimé</span>}
+                  <br />
+                  Commission : <span className="font-medium text-emerald-700">{formatPrix(getCommission(mandat))}</span>
+                  {isCommissionEstimated(mandat) && <span className="text-amber-600 ml-1" title="Commission estimée à 5% du TTC">~ estimée</span>}
                 </div>
               </div>
               <DetailItem label="Prix au m²" value={mandat.prixM2 ? `${parseFloat(mandat.prixM2).toLocaleString('fr')}€` : '—'} />
