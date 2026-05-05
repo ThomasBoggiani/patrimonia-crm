@@ -20,6 +20,7 @@ import MandatAIAssistant from './MandatAIAssistant';
 import DocumentsModal from './DocumentsModal';
 import AgendaTab from './AgendaTab';
 import TeamTab from './TeamTab';
+import MyProfile from './MyProfile';
 import NotificationBell from './NotificationBell';
 import PhotoUploader from './PhotoUploader';
 import IntegrationsTab from './IntegrationsTab';
@@ -161,7 +162,6 @@ export default function CRM() {
     { id: 'matching', label: 'Matching auto', icon: Sparkles },
     { id: 'todos', label: 'To-do perso', icon: CheckSquare },
     ...(isManager(profile) ? [{ id: 'direction', label: 'Direction', icon: Building2 }] : []),
-    { id: 'remuneration', label: 'Rémunération', icon: TrendingUp },
     { id: 'agenda', label: 'Agenda', icon: Calendar },
     { id: 'annonces', label: 'Annonces', icon: Megaphone },
     { id: 'questionnaires', label: 'Questionnaires', icon: FileQuestion },
@@ -261,13 +261,23 @@ export default function CRM() {
           <div className="border-t border-cream-dark">
             <div className="p-4">
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-9 h-9 rounded-full gradient-sage-dark flex items-center justify-center text-white font-medium text-xs flex-shrink-0">
-                  {getCurrentUserInitials(profile)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium text-ink truncate">{getCurrentUserName(profile)}</div>
-                  <div className="text-[10px] text-sage-dark truncate">{profile?.fonction || profile?.role || 'Utilisateur'}</div>
-                </div>
+                <button
+                  onClick={() => { setActiveTab('myprofile'); setTabKey(k => k + 1); setSidebarOpen(false); }}
+                  className="flex items-center gap-3 flex-1 min-w-0 text-left rounded-lg p-1 -m-1 hover:bg-cream-100 transition-colors group"
+                  title="Voir ma fiche"
+                >
+                  <div className="w-9 h-9 rounded-full overflow-hidden gradient-sage-dark flex items-center justify-center text-white font-medium text-xs flex-shrink-0">
+                    {profile?.avatar_url ? (
+                      <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <span>{getCurrentUserInitials(profile)}</span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium text-ink truncate group-hover:text-sage-darker">{getCurrentUserName(profile)}</div>
+                    <div className="text-[10px] text-sage-dark truncate">{profile?.fonction || profile?.role || 'Utilisateur'}</div>
+                  </div>
+                </button>
                 {!isMobileView && <NotificationBell />}
               </div>
               <button onClick={signOut} className="w-full text-[11px] text-ink/60 hover:text-ink py-1 rounded hover:bg-cream-100">
@@ -286,7 +296,7 @@ export default function CRM() {
             {activeTab === 'matching' && <MatchingTab mandats={mandats} clients={clients} deals={deals} reload={loadAll} />}
             {activeTab === 'todos' && <TodosTab todos={todos} reload={loadAll} mandats={mandats} clients={clients} deals={deals} allProfiles={allProfiles} />}
             {activeTab === 'direction' && <DashboardDirection mandats={mandats} deals={deals} clients={clients} todos={todos} allProfiles={allProfiles} />}
-            {activeTab === 'remuneration' && <RemunerationTab mandats={mandats} allProfiles={allProfiles} />}
+            {activeTab === 'myprofile' && <MyProfile mandats={mandats} todos={todos} clients={clients} allProfiles={allProfiles} RemunerationComponent={RemunerationTab} onNavigate={(t) => { setActiveTab(t); setTabKey(k => k + 1); }} />}
             {activeTab === 'agenda' && <AgendaTab />}
             {activeTab === 'integrations' && <IntegrationsTab />}
             {activeTab === 'team' && <TeamTab />}
