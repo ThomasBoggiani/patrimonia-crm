@@ -7,6 +7,7 @@
 import { useState, useRef } from 'react';
 import { X, Sparkles, FileText, Mic, MicOff, Upload, Loader2, Check, AlertCircle, Building2, User as UserIcon, ArrowRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth, getCurrentUserInitials } from '@/lib/auth';
 
 const TYPE_LABELS = {
   mandat: { label: 'Mandat (bien à vendre)', icon: Building2, color: 'sage' },
@@ -16,6 +17,8 @@ const TYPE_LABELS = {
 };
 
 export default function AICreateModal({ open, onClose, defaultType, onCreated }) {
+  const { profile } = useAuth();
+  const myInitials = getCurrentUserInitials(profile) || 'TB';
   const [tab, setTab] = useState('text'); // 'files' | 'text' | 'audio'
   const [text, setText] = useState('');
   const [files, setFiles] = useState([]);
@@ -113,7 +116,7 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
           ...mandatFields,
           description: description || null,
           statut: 'Sourcing',
-          owner: 'TB', // TODO : récupérer initiales user
+          owner: myInitials,
           created_by: user?.id,
         }).select().single();
         if (mErr) {
@@ -132,7 +135,7 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
           typologies_recherchees: typologies_recherchees || [],
           statut: 'Actif',
           created_by: user?.id,
-          owner: 'TB',
+          owner: myInitials,
         }).select().single();
         if (cErr) {
           console.error('Erreur création client:', cErr);
