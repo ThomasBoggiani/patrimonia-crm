@@ -110,6 +110,13 @@ Renvoie UNIQUEMENT un JSON valide (pas de backticks markdown), exactement ce for
     "Off-market via deux family offices identifiés"
   ],
 
+  "highlights": [
+    "Emplacement Paris 8e",
+    "Rendement 5,2% net",
+    "Off-market exclusif",
+    "Travaux récents 2023"
+  ],
+
   "brief": {
     "forces": ["Emplacement Paris 8e premium", "Rendement supérieur au marché"],
     "faiblesses": ["DPE classe E à anticiper", "Travaux toiture à estimer"],
@@ -126,6 +133,7 @@ Renvoie UNIQUEMENT un JSON valide (pas de backticks markdown), exactement ce for
 - "matching_clients" : compare le bien aux clients fournis, ne mets que ceux qui matchent vraiment (budget/zone/typologie)
 - "target_profiles" : 2 à 5 profils-types d'acheteurs idéaux
 - "strategies" : 3 à 5 stratégies concrètes pour vendre off-market
+- "highlights" : 4 à 8 points forts COURTS (max 5 mots chacun) à afficher en badges sur la fiche. Ce sont les arguments de vente clés.
 - "brief.synthese" : max 500 caractères, ton professionnel
 - TOUS les textes en FRANÇAIS
 - Réponds UNIQUEMENT le JSON, pas de préambule`;
@@ -145,7 +153,7 @@ async function callClaude(systemPrompt, userContent) {
   } catch (e) {
     console.error('[ai-analyze] JSON parse error:', e.message, '\nRaw:', text.slice(0, 500));
     return {
-      parsed: { updates: {}, tasks: [], matching_clients: [], target_profiles: [], strategies: [], brief: {} },
+      parsed: { updates: {}, tasks: [], matching_clients: [], target_profiles: [], strategies: [], highlights: [], brief: {} },
       usage: response.usage,
       parseError: true,
     };
@@ -363,7 +371,7 @@ export async function POST(request) {
       ? `${existingDesc}\n\n${briefText}`
       : briefText;
 
-    // ─── 9. Appliquer les updates auto-fill + nouvelle description ───
+    // ─── 9. Appliquer les updates auto-fill + nouvelle description + highlights ───
     const finalUpdates = { ...autoFilled, description: newDescription };
 
     // Si l'IA a proposé une description, on l'utilise (en remplaçant celle qu'on vient de construire)
@@ -372,6 +380,16 @@ export async function POST(request) {
       finalUpdates.description = `${autoFilled.description}\n\n${briefText}`;
     }
     delete autoFilled.description; // Pour ne pas le compter dans autoFilled retourné au client
+
+    // Highlights : on remplace toujours par ceux de l'IA (les points forts les plus pertinents)
+    // Si l'IA n'en a pas renvoyé, on garde les anciens (pas d'écrasement par tableau vide)
+    if (Array.isArray(parsed.highlights) && parsed.highlights.length > 0) {
+      // Limiter à 8 highlights max, chacun max 60 caractères pour ne pas casser l'affichage
+      finalUpdates.highlights = parsed.highlights
+        .slice(0, 8)
+        .map(h => String(h).trim().slice(0, 60))
+        .filter(h => h.length > 0);
+    }
 
     const { error: updateErr } = await supabaseAdmin
       .from('mandats').update(finalUpdates).eq('id', mandatId);
@@ -426,6 +444,7 @@ export async function POST(request) {
       matchingClients: parsed.matching_clients || [],
       targetProfiles: parsed.target_profiles || [],
       strategies: parsed.strategies || [],
+      highlights: finalUpdates.highlights || [],  // points forts (déjà sauvegardés en BDD)
       brief: parsed.brief || {},
       confidence: parsed.confidence || 0,
       reasoning: parsed.updates_reasoning || '',
