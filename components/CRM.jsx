@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
+import { usePriceMode, getPriceTTC, getPriceNV, getDisplayPrice, isNVEstimated } from '@/lib/priceDisplay';
 import AICreateModal from './AICreateModal';
 import MarkAsSoldModal from './MarkAsSoldModal';
 import VoiceNoteModal from './VoiceNoteModal';
@@ -972,6 +973,7 @@ function TypeInteractionBadge({ type }) {
 // === MANDATS ===
 function MandatsTab({ mandats, reload, clients, deals, todos, annonces, allProfiles = [] }) {
   const { user, profile } = useAuth();
+  const [priceMode, setPriceMode] = usePriceMode();
   const [search, setSearch] = useState('');
   const [filterComm, setFilterComm] = useState('Tous');
   const [filterType, setFilterType] = useState('Tous');
@@ -1045,22 +1047,40 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces, allProfi
 
   return (
     <div className="p-6 max-w-none">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="flex items-baseline gap-3">
           <h1 className="font-display text-2xl font-semibold text-stone-900">Mandats</h1>
-          <span className="text-stone-500 text-sm">{filtered.length} bien{filtered.length > 1 ? 's' : ''} · Portefeuille {formatPrixCompact(mandats.reduce((s,m)=>s+(parseFloat(m.prix)||0),0))}</span>
+          <span className="text-stone-500 text-sm">
+            {filtered.length} bien{filtered.length > 1 ? 's' : ''} · Portefeuille {formatPrixCompact(mandats.reduce((s,m)=>s+(getDisplayPrice(m, priceMode)||0),0))}
+          </span>
         </div>
-        <div className="flex items-center bg-stone-100 rounded-lg p-0.5 mr-2">
-          <button onClick={() => setView('list')} className={`px-3 py-1.5 text-xs font-medium rounded-md ${view === 'list' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'}`}>
-            Liste
-          </button>
-          <button onClick={() => setView('kanban')} className={`px-3 py-1.5 text-xs font-medium rounded-md ${view === 'kanban' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'}`}>
-            Kanban
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Toggle TTC / NV */}
+          <div className="flex items-center bg-stone-100 rounded-lg p-0.5" title="Mode d'affichage des prix">
+            <button onClick={() => setPriceMode('TTC')}
+              className={`px-2.5 py-1.5 text-xs font-medium rounded-md ${priceMode === 'TTC' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+              title="Prix TTC honoraires inclus (= prix annoncé)">
+              💰 TTC
+            </button>
+            <button onClick={() => setPriceMode('NV')}
+              className={`px-2.5 py-1.5 text-xs font-medium rounded-md ${priceMode === 'NV' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+              title="Prix net vendeur">
+              📊 NV
+            </button>
+          </div>
+          {/* Toggle Liste / Kanban */}
+          <div className="flex items-center bg-stone-100 rounded-lg p-0.5">
+            <button onClick={() => setView('list')} className={`px-3 py-1.5 text-xs font-medium rounded-md ${view === 'list' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'}`}>
+              Liste
+            </button>
+            <button onClick={() => setView('kanban')} className={`px-3 py-1.5 text-xs font-medium rounded-md ${view === 'kanban' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'}`}>
+              Kanban
+            </button>
+          </div>
+          <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-3 py-2 bg-ink-deep text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
+            <Plus className="w-4 h-4" /> Nouveau mandat
           </button>
         </div>
-        <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-3 py-2 bg-ink-deep text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
-          <Plus className="w-4 h-4" /> Nouveau mandat
-        </button>
       </div>
 
       <div className="flex gap-3 mb-6">
@@ -1086,7 +1106,7 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces, allProfi
         </select>
       </div>
 
-      {view === 'kanban' ? (         <MandatsKanban mandats={filtered} onSelectMandat={setSelectedMandat} reload={reload} />       ) : (       <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden">
+      {view === 'kanban' ? (         <MandatsKanban mandats={filtered} onSelectMandat={setSelectedMandat} reload={reload} priceMode={priceMode} />       ) : (       <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden">
         <table className="w-full">
               <colgroup>
                 <col style={{ width: '80px' }} />
@@ -1134,7 +1154,12 @@ function MandatsTab({ mandats, reload, clients, deals, todos, annonces, allProfi
                   </td>
                   <td className="px-3 py-3 text-sm text-stone-700">{m.type}</td>
                   <td className="px-3 py-3">
-                    <div className="font-medium text-stone-900 text-sm">{formatPrix(m.prix)}</div>
+                    <div className="font-medium text-stone-900 text-sm">
+                      {formatPrix(getDisplayPrice(m, priceMode))}
+                      {priceMode === 'NV' && isNVEstimated(m) && (
+                        <span className="ml-1 text-[10px] text-amber-600 font-normal" title="Net vendeur estimé (honoraires non renseignés)">~</span>
+                      )}
+                    </div>
                     {m.prixM2 && parseFloat(m.prixM2) > 0 && (
                       <div className="text-xs text-stone-500">{parseFloat(m.prixM2).toLocaleString('fr')} €/m²</div>
                     )}
@@ -1332,7 +1357,7 @@ function ClientSelector({ clients, mandats, value, onChange, onCreateNew }) {
 // À ajouter dans components/CRM.jsx (avant la fonction MandatForm)
 // ═══════════════════════════════════════════════════════════════════
 
-function MandatsKanban({ mandats, onSelectMandat, reload }) {
+function MandatsKanban({ mandats, onSelectMandat, reload, priceMode = 'TTC' }) {
   const [draggingId, setDraggingId] = useState(null);
   const [dragOverCol, setDragOverCol] = useState(null);
   const [updating, setUpdating] = useState(false);
@@ -1443,7 +1468,10 @@ function MandatsKanban({ mandats, onSelectMandat, reload }) {
                       </div>
                     )}
                     <div className="flex items-center justify-between mt-1.5">
-                      <span className="text-[11px] font-medium text-stone-900">{formatPrixCompact(parseFloat(m.prix) || 0)}</span>
+                      <span className="text-[11px] font-medium text-stone-900">
+                        {formatPrixCompact(getDisplayPrice(m, priceMode) || 0)}
+                        {priceMode === 'NV' && isNVEstimated(m) && <span className="text-amber-600">~</span>}
+                      </span>
                       <div className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-sage-100 text-sage-darker text-[9px] font-semibold border border-sage-light" title={'Owner: ' + (m.owner || '—')}>
                         {m.owner || '?'}
                       </div>
@@ -1500,7 +1528,7 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
 
   const REQUIRED_FIELDS = {
     nom: 'Nom du bien', adresse: 'Adresse', type: "Type d'actif",
-    prix: 'Prix net vendeur', surface: 'Surface totale',
+    prix: 'Prix annoncé (TTC)', surface: 'Surface totale',
   };
 
   async function compressImage(file) {
@@ -1829,7 +1857,7 @@ async function handleFolderImport(event) {
                 <Field label="Échéance"><input type="date" value={data.mandatDateEcheance || ''} onChange={e => update('mandatDateEcheance', e.target.value)} className={fieldClass('mandatDateEcheance')} /></Field>
               </div>
               <div className="grid grid-cols-3 gap-3">
-                <Field label="Prix (€)"><input type="number" value={data.prix} onChange={e => update('prix', +e.target.value)} className={fieldClass('prix')} /></Field>
+                <Field label="Prix annoncé TTC (€)"><input type="number" value={data.prix} onChange={e => update('prix', +e.target.value)} className={fieldClass('prix')} placeholder="Honoraires inclus" /></Field>
                 <Field label="Prix/m² (€)"><input type="number" value={data.prixM2} onChange={e => update('prixM2', +e.target.value)} className={fieldClass('prixM2')} /></Field>
                 <Field label="Loyers/an (€)"><input type="number" value={data.loyersAnnuels} onChange={e => update('loyersAnnuels', +e.target.value)} className={fieldClass('loyersAnnuels')} /></Field>
               </div>
@@ -2102,7 +2130,14 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Analyse financière</h2>
             <div className="grid grid-cols-4 gap-4">
-              <DetailItem label="Prix net vendeur" value={formatPrix(mandat.prix)} highlight />
+              <div className="col-span-1">
+                <div className="text-xs uppercase tracking-wide text-stone-500 mb-1">Prix annoncé (TTC)</div>
+                <div className="text-2xl font-display font-semibold text-stone-900">{formatPrix(getPriceTTC(mandat))}</div>
+                <div className="text-[11px] text-stone-500 mt-1">
+                  Net vendeur : <span className="font-medium">{formatPrix(getPriceNV(mandat))}</span>
+                  {isNVEstimated(mandat) && <span className="text-amber-600 ml-1" title="Honoraires non renseignés, estimation à 5%">~ estimé</span>}
+                </div>
+              </div>
               <DetailItem label="Prix au m²" value={mandat.prixM2 ? `${parseFloat(mandat.prixM2).toLocaleString('fr')}€` : '—'} />
               <DetailItem label="Loyers annuels" value={mandat.loyersAnnuels ? `${parseFloat(mandat.loyersAnnuels).toLocaleString('fr')}€` : '—'} />
               <DetailItem label="Rendement" value={parseFloat(mandat.rendement) > 0 ? `${mandat.rendement}%` : '—'} highlight />
