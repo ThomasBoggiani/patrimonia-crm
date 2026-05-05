@@ -3005,6 +3005,221 @@ function MatchingTab({ mandats, clients, deals, reload }) {
 // Filtre sur created_at : Mois en cours / Trimestre / Année / Tout
 // ═══════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════
+// ReglagesSection — Panneau admin pour modifier les taux de commission
+// À COLLER dans components/CRM.jsx avant la fonction DashboardDirection
+// ═══════════════════════════════════════════════════════════════════
+
+function ReglagesSection({ rates, setRates, userId }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(rates);
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState(null);
+
+  // Sync draft when rates change
+  useEffect(() => {
+    setDraft(rates);
+  }, [rates]);
+
+  const total = (parseFloat(draft.pourvoyeur) || 0) + (parseFloat(draft.vendeur) || 0) + (parseFloat(draft.agence) || 0);
+  const isValid = Math.abs(total - 100) < 0.01;
+
+  async function handleSave() {
+    if (!isValid) return;
+    setSaving(true);
+
+    const newValue = {
+      pourvoyeur: parseFloat(draft.pourvoyeur) || 0,
+      vendeur: parseFloat(draft.vendeur) || 0,
+      agence: parseFloat(draft.agence) || 0,
+      taux_commission: parseFloat(draft.taux_commission) || 5,
+      tva: rates.tva || 20,
+    };
+
+    const { error } = await supabase
+      .from('settings')
+      .upsert({
+        key: 'commission_rates',
+        value: newValue,
+        updated_by: userId,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'key' });
+
+    if (!error) {
+      setRates(prev => ({ ...prev, ...newValue }));
+      setSavedAt(new Date());
+      setEditing(false);
+    } else {
+      alert('Erreur lors de la sauvegarde : ' + error.message);
+    }
+    setSaving(false);
+  }
+
+  function handleCancel() {
+    setDraft(rates);
+    setEditing(false);
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden mt-6">
+      <div className="p-5 border-b border-stone-200 flex items-center justify-between">
+        <div>
+          <h2 className="font-display text-lg font-semibold text-stone-900 flex items-center gap-2">⚙️ Réglages</h2>
+          <p className="text-xs text-stone-500 mt-1">Taux de commission appliqués sur l'ensemble du CRM</p>
+        </div>
+        {!editing ? (
+          <button
+            onClick={() => setEditing(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg transition"
+          >
+            <Edit2 className="w-3.5 h-3.5" /> Modifier
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCancel}
+              disabled={saving}
+              className="px-3 py-1.5 text-xs font-medium bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg transition disabled:opacity-50"
+            >
+              Annuler
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!isValid || saving}
+              className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving ? '⏳ Enregistrement...' : '✓ Enregistrer'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="p-5">
+        <div className="grid grid-cols-4 gap-4">
+          {/* Pourvoyeur */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="text-xs font-medium text-blue-700 uppercase tracking-wide mb-2">🤝 Pourvoyeur</div>
+            {editing ? (
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={draft.pourvoyeur}
+                  onChange={e => setDraft({ ...draft, pourvoyeur: e.target.value })}
+                  className="w-full px-2 py-1 border border-blue-300 rounded text-2xl font-semibold text-blue-900 bg-white focus:outline-none focus:border-blue-500"
+                />
+                <span className="text-2xl font-semibold text-blue-900">%</span>
+              </div>
+            ) : (
+              <div className="text-3xl font-semibold text-blue-900">{rates.pourvoyeur}<span className="text-xl">%</span></div>
+            )}
+            <div className="text-[10px] text-blue-600 mt-1">Apporteur du mandat</div>
+          </div>
+
+          {/* Vendeur */}
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <div className="text-xs font-medium text-amber-700 uppercase tracking-wide mb-2">🎯 Vendeur</div>
+            {editing ? (
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={draft.vendeur}
+                  onChange={e => setDraft({ ...draft, vendeur: e.target.value })}
+                  className="w-full px-2 py-1 border border-amber-300 rounded text-2xl font-semibold text-amber-900 bg-white focus:outline-none focus:border-amber-500"
+                />
+                <span className="text-2xl font-semibold text-amber-900">%</span>
+              </div>
+            ) : (
+              <div className="text-3xl font-semibold text-amber-900">{rates.vendeur}<span className="text-xl">%</span></div>
+            )}
+            <div className="text-[10px] text-amber-600 mt-1">Closer de la vente</div>
+          </div>
+
+          {/* Agence */}
+          <div className="bg-stone-50 border border-stone-200 rounded-lg p-4">
+            <div className="text-xs font-medium text-stone-700 uppercase tracking-wide mb-2">🏛️ Agence</div>
+            {editing ? (
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={draft.agence}
+                  onChange={e => setDraft({ ...draft, agence: e.target.value })}
+                  className="w-full px-2 py-1 border border-stone-300 rounded text-2xl font-semibold text-stone-900 bg-white focus:outline-none focus:border-stone-500"
+                />
+                <span className="text-2xl font-semibold text-stone-900">%</span>
+              </div>
+            ) : (
+              <div className="text-3xl font-semibold text-stone-900">{rates.agence}<span className="text-xl">%</span></div>
+            )}
+            <div className="text-[10px] text-stone-600 mt-1">Part agence</div>
+          </div>
+
+          {/* Taux commission */}
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+            <div className="text-xs font-medium text-emerald-700 uppercase tracking-wide mb-2">💰 Taux commission</div>
+            {editing ? (
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min="0"
+                  max="20"
+                  step="0.1"
+                  value={draft.taux_commission}
+                  onChange={e => setDraft({ ...draft, taux_commission: e.target.value })}
+                  className="w-full px-2 py-1 border border-emerald-300 rounded text-2xl font-semibold text-emerald-900 bg-white focus:outline-none focus:border-emerald-500"
+                />
+                <span className="text-2xl font-semibold text-emerald-900">%</span>
+              </div>
+            ) : (
+              <div className="text-3xl font-semibold text-emerald-900">{rates.taux_commission}<span className="text-xl">%</span></div>
+            )}
+            <div className="text-[10px] text-emerald-600 mt-1">% du HT</div>
+          </div>
+        </div>
+
+        {/* Validation */}
+        {editing && (
+          <div className={`mt-4 p-3 rounded-lg flex items-center gap-2 text-sm ${
+            isValid ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
+          }`}>
+            {isValid ? (
+              <>
+                <span>✅</span>
+                <span>La répartition fait bien <strong>100%</strong> (Pourvoyeur + Vendeur + Agence)</span>
+              </>
+            ) : (
+              <>
+                <span>⚠️</span>
+                <span>La répartition doit faire <strong>100%</strong>. Total actuel : <strong>{total.toFixed(1)}%</strong></span>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Confirmation après save */}
+        {!editing && savedAt && (
+          <div className="mt-4 p-3 rounded-lg flex items-center gap-2 text-sm bg-emerald-50 text-emerald-800 border border-emerald-200">
+            <span>✅</span>
+            <span>Réglages mis à jour à {savedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}. Les calculs (Rémunération, Dashboard Direction) sont automatiquement à jour.</span>
+          </div>
+        )}
+
+        {/* Aide */}
+        <div className="mt-4 text-xs text-stone-500">
+          <strong>Calcul :</strong> Prix TTC ÷ {(1 + (rates.tva || 20) / 100).toFixed(2)} = HT · Commission agence = HT × {rates.taux_commission}% · Répartition Pourvoyeur {rates.pourvoyeur}% / Vendeur {rates.vendeur}% / Agence {rates.agence}%
+        </div>
+      </div>
+    </div>
+  );
+}
 function DashboardDirection({ mandats, deals, clients, todos, allProfiles = [] }) {
   const { user, profile } = useAuth();
   const [rates, setRates] = useState({ pourvoyeur: 30, vendeur: 30, agence: 40, taux_commission: 5, tva: 20 });
@@ -3461,6 +3676,9 @@ function DashboardDirection({ mandats, deals, clients, todos, allProfiles = [] }
         )}
       </div>
 
+      {/* ═══ RÉGLAGES ADMIN ═══ */}
+      <ReglagesSection rates={rates} setRates={setRates} userId={user?.id} />
+    
     </div>
   );
 }
