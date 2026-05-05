@@ -67,10 +67,134 @@ async function loadVendeurStats(mandatId, period) {
   if (!period?.start || !period?.end) {
     return { stats: {}, events: [] };
   }
-  return {
-    stats: { nb_visites: 0, nb_contacts: 0, nb_offres: 0, nb_vues: 0 },
-    events: [],
+
+  const startDate = new Date(period.start);
+  const endDate = new Date(period.end);
+  // Inclure toute la journée de fin
+  endDate.setHours(23, 59, 59, 999);
+
+  // ─── Charger les deals (matchings vendeur/acheteur) ───
+  const { data: deals = [] } = await supabaseAdmin
+    .from('deals')
+    .select('id, statut, created_at, updated_at, client_id, mandat_id, notes')
+    .eq('mandat_id', mandatId)
+    .gte('created_at', startDate.toISOString())
+    .lte('created_at', endDate.toISOString());
+
+  // ─── Charger les clients pour les noms ───
+  const clientIds = [...new Set((deals || []).map(d => d.client_id).filter(Boolean))];
+  let clientsById = {};
+  if (clientIds.length > 0) {
+    const { data: clients = [] } = await supabaseAdmin
+      .from('clients')
+      .select('id, prenom, nom, societe')
+      .in('id', clientIds);
+    clientsById = Object.fromEntries((clients || []).map(c => [c.id, c]));
+  }
+
+  // ─── Charger les tâches sur le mandat ───
+  const { data: todos = [] } = await supabaseAdmin
+    .from('todos')
+    .select('id, titre, statut, priorite, echeance, created_at, updated_at')
+    .eq('lien_type', 'mandat')
+    .eq('lien_id', mandatId)
+    .gte('created_at', startDate.toISOString())
+    .lte('created_at', endDate.toISOString());
+
+  // ─── Charger le mandat pour les dates clés ───
+  const { data: mandat } = await supabaseAdmin
+    .from('mandats')
+    .select('created_at, date_signature, date_vente')
+    .eq('id', mandatId)
+    .maybeSingle();
+
+  // ─── Calculer les stats ───
+  const dealsList = deals || [];
+  const stats = {
+    nb_contacts: dealsList.length,
+    nb_visites: dealsList.filter(d => d.statut === 'Visite').length,
+    nb_offres: dealsList.filter(d => d.statut === 'Offre' || d.statut === 'Promesse' || d.statut === 'Gagné').length,
+    nb_vues: 'N/A',
   };
+
+  // ─── Construire les events (chronologie) ───
+  const events = [];
+
+  // 1. Création du mandat (si dans la période)
+  if (mandat?.created_at) {
+    const createdAt = new Date(mandat.created_at);
+    if (createdAt >= startDate && createdAt <= endDate) {
+      events.push({
+        date: mandat.created_at,
+        type: 'Mandat',
+        label: '📋 Création du mandat',
+        description: 'Le mandat est entré en sourcing',
+      });
+    }
+  }
+
+  // 2. Signature du mandat
+  if (mandat?.date_signature) {
+    const sigDate = new Date(mandat.date_signature);
+    if (sigDate >= startDate && sigDate <= endDate) {
+      events.push({
+        date: mandat.date_signature,
+        type: 'Signature',
+        label: '✍️ Signature du mandat',
+        description: 'Le mandat a été signé',
+      });
+    }
+  }
+
+  // 3. Date de vente
+  if (mandat?.date_vente) {
+    const venteDate = new Date(mandat.date_vente);
+    if (venteDate >= startDate && venteDate <= endDate) {
+      events.push({
+        date: mandat.date_vente,
+        type: 'Vente',
+        label: '🏆 Vente conclue',
+        description: 'La transaction a été finalisée',
+      });
+    }
+  }
+
+  // 4. Deals (matchings)
+  for (const d of dealsList) {
+    const client = clientsById[d.client_id];
+    const clientName = client
+      ? `${client.prenom || ''} ${client.nom || ''}`.trim() || client.societe || 'Client'
+      : 'Client';
+
+    let label = `📞 Contact : ${clientName}`;
+    if (d.statut === 'Visite') label = `👁️ Visite : ${clientName}`;
+    if (d.statut === 'Offre') label = `💰 Offre reçue : ${clientName}`;
+    if (d.statut === 'Promesse') label = `📝 Promesse signée : ${clientName}`;
+    if (d.statut === 'Gagné') label = `🏆 Vente : ${clientName}`;
+    if (d.statut === 'Perdu') label = `❌ Affaire perdue : ${clientName}`;
+
+    events.push({
+      date: d.created_at,
+      type: d.statut || 'Contact',
+      label,
+      description: d.notes || `Statut : ${d.statut}`,
+    });
+  }
+
+  // 5. Tâches importantes
+  for (const t of todos || []) {
+    events.push({
+      date: t.created_at,
+      type: 'Tâche',
+      label: `✅ ${t.titre}`,
+      description: t.statut === 'Fait' ? 'Tâche réalisée' : `Priorité ${t.priorite || 'normale'}`,
+    });
+  }
+
+  // ─── Tri chronologique inversé (plus récent en premier) ───
+  events.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  return { stats, events };
 }
 
 function getLogoUrl(request, isOffMarket) {
