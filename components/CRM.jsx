@@ -22,7 +22,6 @@ import DocumentsModal from './DocumentsModal';
 import AgendaTab from './AgendaTab';
 import TeamTab from './TeamTab';
 import MyProfile from './MyProfile';
-import AIEnrichModal from './AIEnrichModal';
 import AIAnalyzeModal from './AIAnalyzeModal';
 import NotificationBell from './NotificationBell';
 import PhotoUploader from './PhotoUploader';
