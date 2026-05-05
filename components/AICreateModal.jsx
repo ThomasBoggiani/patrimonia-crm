@@ -106,6 +106,10 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
       const token = session?.access_token;
       if (!token) { setCreating(false); return; }
 
+      console.log('[AICreateModal DEBUG] profile:', profile);
+      console.log('[AICreateModal DEBUG] profile?.prenom:', profile?.prenom);
+      console.log('[AICreateModal DEBUG] profile?.nom:', profile?.nom);
+      console.log('[AICreateModal DEBUG] initials computed:', profile ? getCurrentUserInitials(profile) : 'TB-fallback');
       const created = { mandat: null, client: null };
 
       if ((result.type === 'mandat' || result.type === 'both') && result.mandat) {
