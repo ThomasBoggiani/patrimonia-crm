@@ -28,7 +28,8 @@ import PhotoUploader from './PhotoUploader';
 import IntegrationsTab from './IntegrationsTab';
 import ClientEmails from './ClientEmails'; 
 import ClientAIAssistant from './ClientAIAssistant'; 
-import InboxTab from './InboxTab';
+import InboxTab from './InboxTab'; 
+import QuestionnaireResponseModal from './QuestionnaireResponseModal';
 import ContactsImportModal from './ContactsImportModal';
 import PdfExportButtons from '@/components/PdfExportButtons';
 import { PhotosModal, VisiteModal, MandantModal } from './MandatModals';
@@ -4303,6 +4304,8 @@ function AnnoncesTab({ annonces, reload, mandats }) {
 function QuestionnairesTab({ questionnaires, reload }) {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [showQR, setShowQR] = useState(null);
+  const [selectedResponse, setSelectedResponse] = useState(null);
+  const [selectedQuestionnaire, setSelectedQuestionnaire] = useState(null);
 
   const templates = {
     vendeur: {
@@ -4382,33 +4385,32 @@ function QuestionnairesTab({ questionnaires, reload }) {
       {questionnaires.length > 0 && (
         <div>
           <h2 className="font-display text-2xl font-semibold text-stone-900 mb-4">Liens générés</h2>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {questionnaires.map(q => (
-              <div key={q.id} className="bg-white rounded-xl p-4 shadow-luxe border border-stone-200 flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                  q.type === 'vendeur' ? 'bg-sage-100 text-sage-dark' : 'bg-emerald-100 text-emerald-700'
-                }`}>
-                  <FileQuestion className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm text-stone-900">{q.nom}</div>
-                  <div className="text-xs text-stone-500 truncate font-mono">{q.lien}</div>
-                </div>
-                <span className="text-xs text-stone-500">{(q.reponses || []).length} réponses</span>
-                <button onClick={() => navigator.clipboard.writeText(q.lien)} className="p-2 text-stone-600 hover:bg-stone-100 rounded-lg" title="Copier">
-                  <Copy className="w-4 h-4" />
-                </button>
-                <button onClick={() => setShowQR(q)} className="p-2 text-stone-600 hover:bg-stone-100 rounded-lg" title="QR Code">
-                  <QrCode className="w-4 h-4" />
-                </button>
-                <button onClick={() => deleteQ(q.id)} className="p-2 text-stone-600 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+              <QuestionnaireCard
+                key={q.id}
+                q={q}
+                onShowQR={setShowQR}
+                onDelete={deleteQ}
+                onOpenResponse={(r) => { setSelectedQuestionnaire(q); setSelectedResponse(r); }}
+                onReload={reload}
+              />
             ))}
           </div>
         </div>
       )}
+
+      {/* Modale détail réponse + import CRM */}
+      <QuestionnaireResponseModal
+        isOpen={!!selectedResponse}
+        onClose={() => { setSelectedResponse(null); setSelectedQuestionnaire(null); }}
+        questionnaire={selectedQuestionnaire}
+        response={selectedResponse}
+        onImported={(imported) => {
+          alert(`✓ ${imported.type === 'client' ? 'Client' : 'Mandat'} créé avec succès dans le CRM`);
+          reload();
+        }}
+      />
 
       {selectedTemplate && (
         <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-6" onClick={() => setSelectedTemplate(null)}>
@@ -4465,6 +4467,116 @@ function QuestionnairesTab({ questionnaires, reload }) {
               <button onClick={() => setShowQR(null)} className="flex-1 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Fermer</button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Carte questionnaire (avec liste des réponses dépliable)
+// ─────────────────────────────────────────────
+function QuestionnaireCard({ q, onShowQR, onDelete, onOpenResponse, onReload }) {
+  const [expanded, setExpanded] = useState(false);
+  const responses = q.reponses || [];
+  const nbResponses = responses.length;
+  const nbImported = responses.filter(r => r.imported_client_id || r.imported_mandat_id).length;
+  const nbToImport = nbResponses - nbImported;
+
+  return (
+    <div className="bg-white rounded-xl shadow-luxe border border-cream-dark overflow-hidden">
+      {/* Ligne principale */}
+      <div className="p-4 flex items-center gap-4">
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+          q.type === 'vendeur' ? 'bg-sage-100 text-sage-dark' : 'bg-emerald-100 text-emerald-700'
+        }`}>
+          <FileQuestion className="w-5 h-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-medium text-sm text-stone-900">{q.nom}</div>
+          <div className="text-xs text-stone-500 truncate font-mono">{q.lien}</div>
+        </div>
+
+        {nbResponses > 0 && (
+          <button
+            onClick={() => setExpanded(e => !e)}
+            className="flex items-center gap-1.5 text-xs px-2.5 py-1 bg-stone-100 hover:bg-stone-200 rounded-md"
+          >
+            <span className="font-semibold">{nbResponses}</span> réponse{nbResponses > 1 ? 's' : ''}
+            {nbToImport > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 bg-purple-600 text-white text-[10px] rounded-full">
+                {nbToImport} à importer
+              </span>
+            )}
+            <ChevronRight className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+          </button>
+        )}
+        {nbResponses === 0 && (
+          <span className="text-xs text-stone-400">Aucune réponse</span>
+        )}
+
+        <button onClick={() => navigator.clipboard.writeText(q.lien)} className="p-2 text-stone-600 hover:bg-stone-100 rounded-lg" title="Copier le lien">
+          <Copy className="w-4 h-4" />
+        </button>
+        <button onClick={() => onShowQR(q)} className="p-2 text-stone-600 hover:bg-stone-100 rounded-lg" title="QR Code">
+          <QrCode className="w-4 h-4" />
+        </button>
+        <button onClick={() => onDelete(q.id)} className="p-2 text-stone-600 hover:text-red-600 hover:bg-red-50 rounded-lg">
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Liste des réponses (dépliable) */}
+      {expanded && nbResponses > 0 && (
+        <div className="border-t border-cream-dark bg-stone-50/50 divide-y divide-cream-dark">
+          {responses
+            .slice()
+            .sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at))
+            .map((r, i) => {
+              const a = r.answers || {};
+              const fullName = `${a.prenom || ''} ${a.nom || ''}`.trim() || '(sans nom)';
+              const submittedDate = new Date(r.submitted_at);
+              const isImported = r.imported_client_id || r.imported_mandat_id;
+              return (
+                <div key={i} className="p-3 flex items-center gap-3 hover:bg-white">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm text-stone-900 truncate">
+                      {fullName}
+                      {a.societe && <span className="text-stone-500 font-normal"> · {a.societe}</span>}
+                    </div>
+                    <div className="text-xs text-stone-500 truncate">
+                      {a.email || ''}
+                      {a.tel && ` · ${a.tel}`}
+                    </div>
+                    <div className="text-[10px] text-stone-400 mt-0.5">
+                      Soumis le {submittedDate.toLocaleString('fr-FR')}
+                    </div>
+                  </div>
+
+                  {isImported ? (
+                    <span className="text-xs px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full flex items-center gap-1">
+                      <Check className="w-3 h-3" />
+                      Importé
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => onOpenResponse(r)}
+                      className="text-xs px-3 py-1.5 bg-stone-900 text-white rounded-md hover:bg-stone-800"
+                    >
+                      Voir & importer
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => onOpenResponse(r)}
+                    className="text-xs px-2 py-1.5 text-stone-600 hover:bg-stone-100 rounded-md"
+                    title="Voir les détails"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            })}
         </div>
       )}
     </div>
