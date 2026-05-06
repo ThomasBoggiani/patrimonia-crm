@@ -8,7 +8,7 @@ export default function EmailPreviewModal({
   isOpen,
   onClose,
   draft,           // { to, subject, body_html, intent }
-  client,          // objet client complet (pour logger l'interaction)
+  client,          // objet client complet
   onSent           // callback (optionnel) : (result) => void
 }) {
   const [to, setTo] = useState('');
@@ -24,13 +24,15 @@ export default function EmailPreviewModal({
       setSubject(draft.subject || '');
       setBodyHtml(draft.body_html || '');
       setError('');
+      setPreviewMode('html');
     }
   }, [draft, client]);
 
   if (!isOpen || !draft) return null;
 
   // ─────────────────────────────────────────────────────
-  // Envoi via Microsoft Graph
+  // Envoi via /api/microsoft/emails (POST)
+  // Payload attendu par cette route : { to, subject, content, clientId }
   // ─────────────────────────────────────────────────────
   async function handleSend() {
     if (!to || !subject || !bodyHtml) {
@@ -53,30 +55,22 @@ export default function EmailPreviewModal({
         body: JSON.stringify({
           to,
           subject,
-          body_html: bodyHtml,
-          // utile pour l'API si elle log côté serveur
-          client_id: client?.id
+          content: bodyHtml,        // ⚠️ "content" (pas body_html)
+          clientId: client?.id      // ⚠️ camelCase
         })
       });
 
       const json = await res.json().catch(() => ({}));
+
       if (!res.ok) {
+        if (json?.code === 'NOT_CONNECTED') {
+          throw new Error('Microsoft n\'est pas connecté. Connecte-toi via /integrations.');
+        }
         throw new Error(json.error || `Erreur Microsoft (${res.status})`);
       }
 
-      // Log interaction côté CRM (best-effort, n'empêche pas le succès)
-      try {
-        await supabase.from('interactions').insert({
-          client_id: client?.id,
-          created_by: session.user?.id,
-          type: 'email',
-          resume: `Email envoyé : ${subject}`,
-          date: new Date().toISOString().slice(0, 10),
-          metadata: { from_ai: true, intent: draft.intent }
-        });
-      } catch (e) {
-        console.warn('[EmailPreviewModal] log interaction KO:', e.message);
-      }
+      // L'API logge déjà l'interaction côté serveur si clientId fourni.
+      // (Bug connu : le champ utilisé est "notes" au lieu de "resume" — à corriger côté API.)
 
       onSent?.({ ok: true });
       onClose();
@@ -88,7 +82,7 @@ export default function EmailPreviewModal({
   }
 
   // ─────────────────────────────────────────────────────
-  // Fallback : ouvrir dans Outlook (mailto)
+  // Fallback : ouvrir dans le client mail (mailto)
   // ─────────────────────────────────────────────────────
   function handleOpenInMail() {
     const stripHtml = (html) => {
@@ -114,11 +108,11 @@ export default function EmailPreviewModal({
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-2xl">✉️</span>
             <h3 className="font-semibold text-lg">Aperçu de l'email</h3>
             {draft.intent && (
-              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full ml-2">
+              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
                 {draft.intent}
               </span>
             )}
