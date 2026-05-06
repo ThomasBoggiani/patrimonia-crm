@@ -148,4 +148,380 @@ Tu aides l'agent à mieux servir un client précis : recommander des mandats, r�
 - Quand tu recommandes des mandats, utilise OBLIGATOIREMENT le tool \`recommend_mandats\` (ne récite PAS la liste en texte brut).
 - Quand tu rédiges un email à envoyer, utilise OBLIGATOIREMENT le tool \`draft_email\` — l'agent validera dans une modale avant envoi réel.
 - Quand tu crées une tâche, interaction, ou mises à jour client → utilise les tools dédiés.
-- Si une info te
+- Si une info te manque pour bien faire, POSE UNE QUESTION avant d'agir. Ne suppose pas.
+- Tu ne donnes JAMAIS de conseil juridique ou fiscal contraignant.
+
+## CONTEXTE CLIENT
+${clientBlock}
+
+## 30 DERNIÈRES INTERACTIONS
+${interactionsBlock}
+
+## 20 DERNIERS EMAILS OUTLOOK (échanges avec ce client)
+${emailsBlock}
+
+## ${mandats.length} MANDATS ACTIFS (statuts: ${ACTIVE_MANDAT_STATUTS.join(', ')})
+${mandatsBlock}
+${summaryBlock}`;
+}
+
+// ─────────────────────────────────────────────────────────
+// Tools exposés à Claude
+// ─────────────────────────────────────────────────────────
+const TOOLS = [
+  {
+    name: 'recommend_mandats',
+    description: 'Recommander une liste de mandats au client en se basant sur son profil. Renvoie les IDs des mandats les plus pertinents avec une justification courte par mandat.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        mandat_ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'IDs (UUID) des mandats à recommander, dans l\'ordre de pertinence (max 5).'
+        },
+        justification: {
+          type: 'string',
+          description: 'Pourquoi ces mandats matchent ce client (1-3 phrases globales).'
+        },
+        per_mandat_notes: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Note courte (1 phrase) par mandat, dans le même ordre que mandat_ids.'
+        }
+      },
+      required: ['mandat_ids', 'justification']
+    }
+  },
+  {
+    name: 'draft_email',
+    description: 'Préparer un brouillon d\'email à envoyer au client via Outlook. Le brouillon sera affiché dans une modale d\'aperçu avant envoi.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: 'Destinataire (par défaut, email du client).' },
+        subject: { type: 'string' },
+        body_html: { type: 'string', description: 'Corps en HTML simple (paragraphes <p>, listes <ul>, gras <strong>).' },
+        intent: { type: 'string', enum: ['relance', 'presentation_bien', 'reponse', 'remerciement', 'rdv', 'autre'] }
+      },
+      required: ['subject', 'body_html', 'intent']
+    }
+  },
+  {
+    name: 'create_task',
+    description: 'Créer une tâche (todo) liée à ce client.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        titre: { type: 'string' },
+        echeance: { type: 'string', description: 'Date ISO YYYY-MM-DD (optionnel)' },
+        priorite: { type: 'string', enum: ['basse', 'normale', 'haute'] }
+      },
+      required: ['titre']
+    }
+  },
+  {
+    name: 'log_interaction',
+    description: 'Ajouter une ligne dans l\'historique des interactions du client (appel, email, RDV, note...).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['appel', 'email', 'rdv', 'note', 'sms', 'visite'] },
+        resume: { type: 'string', description: 'Résumé de l\'interaction.' },
+        next_step: { type: 'string', description: 'Prochaine étape (optionnel).' },
+        date_next_step: { type: 'string', description: 'Date ISO YYYY-MM-DD pour la prochaine étape (optionnel).' }
+      },
+      required: ['type', 'resume']
+    }
+  },
+  {
+    name: 'update_client',
+    description: 'Mettre à jour des champs précis de la fiche client (statut, maturité, critères de recherche, détails). Champs autorisés uniquement.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        statut: { type: 'string' },
+        maturite: { type: 'string' },
+        budget_min: { type: 'number' },
+        budget_max: { type: 'number' },
+        rendement_min: { type: 'number' },
+        details_recherche: { type: 'string' }
+      }
+    }
+  }
+];
+
+const ALLOWED_CLIENT_FIELDS = ['statut', 'maturite', 'budget_min', 'budget_max', 'rendement_min', 'details_recherche'];
+
+// ─────────────────────────────────────────────────────────
+// Exécution des tools
+// ─────────────────────────────────────────────────────────
+async function executeTool(toolName, toolInput, { service, clientId, userId, client }) {
+  try {
+    switch (toolName) {
+      case 'recommend_mandats':
+        return { ok: true, kind: 'ui', payload: toolInput };
+
+      case 'draft_email':
+        return {
+          ok: true,
+          kind: 'ui',
+          payload: { ...toolInput, to: toolInput.to || client.email }
+        };
+
+      case 'create_task': {
+        const { data, error } = await service.from('todos').insert({
+          titre: toolInput.titre,
+          echeance: toolInput.echeance || null,
+          priorite: toolInput.priorite || 'normale',
+          lien_type: 'client',
+          lien_id: clientId,
+          assigned_to_user_id: userId,
+          created_by: userId,
+          statut: 'a_faire'
+        }).select().single();
+        if (error) throw error;
+        return { ok: true, kind: 'db', payload: data };
+      }
+
+      case 'log_interaction': {
+        const { data, error } = await service.from('interactions').insert({
+          client_id: clientId,
+          created_by: userId,
+          type: toolInput.type,
+          resume: toolInput.resume,
+          next_step: toolInput.next_step || null,
+          date_next_step: toolInput.date_next_step || null,
+          date: new Date().toISOString().slice(0, 10)
+        }).select().single();
+        if (error) throw error;
+        return { ok: true, kind: 'db', payload: data };
+      }
+
+      case 'update_client': {
+        const update = {};
+        for (const k of ALLOWED_CLIENT_FIELDS) {
+          if (toolInput[k] !== undefined) update[k] = toolInput[k];
+        }
+        if (Object.keys(update).length === 0) {
+          return { ok: false, error: 'Aucun champ valide à mettre à jour' };
+        }
+        update.updated_by = userId;
+        update.updated_at = new Date().toISOString();
+        const { data, error } = await service
+          .from('clients')
+          .update(update)
+          .eq('id', clientId)
+          .select()
+          .single();
+        if (error) throw error;
+        return { ok: true, kind: 'db', payload: data };
+      }
+
+      default:
+        return { ok: false, error: `Tool inconnu: ${toolName}` };
+    }
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Résumé auto si conversation trop longue
+// ─────────────────────────────────────────────────────────
+async function summarizeOldMessages(anthropic, oldMessages, existingSummary) {
+  if (!oldMessages.length) return existingSummary || '';
+  const text = oldMessages.map(m => {
+    const c = typeof m.content === 'string' ? m.content : JSON.stringify(m.content).slice(0, 500);
+    return `[${m.role}] ${c}`;
+  }).join('\n');
+  try {
+    const resp = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 600,
+      messages: [{
+        role: 'user',
+        content: `Voici un historique de conversation entre un agent immobilier et son IA assistante au sujet d'un client. Résume en 5-10 puces les points clés (préférences exprimées, mandats déjà discutés, décisions prises, actions en attente). Sois factuel et concis.\n\nRésumé existant à intégrer: ${existingSummary || '(aucun)'}\n\nNouveaux messages à résumer:\n${text}`
+      }]
+    });
+    return resp.content.find(c => c.type === 'text')?.text || existingSummary || '';
+  } catch (e) {
+    console.warn('[ai-chat] summarize KO:', e.message);
+    return existingSummary || '';
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// POST : nouveau message
+// ─────────────────────────────────────────────────────────
+export async function POST(req, { params }) {
+  try {
+    const { id: clientId } = params;
+    const authHeader = req.headers.get('authorization') || '';
+    if (!authHeader) return NextResponse.json({ error: 'Auth requise' }, { status: 401 });
+
+    const supabase = getSupabase(authHeader);
+    const { data: { user }, error: uErr } = await supabase.auth.getUser();
+    if (uErr || !user) return NextResponse.json({ error: 'User invalide' }, { status: 401 });
+
+    const body = await req.json();
+    const userMessage = (body.message || '').trim();
+    if (!userMessage) return NextResponse.json({ error: 'Message vide' }, { status: 400 });
+
+    const origin = new URL(req.url).origin;
+    const ctx = await loadContext(supabase, clientId, origin, authHeader);
+
+    const service = getServiceSupabase();
+    let { data: conv } = await service
+      .from('client_ai_conversations')
+      .select('*')
+      .eq('client_id', clientId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    let messages = conv?.messages || [];
+    let summary = conv?.summary || '';
+
+    messages.push({ role: 'user', content: userMessage });
+
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    if (messages.length > SUMMARIZE_THRESHOLD) {
+      const cutoff = messages.length - KEEP_AFTER_SUMMARY;
+      const toSummarize = messages.slice(0, cutoff);
+      summary = await summarizeOldMessages(anthropic, toSummarize, summary);
+      messages = messages.slice(cutoff);
+    }
+
+    const systemPrompt = buildSystemPrompt(ctx, summary);
+    const toolsExecuted = [];
+    const apiMessages = messages.map(m => ({ role: m.role, content: m.content }));
+
+    let finalText = '';
+    let loops = 0;
+    const MAX_LOOPS = 4;
+
+    while (loops < MAX_LOOPS) {
+      loops++;
+      const resp = await anthropic.messages.create({
+        model: MODEL,
+        max_tokens: 2048,
+        system: systemPrompt,
+        tools: TOOLS,
+        messages: apiMessages
+      });
+
+      const textBlocks = resp.content.filter(c => c.type === 'text').map(c => c.text);
+      if (textBlocks.length) finalText += (finalText ? '\n\n' : '') + textBlocks.join('\n');
+
+      if (resp.stop_reason !== 'tool_use') {
+        apiMessages.push({ role: 'assistant', content: resp.content });
+        break;
+      }
+
+      apiMessages.push({ role: 'assistant', content: resp.content });
+      const toolResults = [];
+      for (const block of resp.content) {
+        if (block.type !== 'tool_use') continue;
+        const result = await executeTool(block.name, block.input, {
+          service, clientId, userId: user.id, client: ctx.client
+        });
+        toolsExecuted.push({ name: block.name, input: block.input, result });
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: block.id,
+          content: JSON.stringify(result).slice(0, 2000)
+        });
+      }
+      apiMessages.push({ role: 'user', content: toolResults });
+    }
+
+    messages.push({
+      role: 'assistant',
+      content: finalText || '(action exécutée)',
+      tools: toolsExecuted,
+      ts: new Date().toISOString()
+    });
+
+    if (messages.length > MAX_MESSAGES + 20) {
+      messages = messages.slice(-MAX_MESSAGES);
+    }
+
+    if (conv) {
+      await service.from('client_ai_conversations').update({
+        messages, summary
+      }).eq('id', conv.id);
+    } else {
+      await service.from('client_ai_conversations').insert({
+        client_id: clientId, user_id: user.id, messages, summary
+      });
+    }
+
+    return NextResponse.json({
+      reply: finalText || '(action exécutée)',
+      tools: toolsExecuted,
+      messages_count: messages.length
+    });
+
+  } catch (e) {
+    console.error('[ai-chat POST]', e);
+    return NextResponse.json({ error: e.message || 'Erreur serveur' }, { status: 500 });
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// GET : conversation existante
+// ─────────────────────────────────────────────────────────
+export async function GET(req, { params }) {
+  try {
+    const { id: clientId } = params;
+    const authHeader = req.headers.get('authorization') || '';
+    if (!authHeader) return NextResponse.json({ error: 'Auth requise' }, { status: 401 });
+
+    const supabase = getSupabase(authHeader);
+    const { data: { user }, error: uErr } = await supabase.auth.getUser();
+    if (uErr || !user) return NextResponse.json({ error: 'User invalide' }, { status: 401 });
+
+    const service = getServiceSupabase();
+    const { data: conv } = await service
+      .from('client_ai_conversations')
+      .select('messages, summary, updated_at')
+      .eq('client_id', clientId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    return NextResponse.json({
+      messages: conv?.messages || [],
+      summary: conv?.summary || '',
+      updated_at: conv?.updated_at || null
+    });
+  } catch (e) {
+    console.error('[ai-chat GET]', e);
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// DELETE : reset conversation
+// ─────────────────────────────────────────────────────────
+export async function DELETE(req, { params }) {
+  try {
+    const { id: clientId } = params;
+    const authHeader = req.headers.get('authorization') || '';
+    if (!authHeader) return NextResponse.json({ error: 'Auth requise' }, { status: 401 });
+
+    const supabase = getSupabase(authHeader);
+    const { data: { user }, error: uErr } = await supabase.auth.getUser();
+    if (uErr || !user) return NextResponse.json({ error: 'User invalide' }, { status: 401 });
+
+    const service = getServiceSupabase();
+    await service.from('client_ai_conversations')
+      .delete()
+      .eq('client_id', clientId)
+      .eq('user_id', user.id);
+
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
