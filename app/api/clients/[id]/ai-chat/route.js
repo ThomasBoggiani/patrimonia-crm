@@ -506,7 +506,19 @@ export async function POST(req, { params }) {
     return NextResponse.json({
       reply: finalText || '(action exécutée)',
       tools: toolsExecuted,
-      messages_count: messages.length
+      messages_count: messages.length,
+      _debug: {
+        client_email: ctx.client?.email || null,
+        nb_emails_loaded: ctx.emails?.length || 0,
+        nb_interactions_loaded: ctx.interactions?.length || 0,
+        nb_mandats_loaded: ctx.mandats?.length || 0,
+        emails_preview: (ctx.emails || []).slice(0, 3).map(e => ({
+          subject: e.subject,
+          from: e.from,
+          to: e.to,
+          date: e.date
+        }))
+      }
     });
 
   } catch (e) {
