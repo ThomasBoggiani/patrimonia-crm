@@ -71,13 +71,15 @@ async function loadContext(supabase, clientId, serverUserId) {
   if (client?.email) {
     try {
       const select = '$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime,isRead,webLink';
-      const safeEmail = client.email.replace(/'/g, "''");
+      const safeEmailLower = client.email.toLowerCase().trim();
 
-      const filterFrom = `from/emailAddress/address eq '${safeEmail}'`;
-      const endpointFrom = `/me/messages?$filter=${encodeURIComponent(filterFrom)}&$top=20&$orderby=${encodeURIComponent('receivedDateTime desc')}&${select}`;
-
-      const filterTo = `toRecipients/any(r:r/emailAddress/address eq '${safeEmail}')`;
-      const endpointTo = `/me/mailFolders/SentItems/messages?$filter=${encodeURIComponent(filterTo)}&$top=20&$orderby=${encodeURIComponent('sentDateTime desc')}&${select}`;
+      // ⚠️ Graph rejette les filtres complexes (from + orderby, toRecipients/any) en 400.
+      // Stratégie : fetch large sans filtre serveur, puis filtrage côté Node.
+      const fetchSize = 100;
+      const orderbyRecv = encodeURIComponent('receivedDateTime desc');
+      const orderbySent = encodeURIComponent('sentDateTime desc');
+      const endpointFrom = `/me/mailFolders/Inbox/messages?$top=${fetchSize}&$orderby=${orderbyRecv}&${select}`;
+      const endpointTo = `/me/mailFolders/SentItems/messages?$top=${fetchSize}&$orderby=${orderbySent}&${select}`;
 
       const adminSb = getServiceSupabase();
 
@@ -86,9 +88,18 @@ async function loadContext(supabase, clientId, serverUserId) {
         callGraph({ supabase: adminSb, userId: serverUserId, endpoint: endpointTo }),
       ]);
 
-      const fromRaw = resFrom.status === 'fulfilled' ? (resFrom.value?.value || []) : [];
-      const toRaw = resTo.status === 'fulfilled' ? (resTo.value?.value || []) : [];
+      const allFrom = resFrom.status === 'fulfilled' ? (resFrom.value?.value || []) : [];
+      const allTo = resTo.status === 'fulfilled' ? (resTo.value?.value || []) : [];
 
+      // Filtrage côté Node sur l'adresse email (case-insensitive)
+      const fromRaw = allFrom.filter(m =>
+        m.from?.emailAddress?.address?.toLowerCase().trim() === safeEmailLower
+      );
+      const toRaw = allTo.filter(m =>
+        (m.toRecipients || []).some(r =>
+          r.emailAddress?.address?.toLowerCase().trim() === safeEmailLower
+        )
+      );
       // Merge + dédup + tri par date desc + cap 20
       const seen = new Set();
       const merged = [];
