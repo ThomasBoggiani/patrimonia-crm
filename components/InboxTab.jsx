@@ -2,9 +2,10 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Mail, RefreshCw, Search, Inbox, User as UserIcon, Paperclip, Reply, ExternalLink, AlertCircle, X } from 'lucide-react';
+import { Mail, RefreshCw, Search, Inbox, User as UserIcon, Paperclip, Reply, ExternalLink, AlertCircle, X, UserPlus, Link2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import EmailPreviewModal from './EmailPreviewModal';
+import InboxClientActionsModal from './InboxClientActionsModal';
 
 const FILTERS = [
   { id: 'all', label: 'Tous' },
@@ -28,6 +29,25 @@ export default function InboxTab({ onUnreadCountChange }) {
   const [replyModalOpen, setReplyModalOpen] = useState(false);
   const [replyDraft, setReplyDraft] = useState(null);
   const [replyClient, setReplyClient] = useState(null);
+
+  // Modale actions client (créer / lier)
+  const [clientActionsOpen, setClientActionsOpen] = useState(false);
+  const [clientActionsContext, setClientActionsContext] = useState(null);
+
+  function openClientActions(msg) {
+    setClientActionsContext({
+      fromName: msg.from?.name || '',
+      fromEmail: msg.from?.address || '',
+      emailSubject: msg.subject || '',
+      emailPreview: msg.bodyPreview || ''
+    });
+    setClientActionsOpen(true);
+  }
+
+  function handleClientActionSuccess(client) {
+    // Refresh des messages pour que le badge "Pas dans le CRM" disparaisse
+    load(true);
+  }
 
   const pollRef = useRef(null);
 
@@ -251,6 +271,7 @@ export default function InboxTab({ onUnreadCountChange }) {
             <MessageDetail
               msg={selected}
               onReply={() => handleReply(selected)}
+              onCreateOrLink={() => openClientActions(selected)}
             />
           )}
         </div>
@@ -265,6 +286,16 @@ export default function InboxTab({ onUnreadCountChange }) {
         onSent={() => {
           setReplyModalOpen(false);
         }}
+      />
+
+      <InboxClientActionsModal
+        isOpen={clientActionsOpen}
+        onClose={() => setClientActionsOpen(false)}
+        fromName={clientActionsContext?.fromName}
+        fromEmail={clientActionsContext?.fromEmail}
+        emailSubject={clientActionsContext?.emailSubject}
+        emailPreview={clientActionsContext?.emailPreview}
+        onSuccess={handleClientActionSuccess}
       />
     </div>
   );
@@ -331,7 +362,7 @@ function MessageRow({ msg, isSelected, onClick }) {
 // ─────────────────────────────────────────────────────────
 // Sous-composant : détail d'un message
 // ─────────────────────────────────────────────────────────
-function MessageDetail({ msg, onReply }) {
+function MessageDetail({ msg, onReply, onCreateOrLink }) {
   const date = msg.receivedDateTime ? new Date(msg.receivedDateTime).toLocaleString('fr-FR') : '';
 
   return (
@@ -349,13 +380,26 @@ function MessageDetail({ msg, onReply }) {
         </div>
       </div>
 
-      {msg.crm_client && (
+      {msg.crm_client ? (
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2 text-sm">
           <UserIcon className="w-4 h-4 text-emerald-700" />
           <span className="text-emerald-900">
             <strong>{msg.crm_client.prenom} {msg.crm_client.nom}</strong>
             {msg.crm_client.societe && <span className="text-emerald-700"> · {msg.crm_client.societe}</span>}
           </span>
+        </div>
+      ) : (
+        <div className="p-3 bg-stone-50 border border-stone-200 rounded-lg flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-stone-600">⚠️ Cet expéditeur n'est pas dans le CRM</span>
+          <div className="flex gap-2 ml-auto">
+            <button
+              onClick={onCreateOrLink}
+              className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-600 text-white rounded-md text-xs font-medium hover:bg-purple-700"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              Créer / Lier
+            </button>
+          </div>
         </div>
       )}
 
