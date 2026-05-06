@@ -56,6 +56,16 @@ export async function GET(request) {
     const emailsFrom = resFrom.status === 'fulfilled' ? (resFrom.value?.value || []) : [];
     const emailsTo = resTo.status === 'fulfilled' ? (resTo.value?.value || []) : [];
 
+    // 🔍 DEBUG : capturer les erreurs Graph dans la réponse
+    const debug = {
+      from_status: resFrom.status,
+      from_error: resFrom.status === 'rejected' ? String(resFrom.reason?.message || resFrom.reason) : null,
+      to_status: resTo.status,
+      to_error: resTo.status === 'rejected' ? String(resTo.reason?.message || resTo.reason) : null,
+      endpointFrom,
+      endpointTo
+    };
+
     // Merge + déduplication par id
     const seen = new Set();
     const merged = [];
@@ -75,7 +85,7 @@ export async function GET(request) {
 
     const emails = merged.slice(0, limit);
 
-    return NextResponse.json({ emails });
+    return NextResponse.json({ emails, debug });
   } catch (err) {
     console.error('List emails error:', err);
     if (err.message === 'NOT_CONNECTED') {
