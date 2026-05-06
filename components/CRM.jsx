@@ -2526,7 +2526,7 @@ function ClientForm({ client, onSave, onClose }) {
     nom: '', prenom: '', societe: '', tel: '', email: '',
     typologie: 'Foncières', nature: 'Privée', budgetMin: 0, budgetMax: 0,
     rendementMin: 0, zones: [], typologiesRecherchees: [],
-    statut: 'Actif', maturite: 'Moyen', origine: 'Apporteur', owner: getCurrentUserInitials(profile) || 'TB'
+    statut: 'Actif', maturite: 'Moyen', origine: 'Apporteur', owner: 'TB'
   });
   const update = (k, v) => setData({ ...data, [k]: v });
   const toggleArray = (key, value) => {
