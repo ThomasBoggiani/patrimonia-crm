@@ -377,7 +377,7 @@ function MessageDetail({ msg, onReply }) {
           Répondre
         </button>
         {msg.webLink && (
-          
+           <a
             href={msg.webLink}
             target="_blank"
             rel="noopener noreferrer"
