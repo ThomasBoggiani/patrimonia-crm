@@ -26,7 +26,8 @@ import AIAnalyzeModal from './AIAnalyzeModal';
 import NotificationBell from './NotificationBell';
 import PhotoUploader from './PhotoUploader';
 import IntegrationsTab from './IntegrationsTab';
-import ClientEmails from './ClientEmails';
+import ClientEmails from './ClientEmails'; 
+import ClientAIAssistant from './ClientAIAssistant';
 import ContactsImportModal from './ContactsImportModal';
 import PdfExportButtons from '@/components/PdfExportButtons';
 import { PhotosModal, VisiteModal, MandantModal } from './MandatModals';
@@ -2673,7 +2674,15 @@ function ClientDetail({ client, reload, interactions, onBack, onEdit, deals, man
       <button onClick={onBack} className="flex items-center gap-2 text-sm text-stone-600 hover:text-stone-900 mb-6">
         <ChevronRight className="w-4 h-4 rotate-180" /> Retour aux clients
       </button>
-      
+
+      {/* ✨ Assistant IA — en tête de fiche client */}
+      <div className="mb-6 bg-white rounded-xl shadow-luxe border border-cream-dark overflow-hidden" style={{ height: '600px' }}>
+        <ClientAIAssistant
+          client={client}
+          mandats={mandats}
+        />
+      </div>
+
       {pushFeedback && (
         <div className={`mb-4 p-3 rounded-lg flex items-start gap-2 text-sm ${
           pushFeedback.type === 'success' 
