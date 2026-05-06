@@ -1,7 +1,8 @@
 // app/api/clients/[id]/ai-chat/route.js
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import Anthropic from '@anthropic-ai/sdk';
+import Anthropic from '@anthropic-ai/sdk'; 
+import { callGraph } from '@/lib/microsoft-graph';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -39,7 +40,7 @@ function getServiceSupabase() {
 // ─────────────────────────────────────────────────────────
 // Chargement contexte client
 // ─────────────────────────────────────────────────────────
-async function loadContext(supabase, clientId, origin, authHeader) {
+async function loadContext(supabase, clientId, serverUserId) {
   // 1) Fiche client
   const { data: client, error: cErr } = await supabase
     .from('clients')
@@ -64,22 +65,57 @@ async function loadContext(supabase, clientId, origin, authHeader) {
     .order('created_at', { ascending: false })
     .limit(80);
 
-  // 4) Emails Outlook (20 derniers liés à l'email du client)
+  // 4) Emails Outlook (20 derniers échangés avec ce client : entrants + sortants)
   let emails = [];
   if (client?.email) {
     try {
-      const url = `${origin}/api/microsoft/emails?email=${encodeURIComponent(client.email)}&limit=20`;
-      const res = await fetch(url, { headers: { Authorization: authHeader } });
-      if (res.ok) {
-        const json = await res.json();
-        const raw = json.emails || json.value || json.messages || [];
-        emails = raw.slice(0, 20).map(e => ({
-          subject: e.subject,
-          from: e.from?.emailAddress?.address || e.from || '',
-          to: (e.toRecipients || []).map(r => r.emailAddress?.address).filter(Boolean).join(', '),
-          date: e.receivedDateTime || e.sentDateTime,
-          preview: (e.bodyPreview || '').slice(0, 300)
-        }));
+      const safeEmail = client.email.replace(/'/g, "''");
+      const select = '$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime';
+
+      // Entrants (from = client)
+      const filterFrom = encodeURIComponent(`from/emailAddress/address eq '${safeEmail}'`);
+      const endpointFrom = `/me/messages?$filter=${filterFrom}&$top=20&$orderby=receivedDateTime desc&${select}`;
+
+      // Sortants (toRecipients contient client) — depuis SentItems pour optimiser
+      const filterTo = encodeURIComponent(`toRecipients/any(r:r/emailAddress/address eq '${safeEmail}')`);
+      const endpointTo = `/me/mailFolders/SentItems/messages?$filter=${filterTo}&$top=20&$orderby=sentDateTime desc&${select}`;
+
+      const adminSb = getServiceSupabase();
+      const [resFrom, resTo] = await Promise.allSettled([
+        callGraph({ supabase: adminSb, userId: serverUserId, endpoint: endpointFrom }),
+        callGraph({ supabase: adminSb, userId: serverUserId, endpoint: endpointTo }),
+      ]);
+
+      const fromRaw = resFrom.status === 'fulfilled' ? (resFrom.value?.value || []) : [];
+      const toRaw = resTo.status === 'fulfilled' ? (resTo.value?.value || []) : [];
+
+      // Merge + dédup + tri par date desc + cap 20
+      const seen = new Set();
+      const merged = [];
+      for (const e of [...fromRaw, ...toRaw]) {
+        if (e.id && !seen.has(e.id)) {
+          seen.add(e.id);
+          merged.push(e);
+        }
+      }
+      merged.sort((a, b) => {
+        const da = new Date(a.receivedDateTime || a.sentDateTime || 0).getTime();
+        const db = new Date(b.receivedDateTime || b.sentDateTime || 0).getTime();
+        return db - da;
+      });
+
+      emails = merged.slice(0, 20).map(e => ({
+        subject: e.subject,
+        from: e.from?.emailAddress?.address || '',
+        to: (e.toRecipients || []).map(r => r.emailAddress?.address).filter(Boolean).join(', '),
+        date: e.receivedDateTime || e.sentDateTime,
+        preview: (e.bodyPreview || '').slice(0, 300)
+      }));
+
+      if (emails.length === 0) {
+        console.warn('[ai-chat] Aucun email trouvé pour', client.email);
+      } else {
+        console.log('[ai-chat] Trouvé', emails.length, 'emails pour', client.email);
       }
     } catch (e) {
       console.warn('[ai-chat] emails Outlook KO:', e.message);
@@ -368,8 +404,7 @@ export async function POST(req, { params }) {
     const userMessage = (body.message || '').trim();
     if (!userMessage) return NextResponse.json({ error: 'Message vide' }, { status: 400 });
 
-    const origin = new URL(req.url).origin;
-    const ctx = await loadContext(supabase, clientId, origin, authHeader);
+    const ctx = await loadContext(supabase, clientId, user.id);
 
     const service = getServiceSupabase();
     let { data: conv } = await service
