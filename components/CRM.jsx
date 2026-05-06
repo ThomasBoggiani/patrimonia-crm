@@ -4331,7 +4331,8 @@ function QuestionnairesTab({ questionnaires, reload }) {
   };
 
   const sendQuestionnaire = async (type) => {
-    const lien = `https://patrimonia.crm/q/${type}/${Math.random().toString(36).slice(2, 10)}`;
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://patrimonia-crm.vercel.app';     
+    const lien = `${baseUrl}/q/${type}/${Math.random().toString(36).slice(2, 10)}`;
     const { data } = await supabase.from('questionnaires').insert({
       type, nom: templates[type].nom, lien
     }).select().single();
