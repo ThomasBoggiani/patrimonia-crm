@@ -66,15 +66,18 @@ async function loadContext(supabase, clientId, serverUserId) {
     .limit(80);
 
   // 4) Emails Outlook (20 derniers échangés avec ce client : entrants + sortants)
+  // ⚠️ Format calqué EXACTEMENT sur app/api/microsoft/emails/route.js qui marche
   let emails = [];
   if (client?.email) {
     try {
+      const select = '$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime,isRead,webLink';
       const safeEmail = client.email.replace(/'/g, "''");
-      const select = '$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime';
 
-      // Entrants (from = client)
-      const filterFrom = encodeURIComponent(`from/emailAddress/address eq '${safeEmail}'`);
-      const endpointFrom = `/me/messages?$filter=${filterFrom}&$top=20&$orderby=receivedDateTime desc&${select}`;
+      const filterFrom = `from/emailAddress/address eq '${safeEmail}'`;
+      const endpointFrom = `/me/messages?$filter=${encodeURIComponent(filterFrom)}&$top=20&$orderby=receivedDateTime desc&${select}`;
+
+      const filterTo = `toRecipients/any(r:r/emailAddress/address eq '${safeEmail}')`;
+      const endpointTo = `/me/mailFolders/SentItems/messages?$filter=${encodeURIComponent(filterTo)}&$top=20&$orderby=sentDateTime desc&${select}`;
 
       // Sortants (toRecipients contient client) — depuis SentItems pour optimiser
       const filterTo = encodeURIComponent(`toRecipients/any(r:r/emailAddress/address eq '${safeEmail}')`);
@@ -112,11 +115,11 @@ async function loadContext(supabase, clientId, serverUserId) {
         preview: (e.bodyPreview || '').slice(0, 300)
       }));
 
-      if (emails.length === 0) {
-        console.warn('[ai-chat] Aucun email trouvé pour', client.email);
-      } else {
-        console.log('[ai-chat] Trouvé', emails.length, 'emails pour', client.email);
-      }
+      // Logs détaillés pour debug
+      console.log('[ai-chat] Recherche emails pour', client.email);
+      console.log('[ai-chat] resFrom status:', resFrom.status, resFrom.status === 'rejected' ? resFrom.reason?.message : `${fromRaw.length} emails`);
+      console.log('[ai-chat] resTo status:', resTo.status, resTo.status === 'rejected' ? resTo.reason?.message : `${toRaw.length} emails`);
+      console.log('[ai-chat] Total dédupé:', emails.length, 'emails');
     } catch (e) {
       console.warn('[ai-chat] emails Outlook KO:', e.message);
     }
