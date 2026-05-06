@@ -9,7 +9,7 @@ import {
   Circle, CheckCircle2, Eye, Copy, Sparkles,
   FileUp, Loader2, AlertTriangle, Info, Wand2, Mic,
   User as UserIcon, LogOut, Shield, Menu,
-  Image as ImageIcon, Camera, Plug, FolderOpen, Trophy, TrendingUp
+  Image as ImageIcon, Camera, Plug, FolderOpen, Trophy, TrendingUp, Inbox
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
@@ -27,7 +27,8 @@ import NotificationBell from './NotificationBell';
 import PhotoUploader from './PhotoUploader';
 import IntegrationsTab from './IntegrationsTab';
 import ClientEmails from './ClientEmails'; 
-import ClientAIAssistant from './ClientAIAssistant';
+import ClientAIAssistant from './ClientAIAssistant'; 
+import InboxTab from './InboxTab';
 import ContactsImportModal from './ContactsImportModal';
 import PdfExportButtons from '@/components/PdfExportButtons';
 import { PhotosModal, VisiteModal, MandantModal } from './MandatModals';
@@ -99,7 +100,8 @@ export default function CRM() {
   const { profile, signOut } = useAuth();
   const [showAICreate, setShowAICreate] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [tabKey, setTabKey] = useState(0);
+  const [tabKey, setTabKey] = useState(0);   
+  const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [importToast, setImportToast] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -161,6 +163,7 @@ export default function CRM() {
     { id: 'dashboard', label: 'Tableau de bord', icon: Home },
     { id: 'mandats', label: 'Mandats', icon: Building2 },
     { id: 'clients', label: 'Clients', icon: Users },
+    { id: 'inbox', label: 'Inbox', icon: Inbox },
     { id: 'deals', label: 'Deals', icon: Handshake },
     { id: 'matching', label: 'Matching auto', icon: Sparkles },
     { id: 'todos', label: 'To-do perso', icon: CheckSquare },
@@ -256,6 +259,11 @@ export default function CRM() {
                   }`}>
                   <Icon className={`w-4 h-4 ${active ? 'text-sage-dark' : ''}`} />
                   <span className="flex-1 text-left">{tab.label}</span>
+                  {tab.id === 'inbox' && inboxUnreadCount > 0 && (
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-600 text-white min-w-[18px] text-center">
+                      {inboxUnreadCount > 99 ? '99+' : inboxUnreadCount}
+                    </span>
+                  )}
                   {active && <ChevronRight className="w-3.5 h-3.5 text-sage" />}
                 </button>
               );
@@ -295,6 +303,7 @@ export default function CRM() {
             {activeTab === 'dashboard' && <Dashboard mandats={mandats} clients={clients} deals={deals} todos={todos} reload={loadAll} allProfiles={allProfiles} />}
             {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} clients={clients} deals={deals} interactions={interactions} todos={todos} annonces={annonces} allProfiles={allProfiles} />}
             {activeTab === 'clients' && <ClientsTab clients={clients} reload={loadAll} mandats={mandats} deals={deals} interactions={interactions} />}
+            {activeTab === 'inbox' && <InboxTab onUnreadCountChange={setInboxUnreadCount} />}
             {activeTab === 'deals' && <DealsTab deals={deals} reload={loadAll} mandats={mandats} clients={clients} />}
             {activeTab === 'matching' && <MatchingTab mandats={mandats} clients={clients} deals={deals} reload={loadAll} />}
             {activeTab === 'todos' && <TodosTab todos={todos} reload={loadAll} mandats={mandats} clients={clients} deals={deals} allProfiles={allProfiles} />}
