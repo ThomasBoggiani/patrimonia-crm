@@ -16,7 +16,7 @@ const FILTERS = [
 
 const POLL_INTERVAL_MS = 60_000; // refresh auto toutes les 60s
 
-export default function InboxTab({ onUnreadCountChange, reload }) {
+export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -274,6 +274,7 @@ export default function InboxTab({ onUnreadCountChange, reload }) {
               msg={selected}
               onReply={() => handleReply(selected)}
               onCreateOrLink={() => openClientActions(selected)}
+              onOpenClient={onOpenClient}
             />
           )}
         </div>
@@ -364,7 +365,7 @@ function MessageRow({ msg, isSelected, onClick }) {
 // ─────────────────────────────────────────────────────────
 // Sous-composant : détail d'un message
 // ─────────────────────────────────────────────────────────
-function MessageDetail({ msg, onReply, onCreateOrLink }) {
+function MessageDetail({ msg, onReply, onCreateOrLink, onOpenClient }) {
   const date = msg.receivedDateTime ? new Date(msg.receivedDateTime).toLocaleString('fr-FR') : '';
 
   return (
@@ -383,13 +384,19 @@ function MessageDetail({ msg, onReply, onCreateOrLink }) {
       </div>
 
       {msg.crm_client ? (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2 text-sm">
+        <button
+          onClick={() => onOpenClient?.(msg.crm_client.id)}
+          className="w-full text-left p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2 text-sm hover:bg-emerald-100 transition group"
+        >
           <UserIcon className="w-4 h-4 text-emerald-700" />
-          <span className="text-emerald-900">
+          <span className="text-emerald-900 flex-1">
             <strong>{msg.crm_client.prenom} {msg.crm_client.nom}</strong>
             {msg.crm_client.societe && <span className="text-emerald-700"> · {msg.crm_client.societe}</span>}
           </span>
-        </div>
+          <span className="text-xs text-emerald-700 opacity-0 group-hover:opacity-100 transition">
+            Ouvrir la fiche →
+          </span>
+        </button>
       ) : (
         <div className="p-3 bg-stone-50 border border-stone-200 rounded-lg flex flex-wrap items-center gap-2 text-sm">
           <span className="text-stone-600">⚠️ Cet expéditeur n'est pas dans le CRM</span>
