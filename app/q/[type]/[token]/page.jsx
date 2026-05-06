@@ -87,6 +87,23 @@ export default function PublicQuestionnairePage() {
         .eq('id', questionnaire.id);
 
       if (e) throw e;
+
+      // Crée une notification pour TB (et plus tard pour le créateur du questionnaire)
+      const fullName = `${answers.prenom || ''} ${answers.nom || ''}`.trim() || 'Quelqu\'un';
+      const TB_USER_ID = '90ab24e3-db96-4b87-b883-590603f88468'; // TB
+      try {
+        await supabase.from('notifications').insert({
+          user_id: TB_USER_ID,
+          type: 'questionnaire_response',
+          titre: `Nouvelle réponse questionnaire ${type === 'acquereur' ? 'Acquéreur' : 'Vendeur'}`,
+          message: `${fullName}${answers.email ? ' (' + answers.email + ')' : ''} a complété le questionnaire`,
+          lue: false
+        });
+      } catch (notifErr) {
+        // Pas bloquant, on log juste
+        console.warn('[questionnaire] notif KO:', notifErr.message);
+      }
+
       setSuccess(true);
     } catch (e) {
       alert('Erreur lors de l\'envoi : ' + e.message);
