@@ -16,7 +16,7 @@ const FILTERS = [
 
 const POLL_INTERVAL_MS = 60_000; // refresh auto toutes les 60s
 
-export default function InboxTab({ onUnreadCountChange }) {
+export default function InboxTab({ onUnreadCountChange, reload }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -47,6 +47,8 @@ export default function InboxTab({ onUnreadCountChange }) {
   function handleClientActionSuccess(client) {
     // Refresh des messages pour que le badge "Pas dans le CRM" disparaisse
     load(true);
+    // Refresh des clients globaux pour mettre à jour la liste de l'onglet Clients
+    reload?.();
   }
 
   const pollRef = useRef(null);
