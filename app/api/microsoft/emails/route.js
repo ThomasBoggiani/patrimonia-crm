@@ -137,7 +137,7 @@ export async function POST(request) {
         client_id: clientId,
         type: 'Email',
         date: new Date().toISOString().split('T')[0],
-        resume `Email envoyé : ${subject}`,
+        resume: `Email envoyé : ${subject}`,
         created_by: user.id
       });
     }
