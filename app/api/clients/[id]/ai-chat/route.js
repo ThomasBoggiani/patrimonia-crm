@@ -278,7 +278,7 @@ async function executeTool(toolName, toolInput, { service, clientId, userId, cli
           lien_id: clientId,
           assigned_to_user_id: userId,
           created_by: userId,
-          statut: 'a_faire'
+          statut: 'À faire'
         }).select().single();
         if (error) throw error;
         return { ok: true, kind: 'db', payload: data };
