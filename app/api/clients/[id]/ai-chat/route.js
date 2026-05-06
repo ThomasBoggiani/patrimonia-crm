@@ -74,10 +74,10 @@ async function loadContext(supabase, clientId, serverUserId) {
       const safeEmail = client.email.replace(/'/g, "''");
 
       const filterFrom = `from/emailAddress/address eq '${safeEmail}'`;
-      const endpointFrom = `/me/messages?$filter=${encodeURIComponent(filterFrom)}&$top=20&$orderby=receivedDateTime desc&${select}`;
+      const endpointFrom = `/me/messages?$filter=${encodeURIComponent(filterFrom)}&$top=20&$orderby=${encodeURIComponent('receivedDateTime desc')}&${select}`;
 
       const filterTo = `toRecipients/any(r:r/emailAddress/address eq '${safeEmail}')`;
-      const endpointTo = `/me/mailFolders/SentItems/messages?$filter=${encodeURIComponent(filterTo)}&$top=20&$orderby=sentDateTime desc&${select}`;
+      const endpointTo = `/me/mailFolders/SentItems/messages?$filter=${encodeURIComponent(filterTo)}&$top=20&$orderby=${encodeURIComponent('sentDateTime desc')}&${select}`;
 
       const adminSb = getServiceSupabase();
 
