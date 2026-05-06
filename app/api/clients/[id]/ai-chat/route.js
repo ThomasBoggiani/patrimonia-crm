@@ -81,7 +81,6 @@ async function loadContext(supabase, clientId, serverUserId) {
 
       const adminSb = getServiceSupabase();
 
-      const adminSb = getServiceSupabase();
       const [resFrom, resTo] = await Promise.allSettled([
         callGraph({ supabase: adminSb, userId: serverUserId, endpoint: endpointFrom }),
         callGraph({ supabase: adminSb, userId: serverUserId, endpoint: endpointTo }),
