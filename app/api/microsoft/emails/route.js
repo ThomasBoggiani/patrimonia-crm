@@ -38,14 +38,15 @@ export async function GET(request) {
 
     const select = '$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime,isRead,webLink';
     const safeEmail = email.replace(/'/g, "''");
+    const safeEmailLower = safeEmail.toLowerCase();
 
-    // 1) Emails REÇUS de cet email (from = email)
-    const filterFrom = `from/emailAddress/address eq '${safeEmail}'`;
-    const endpointFrom = `/me/messages?$filter=${encodeURIComponent(filterFrom)}&$top=${limit}&$orderby=receivedDateTime desc&${select}`;
-
-    // 2) Emails ENVOYÉS à cet email (dossier SentItems pour optimiser)
-    const filterTo = `toRecipients/any(r:r/emailAddress/address eq '${safeEmail}')`;
-    const endpointTo = `/me/mailFolders/SentItems/messages?$filter=${encodeURIComponent(filterTo)}&$top=${limit}&$orderby=sentDateTime desc&${select}`;
+    // STRATÉGIE :
+    // Graph refuse les filtres complexes (from + orderby, toRecipients/any) sur certains dossiers.
+    // Solution robuste : on récupère les N derniers messages de Inbox + SentItems SANS filtre serveur,
+    // puis on filtre côté Node sur l'adresse email. Plus simple, plus fiable, et cap N suffit.
+    const fetchSize = Math.max(limit * 5, 50); // on récupère plus pour avoir de la marge après filtrage
+    const endpointFrom = `/me/mailFolders/Inbox/messages?$top=${fetchSize}&$orderby=${encodeURIComponent('receivedDateTime desc')}&${select}`;
+    const endpointTo = `/me/mailFolders/SentItems/messages?$top=${fetchSize}&$orderby=${encodeURIComponent('sentDateTime desc')}&${select}`;
 
     // Lancer les 2 requêtes en parallèle
     const [resFrom, resTo] = await Promise.allSettled([
@@ -53,8 +54,18 @@ export async function GET(request) {
       callGraph({ supabase: adminSupabase, userId: user.id, endpoint: endpointTo }),
     ]);
 
-    const emailsFrom = resFrom.status === 'fulfilled' ? (resFrom.value?.value || []) : [];
-    const emailsTo = resTo.status === 'fulfilled' ? (resTo.value?.value || []) : [];
+    const allFrom = resFrom.status === 'fulfilled' ? (resFrom.value?.value || []) : [];
+    const allTo = resTo.status === 'fulfilled' ? (resTo.value?.value || []) : [];
+
+    // Filtrage côté Node : ne garder que ceux avec cette adresse
+    const emailsFrom = allFrom.filter(m =>
+      m.from?.emailAddress?.address?.toLowerCase() === safeEmailLower
+    );
+    const emailsTo = allTo.filter(m =>
+      (m.toRecipients || []).some(r =>
+        r.emailAddress?.address?.toLowerCase() === safeEmailLower
+      )
+    );
 
     // 🔍 DEBUG : capturer les erreurs Graph dans la réponse
     const debug = {
@@ -85,7 +96,7 @@ export async function GET(request) {
 
     const emails = merged.slice(0, limit);
 
-    return NextResponse.json({ emails, debug });
+    return NextResponse.json({ emails });
   } catch (err) {
     console.error('List emails error:', err);
     if (err.message === 'NOT_CONNECTED') {
