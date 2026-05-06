@@ -79,9 +79,7 @@ async function loadContext(supabase, clientId, serverUserId) {
       const filterTo = `toRecipients/any(r:r/emailAddress/address eq '${safeEmail}')`;
       const endpointTo = `/me/mailFolders/SentItems/messages?$filter=${encodeURIComponent(filterTo)}&$top=20&$orderby=sentDateTime desc&${select}`;
 
-      // Sortants (toRecipients contient client) — depuis SentItems pour optimiser
-      const filterTo = encodeURIComponent(`toRecipients/any(r:r/emailAddress/address eq '${safeEmail}')`);
-      const endpointTo = `/me/mailFolders/SentItems/messages?$filter=${filterTo}&$top=20&$orderby=sentDateTime desc&${select}`;
+      const adminSb = getServiceSupabase();
 
       const adminSb = getServiceSupabase();
       const [resFrom, resTo] = await Promise.allSettled([
