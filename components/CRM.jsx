@@ -100,8 +100,16 @@ export default function CRM() {
   const { profile, signOut } = useAuth();
   const [showAICreate, setShowAICreate] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [tabKey, setTabKey] = useState(0);   
+  const [tabKey, setTabKey] = useState(0);
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
+  const [pendingClientToOpen, setPendingClientToOpen] = useState(null);
+
+  // Helper : naviguer vers la fiche d'un client depuis n'importe où
+  function navigateToClient(clientId) {
+    setPendingClientToOpen(clientId);
+    setActiveTab('clients');
+    setTabKey(k => k + 1);
+  }
   const [loading, setLoading] = useState(true);
   const [importToast, setImportToast] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -302,8 +310,8 @@ export default function CRM() {
           <div className="fade-in" key={`${activeTab}-${tabKey}`}>
             {activeTab === 'dashboard' && <Dashboard mandats={mandats} clients={clients} deals={deals} todos={todos} reload={loadAll} allProfiles={allProfiles} />}
             {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} clients={clients} deals={deals} interactions={interactions} todos={todos} annonces={annonces} allProfiles={allProfiles} />}
-            {activeTab === 'clients' && <ClientsTab clients={clients} reload={loadAll} mandats={mandats} deals={deals} interactions={interactions} />}
-            {activeTab === 'inbox' && <InboxTab onUnreadCountChange={setInboxUnreadCount} reload={loadAll} />}
+            {activeTab === 'clients' && <ClientsTab clients={clients} reload={loadAll} mandats={mandats} deals={deals} interactions={interactions} pendingClientId={pendingClientToOpen} onPendingClientConsumed={() => setPendingClientToOpen(null)} />}
+            {activeTab === 'inbox' && <InboxTab onUnreadCountChange={setInboxUnreadCount} reload={loadAll} onOpenClient={navigateToClient} />}
             {activeTab === 'deals' && <DealsTab deals={deals} reload={loadAll} mandats={mandats} clients={clients} />}
             {activeTab === 'matching' && <MatchingTab mandats={mandats} clients={clients} deals={deals} reload={loadAll} />}
             {activeTab === 'todos' && <TodosTab todos={todos} reload={loadAll} mandats={mandats} clients={clients} deals={deals} allProfiles={allProfiles} />}
@@ -2364,13 +2372,24 @@ function KpiBox({ label, value, icon: Icon, sublabel }) {
   );
 }
 // === CLIENTS ===
-function ClientsTab({ clients, reload, mandats, deals, interactions }) {
+function ClientsTab({ clients, reload, mandats, deals, interactions, pendingClientId, onPendingClientConsumed }) {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [filterTypo, setFilterTypo] = useState('Tous');
   const [editingClient, setEditingClient] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
+
+  // Si on arrive ici avec un client à ouvrir (depuis l'Inbox), on l'ouvre direct
+  useEffect(() => {
+    if (pendingClientId && clients.length > 0) {
+      const c = clients.find(x => x.id === pendingClientId);
+      if (c) {
+        setSelectedClient(c);
+        onPendingClientConsumed?.();
+      }
+    }
+  }, [pendingClientId, clients, onPendingClientConsumed]);
   const [showVoice, setShowVoice] = useState(false);
   const [voiceFeedback, setVoiceFeedback] = useState(null);
   const [showImportContacts, setShowImportContacts] = useState(false);
