@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Bell, X, CheckSquare, Building2, Users, Check } from 'lucide-react';
+import { Bell, X, CheckSquare, Building2, Users, Check, FileQuestion } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 
@@ -68,6 +68,7 @@ export default function NotificationBell() {
 
   const iconForType = (type) => {
     if (type === 'task_assigned') return CheckSquare;
+    if (type === 'questionnaire_response') return FileQuestion;
     return Bell;
   };
 
