@@ -104,11 +104,19 @@ export default function CRM() {
   const [tabKey, setTabKey] = useState(0);
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
   const [pendingClientToOpen, setPendingClientToOpen] = useState(null);
+  const [pendingMandatToOpen, setPendingMandatToOpen] = useState(null);
 
   // Helper : naviguer vers la fiche d'un client depuis n'importe où
   function navigateToClient(clientId) {
     setPendingClientToOpen(clientId);
     setActiveTab('clients');
+    setTabKey(k => k + 1);
+  }
+
+  // Helper : naviguer vers la fiche d'un mandat depuis n'importe où
+  function navigateToMandat(mandatId) {
+    setPendingMandatToOpen(mandatId);
+    setActiveTab('mandats');
     setTabKey(k => k + 1);
   }
   const [loading, setLoading] = useState(true);
@@ -310,7 +318,7 @@ export default function CRM() {
         <main className="flex-1 overflow-y-auto scrollbar-thin">
           <div className="fade-in" key={`${activeTab}-${tabKey}`}>
             {activeTab === 'dashboard' && <Dashboard mandats={mandats} clients={clients} deals={deals} todos={todos} reload={loadAll} allProfiles={allProfiles} />}
-            {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} clients={clients} deals={deals} interactions={interactions} todos={todos} annonces={annonces} allProfiles={allProfiles} />}
+            {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} clients={clients} deals={deals} interactions={interactions} todos={todos} annonces={annonces} allProfiles={allProfiles} pendingMandatId={pendingMandatToOpen} onPendingMandatConsumed={() => setPendingMandatToOpen(null)} />}
             {activeTab === 'clients' && <ClientsTab clients={clients} reload={loadAll} mandats={mandats} deals={deals} interactions={interactions} pendingClientId={pendingClientToOpen} onPendingClientConsumed={() => setPendingClientToOpen(null)} />}
             {activeTab === 'inbox' && <InboxTab onUnreadCountChange={setInboxUnreadCount} reload={loadAll} onOpenClient={navigateToClient} />}
             {activeTab === 'deals' && <DealsTab deals={deals} reload={loadAll} mandats={mandats} clients={clients} />}
@@ -337,7 +345,7 @@ export default function CRM() {
         <Mic className="w-6 h-6" />
       </button>
 
-      {/* Toast de succès après import intelligent */}
+      {/* Toast de succès après import / création IA */}
       {importToast && (
         <div className="fixed top-4 right-4 z-50 bg-white border border-sage-light rounded-xl shadow-luxe-hover p-4 max-w-sm animate-in fade-in slide-in-from-top-2">
           <div className="flex items-start gap-3">
@@ -345,8 +353,42 @@ export default function CRM() {
               <Check className="w-4 h-4 text-sage-dark" />
             </div>
             <div className="flex-1">
-              <div className="text-sm font-medium text-ink">Import réussi</div>
-              <div className="text-xs text-sage-dark mt-0.5">{importToast}</div>
+              <div className="text-sm font-medium text-ink mb-1">Import réussi</div>
+              {/* Compatibilité ancienne (string) */}
+              {typeof importToast === 'string' && (
+                <div className="text-xs text-sage-dark">{importToast}</div>
+              )}
+              {/* Nouveau format (objet avec mandat / client) */}
+              {typeof importToast === 'object' && (
+                <div className="space-y-2">
+                  {importToast.mandat && (
+                    <div className="flex items-center justify-between gap-2 bg-sage-50 rounded-lg px-2.5 py-1.5">
+                      <div className="text-xs text-ink truncate">
+                        <span className="font-medium">Mandat :</span> {importToast.mandat.label}
+                      </div>
+                      <button
+                        onClick={() => { navigateToMandat(importToast.mandat.id); setImportToast(null); }}
+                        className="text-[11px] font-medium text-sage-darker hover:text-ink whitespace-nowrap"
+                      >
+                        Voir →
+                      </button>
+                    </div>
+                  )}
+                  {importToast.client && (
+                    <div className="flex items-center justify-between gap-2 bg-sage-50 rounded-lg px-2.5 py-1.5">
+                      <div className="text-xs text-ink truncate">
+                        <span className="font-medium">Client :</span> {importToast.client.label}
+                      </div>
+                      <button
+                        onClick={() => { navigateToClient(importToast.client.id); setImportToast(null); }}
+                        className="text-[11px] font-medium text-sage-darker hover:text-ink whitespace-nowrap"
+                      >
+                        Voir →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <button onClick={() => setImportToast(null)} className="text-stone-400 hover:text-ink">
               <X className="w-4 h-4" />
@@ -360,12 +402,12 @@ export default function CRM() {
         open={showAICreate}
         onClose={() => setShowAICreate(false)}
         onCreated={({ mandat, client }) => {
-          const parts = [];
-          if (mandat) parts.push('✓ Mandat ajouté à l\'onglet Mandats');
-          if (client) parts.push('✓ Client ajouté à l\'onglet Clients');
-          setImportToast(parts.join(' · '));
+          setImportToast({
+            mandat: mandat ? { id: mandat.id, label: mandat.nom || 'Nouveau mandat' } : null,
+            client: client ? { id: client.id, label: `${client.prenom || ''} ${client.nom || ''}`.trim() || 'Nouveau client' } : null
+          });
           loadAll();
-          setTimeout(() => setImportToast(null), 7000);
+          setTimeout(() => setImportToast(null), 10000);
         }}
       />
     </div>
@@ -990,7 +1032,7 @@ function TypeInteractionBadge({ type }) {
 }
 
 // === MANDATS ===
-function MandatsTab({ mandats, reload, clients, deals, todos, annonces, allProfiles = [] }) {
+function MandatsTab({ mandats, reload, clients, deals, interactions, todos, annonces, allProfiles = [], pendingMandatId, onPendingMandatConsumed }) {
   const { user, profile } = useAuth();
   const [secondaryDisplay, setSecondaryDisplay] = useState('m2'); // 'm2' | 'nv_comm'
   const [search, setSearch] = useState('');
