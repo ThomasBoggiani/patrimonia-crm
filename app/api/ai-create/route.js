@@ -96,6 +96,7 @@ RÈGLES :
 - Si type='mandat', n'inclus PAS la clé "client" (et vice-versa).
 - Si type='both', inclus les 2 (mandat + client).
 - Si type='unknown', n'inclus ni "mandat" ni "client".
+- TÉLÉPHONE CLIENT : si la source mentionne plusieurs numéros (fixe + mobile, ou pro + perso), TOUJOURS prendre le mobile/portable en priorité dans le champ "tel". Ignore le fixe. Un numéro mobile français commence par 06, 07, +336, +337, ou indicatif international avec ces chiffres.
 - Pas de préambule, juste le JSON.`;
 
 async function callClaude(userContent) {
