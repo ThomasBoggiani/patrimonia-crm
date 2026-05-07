@@ -320,7 +320,7 @@ export default function CRM() {
           <div className="fade-in" key={`${activeTab}-${tabKey}`}>
             {activeTab === 'dashboard' && <Dashboard mandats={mandats} clients={clients} deals={deals} todos={todos} reload={loadAll} allProfiles={allProfiles} />}
             {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} clients={clients} deals={deals} interactions={interactions} todos={todos} annonces={annonces} allProfiles={allProfiles} pendingMandatId={pendingMandatToOpen} onPendingMandatConsumed={() => setPendingMandatToOpen(null)} />}
-            {activeTab === 'clients' && <ClientsTab clients={clients} reload={loadAll} mandats={mandats} deals={deals} interactions={interactions} pendingClientId={pendingClientToOpen} onPendingClientConsumed={() => setPendingClientToOpen(null)} />}
+            {activeTab === 'clients' && <ClientsTab clients={clients} reload={loadAll} mandats={mandats} deals={deals} interactions={interactions} pendingClientId={pendingClientToOpen} onPendingClientConsumed={() => setPendingClientToOpen(null)} onOpenMandat={navigateToMandat} />}
             {activeTab === 'inbox' && <InboxTab onUnreadCountChange={setInboxUnreadCount} reload={loadAll} onOpenClient={navigateToClient} />}
             {activeTab === 'deals' && <DealsTab deals={deals} reload={loadAll} mandats={mandats} clients={clients} />}
             {activeTab === 'matching' && <MatchingTab mandats={mandats} clients={clients} deals={deals} reload={loadAll} />}
@@ -2416,7 +2416,7 @@ function KpiBox({ label, value, icon: Icon, sublabel }) {
   );
 }
 // === CLIENTS ===
-function ClientsTab({ clients, reload, mandats, deals, interactions, pendingClientId, onPendingClientConsumed }) {
+function ClientsTab({ clients, reload, mandats, deals, interactions, pendingClientId, onPendingClientConsumed, onOpenMandat }) {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [filterTypo, setFilterTypo] = useState('Tous');
@@ -2474,7 +2474,7 @@ function ClientsTab({ clients, reload, mandats, deals, interactions, pendingClie
 
   if (selectedClient) {
     const current = clients.find(c => c.id === selectedClient.id) || selectedClient;
-    return <ClientDetail client={current} reload={reload} interactions={interactions} onBack={() => setSelectedClient(null)} onEdit={() => { setEditingClient(current); setSelectedClient(null); }} deals={deals} mandats={mandats} />;
+    return <ClientDetail client={current} reload={reload} interactions={interactions} onBack={() => setSelectedClient(null)} onEdit={() => { setEditingClient(current); setSelectedClient(null); }} deals={deals} mandats={mandats} onOpenMandat={onOpenMandat} />;
   }
 
   return (
@@ -2669,7 +2669,7 @@ function ClientForm({ client, onSave, onClose }) {
   );
 }
 
-function ClientDetail({ client, reload, interactions, onBack, onEdit, deals, mandats }) {
+function ClientDetail({ client, reload, interactions, onBack, onEdit, deals, mandats, onOpenMandat }) {
   const { user } = useAuth();
   const [showNewInter, setShowNewInter] = useState(false);
   const [newInter, setNewInter] = useState({ date: new Date().toISOString().split('T')[0], type: 'Appel', resume: '', nextStep: '', dateNextStep: '' });
@@ -2810,6 +2810,15 @@ function ClientDetail({ client, reload, interactions, onBack, onEdit, deals, man
               </div>
             )}
           </div>
+
+          {/* Biens correspondants (matching) */}
+          <ClientMatches
+            client={client}
+            mandats={mandats}
+            interactions={interactions}
+            onOpenMandat={onOpenMandat}
+            reload={reload}
+          />
 
           {/* Emails Outlook avec ce client */}
           <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
