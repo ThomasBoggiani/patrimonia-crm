@@ -69,6 +69,8 @@ export default function NotificationBell() {
   const iconForType = (type) => {
     if (type === 'task_assigned') return CheckSquare;
     if (type === 'questionnaire_response') return FileQuestion;
+    if (type === 'client_assigned') return Users;
+    if (type === 'mandat_assigned') return Building2;
     return Bell;
   };
 
