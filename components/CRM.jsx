@@ -2793,7 +2793,8 @@ function ClientDetail({ client, reload, interactions, onBack, onEdit, deals, man
           <h1 className="font-display text-4xl font-semibold text-stone-900 mb-1">{client.prenom} {client.nom}</h1>
           <p className="text-stone-500">{client.societe}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <OwnerSelector entity="client" client={client} reload={reload} />
           {outlookConnected && (
             <button onClick={pushToOutlook} disabled={pushingOutlook || !client.email}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-cream-dark text-ink rounded-lg text-sm hover:bg-cream-50 disabled:opacity-50">
