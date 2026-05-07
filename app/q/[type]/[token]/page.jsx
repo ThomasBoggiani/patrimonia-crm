@@ -310,8 +310,8 @@ function QuestionField({ q, value, error, onChange }) {
         <p className="text-xs text-stone-500 mb-2">{q.hint}</p>
       )}
 
-      {/* Champs texte simples */}
-      {(q.type === 'text' || q.type === 'email' || q.type === 'tel') && (
+      {/* Champs texte simples + date */}
+      {(q.type === 'text' || q.type === 'email' || q.type === 'tel' || q.type === 'date') && (
         <input
           type={q.type}
           value={value || ''}
