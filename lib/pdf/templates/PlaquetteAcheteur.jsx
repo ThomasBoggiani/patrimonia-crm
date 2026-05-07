@@ -227,21 +227,7 @@ export default function PlaquetteAcheteur({
   const finRows = [
     { label: 'Prix net vendeur', value: formatPrix(prixNet) },
   ];
-  if (honoraires && mandat?.honoraires_taux) {
-    finRows.push({
-      label: `Honoraires TTC (${mandat.honoraires_taux}%)`,
-      value: formatPrix(honoraires),
-    });
-    finRows.push({
-      label: 'Prix frais d\'agence inclus',
-      value: formatPrix(prixTotal),
-    });
-  } else if (mandat?.honoraires_charge) {
-    finRows.push({
-      label: 'Honoraires',
-      value: safeText(mandat.honoraires_charge, "À la charge de l'acquéreur"),
-    });
-  }
+  // Lignes "Honoraires" supprimées de la plaquette acheteur (demande équipe mai 2026)
   if (mandat?.surface && prixNet > 0) {
     finRows.push({ label: 'Prix au m²', value: formatPrixM2(prixNet, mandat.surface) });
   }
