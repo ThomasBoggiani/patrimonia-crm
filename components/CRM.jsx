@@ -2323,11 +2323,14 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
 }
 
 // Composant : sélecteur de responsable (dropdown réassignable)
-function OwnerSelector({ mandat, reload }) {
+// Fonctionne pour mandats ET clients via la prop `entity` ('mandat' | 'client')
+function OwnerSelector({ mandat, client, entity = 'mandat', reload }) {
+  const target = entity === 'client' ? client : mandat;
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [profiles, setProfiles] = useState([]);
   const [saving, setSaving] = useState(false);
-  const ownerInitials = (mandat.owner || '?').toUpperCase().slice(0, 2);
+  const ownerInitials = (target?.owner || '?').toUpperCase().slice(0, 2);
 
   useEffect(() => {
     supabase.from('profiles').select('id, prenom, nom').eq('actif', true)
@@ -2344,14 +2347,33 @@ function OwnerSelector({ mandat, reload }) {
     return () => document.removeEventListener('click', handler);
   }, [open]);
 
-  const reassign = async (newInitials) => {
-    if (newInitials === mandat.owner) {
+  const reassign = async (newInitials, profile) => {
+    if (newInitials === target?.owner) {
       setOpen(false);
       return;
     }
     setSaving(true);
     try {
-      await supabase.from('mandats').update({ owner: newInitials }).eq('id', mandat.id);
+      const table = entity === 'client' ? 'clients' : 'mandats';
+      await supabase.from(table).update({ owner: newInitials }).eq('id', target.id);
+
+      // Notification au nouveau propriétaire (si différent de soi-même)
+      if (profile && profile.id && profile.id !== user?.id) {
+        const targetName = entity === 'client'
+          ? `${target.prenom || ''} ${target.nom || ''}`.trim() || 'un client'
+          : target.nom || 'un mandat';
+        const titreEntity = entity === 'client' ? 'client' : 'mandat';
+
+        await supabase.from('notifications').insert({
+          user_id: profile.id,
+          type: entity === 'client' ? 'client_assigned' : 'mandat_assigned',
+          titre: `Nouveau ${titreEntity} assigné : ${targetName}`,
+          message: `Tu as été désigné responsable de ce ${titreEntity}. Pense à le contacter rapidement.`,
+          lue: false,
+          created_by: user?.id
+        });
+      }
+
       if (reload) reload();
       setOpen(false);
     } catch (e) {
@@ -2369,7 +2391,7 @@ function OwnerSelector({ mandat, reload }) {
       <div className="text-[10px] uppercase text-stone-500 tracking-wide mb-1">Resp.</div>
       <button onClick={() => setOpen(!open)} disabled={saving}
         className="w-10 h-10 rounded-full gradient-sage-dark flex items-center justify-center text-white font-medium text-sm shadow-luxe hover:opacity-90 disabled:opacity-50 cursor-pointer relative"
-        title={`Responsable : ${mandat.owner || '—'} — clic pour réassigner`}>
+        title={`Responsable : ${target?.owner || '—'} — clic pour réassigner`}>
         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : ownerInitials}
         <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-white rounded-full flex items-center justify-center shadow border border-cream-dark">
           <ChevronRight className="w-2.5 h-2.5 text-stone-600 rotate-90" />
@@ -2382,9 +2404,9 @@ function OwnerSelector({ mandat, reload }) {
           </div>
           {profiles.map(p => {
             const initials = getInitials(p);
-            const isCurrent = initials === mandat.owner;
+            const isCurrent = initials === target?.owner;
             return (
-              <button key={p.id} onClick={() => reassign(initials)}
+              <button key={p.id} onClick={() => reassign(initials, p)}
                 className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-cream-50 ${isCurrent ? 'bg-sage-50' : ''}`}>
                 <div className="w-7 h-7 rounded-full gradient-sage-dark flex items-center justify-center text-white text-[10px] font-medium flex-shrink-0">
                   {initials}
