@@ -250,14 +250,34 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
       }
 
       if ((result.type === 'client' || result.type === 'both') && result.client) {
-        const { zones, typologies_recherchees, ...clientFields } = result.client;
+        // Whitelist : on ne garde que les colonnes qui existent vraiment dans la table clients.
+        // Évite "Could not find the 'X' column of 'clients' in the schema cache" si l'IA invente des champs.
+        const ALLOWED_CLIENT_COLUMNS = [
+          'nom', 'prenom', 'societe', 'tel', 'email',
+          'typologie', 'nature',
+          'budget_min', 'budget_max', 'rendement_min',
+          'zones', 'typologies_recherchees',
+          'statut', 'maturite', 'origine', 'owner', 'source',
+          'details_recherche', 'date_naissance'
+        ];
+        const filteredClient = {};
+        for (const k of ALLOWED_CLIENT_COLUMNS) {
+          if (result.client[k] !== undefined) filteredClient[k] = result.client[k];
+        }
+        // Aggrège dans details_recherche les champs ignorés (adresse, website, tel_mobile, etc.)
+        const ignored = Object.keys(result.client).filter(k => !ALLOWED_CLIENT_COLUMNS.includes(k));
+        if (ignored.length > 0) {
+          const extras = ignored.map(k => `${k}: ${result.client[k]}`).join('\n');
+          filteredClient.details_recherche = (filteredClient.details_recherche ? filteredClient.details_recherche + '\n\n' : '') + 'Infos complémentaires :\n' + extras;
+        }
+
         const { data: c, error: cErr } = await supabase.from('clients').insert({
-          ...clientFields,
-          zones: zones || [],
-          typologies_recherchees: typologies_recherchees || [],
-          statut: 'Actif',
+          ...filteredClient,
+          zones: filteredClient.zones || [],
+          typologies_recherchees: filteredClient.typologies_recherchees || [],
+          statut: filteredClient.statut || 'Actif',
           created_by: user?.id,
-          owner: profile ? getCurrentUserInitials(profile) : 'TB',
+          owner: filteredClient.owner || (profile ? getCurrentUserInitials(profile) : 'TB'),
         }).select().single();
         if (cErr) {
           console.error('Erreur création client:', cErr);
