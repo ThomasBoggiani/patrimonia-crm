@@ -216,5 +216,12 @@ function formatAnswer(v, q) {
     const formatted = Number(v).toLocaleString('fr-FR');
     return q.unit ? `${formatted} ${q.unit}` : formatted;
   }
+  if (q.type === 'date') {
+    try {
+      return new Date(v).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+    } catch {
+      return String(v);
+    }
+  }
   return String(v);
 }
