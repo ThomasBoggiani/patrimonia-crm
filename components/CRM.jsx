@@ -69,7 +69,15 @@ const STATUTS_MANDAT = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisati
 const STATUTS_DEAL = ['À proposer', 'Envoyé', 'En étude', 'Visite', 'Offre', 'Refusé', 'Gagné', 'Perdu'];
 const TYPES_ACTIF = ['Immeuble d\'habitation', 'Immeuble mixte', 'Immeuble tertiaire', 'Local commercial', 'Local d\'activité', 'Hôtel', 'Hébergement hôtelier', 'Appartement', 'Maison', 'Studio', 'Terrain', 'Bureau', 'Promotion immobilière'];
 const TYPOLOGIES_CLIENT = ['Foncières', 'Marchands de biens', 'Particuliers', 'Fonds', 'Promoteurs', 'Family Office'];
-const ZONES = ['Paris 3e', 'Paris 4e', 'Paris 8e', 'Paris 9e', 'Paris 10e', 'Paris 11e', 'Paris 13e', 'Paris 15e', 'Paris 16e', 'Paris 17e', 'Paris 18e', 'Paris 19e', 'Paris 20e', 'Hauts-de-Seine (92)', 'Seine-Saint-Denis (93)', 'Val-de-Marne (94)', 'Val-d\'Oise (95)', 'Yvelines (78)', 'Seine-et-Marne (77)', 'Essonne (91)', 'Province'];
+const ZONES = [
+  'Paris 3e', 'Paris 4e', 'Paris 8e', 'Paris 9e', 'Paris 10e',
+  'Paris 11e', 'Paris 13e', 'Paris 15e', 'Paris 16e', 'Paris 17e',
+  'Paris 18e', 'Paris 19e', 'Paris 20e',
+  'Hauts-de-Seine (92)', 'Seine-Saint-Denis (93)', 'Val-de-Marne (94)', 'Val-d\'Oise (95)',
+  'Yvelines (78)', 'Seine-et-Marne (77)', 'Essonne (91)',
+  'Province',
+  'France entière'
+];
 const PORTAILS = ['seloger', 'leboncoin', 'bienici', 'figaro'];
 const STATUTS_PORTAIL = ['En ligne', 'En attente', 'À corriger', 'Non diffusé'];
 
