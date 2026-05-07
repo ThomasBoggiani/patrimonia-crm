@@ -361,11 +361,11 @@ export default function CRM() {
         onClose={() => setShowAICreate(false)}
         onCreated={({ mandat, client }) => {
           const parts = [];
-          if (mandat) parts.push('Mandat créé');
-          if (client) parts.push('Client créé');
+          if (mandat) parts.push('✓ Mandat ajouté à l\'onglet Mandats');
+          if (client) parts.push('✓ Client ajouté à l\'onglet Clients');
           setImportToast(parts.join(' · '));
           loadAll();
-          setTimeout(() => setImportToast(null), 5000);
+          setTimeout(() => setImportToast(null), 7000);
         }}
       />
     </div>
