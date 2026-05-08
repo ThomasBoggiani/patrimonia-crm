@@ -232,12 +232,24 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
       const created = { mandat: null, client: null };
 
       if ((result.type === 'mandat' || result.type === 'both') && result.mandat) {
-        // Filtrer les champs jsonb / non gérés
-        const { description, ...mandatFields } = result.mandat;
+        // Whitelist : on ne garde que les colonnes qui existent vraiment dans la table mandats
+        const ALLOWED_MANDAT_COLUMNS = [
+          'nom', 'adresse', 'ville', 'marche', 'type', 'sous_type',
+          'surface', 'nb_pieces', 'nb_chambres', 'etage', 'annee_construction',
+          'prix', 'prix_net_vendeur', 'prix_m2',
+          'honoraires_charge', 'honoraires_taux', 'honoraires_montant',
+          'loyers_annuels', 'rendement', 'charges_annuelles', 'taxe_fonciere',
+          'dpe_consommation', 'dpe_emissions', 'dpe_date',
+          'mandat_numero', 'mandat_type', 'mandat_date_echeance',
+          'nb_lots', 'description', 'commercialisation', 'statut'
+        ];
+        const filteredMandat = {};
+        for (const k of ALLOWED_MANDAT_COLUMNS) {
+          if (result.mandat[k] !== undefined) filteredMandat[k] = result.mandat[k];
+        }
         const { data: m, error: mErr } = await supabase.from('mandats').insert({
-          ...mandatFields,
-          description: description || null,
-          statut: 'Sourcing',
+          ...filteredMandat,
+          statut: filteredMandat.statut || 'Sourcing',
           owner: profile ? getCurrentUserInitials(profile) : 'TB',
           created_by: user?.id,
         }).select().single();
@@ -544,13 +556,22 @@ function TabButton({ active, onClick, children }) {
 }
 
 function PreviewBlock({ title, data, duplicates, duplicateType, onMerge }) {
-  const entries = Object.entries(data).filter(([k, v]) => v !== null && v !== undefined && v !== '');
+  // Masquer 'marche' (champ technique) : on l'affiche dans le titre via le badge
+  const entries = Object.entries(data).filter(([k, v]) => v !== null && v !== undefined && v !== '' && k !== 'marche');
+  const marcheLabel = data.marche === 'b2c' ? 'Habitation (B2C)' : data.marche === 'b2b' ? 'Investissement (B2B)' : null;
   const hasDuplicates = Array.isArray(duplicates) && duplicates.length > 0;
 
   return (
     <div className="mb-4">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-semibold text-stone-900">{title}</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-stone-900">{title}</h3>
+          {marcheLabel && (
+            <span className={`text-xs px-2 py-0.5 rounded-full ${data.marche === 'b2b' ? 'bg-sage-100 text-sage-darker' : 'bg-blue-100 text-blue-800'}`}>
+              {marcheLabel}
+            </span>
+          )}
+        </div>
         {hasDuplicates && (
           <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full">
             ⚠️ {duplicates.length} doublon(s) potentiel(s)
