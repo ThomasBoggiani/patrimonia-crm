@@ -1189,6 +1189,8 @@ function MandatsKanban({ mandats, onSelectMandat, reload, secondaryDisplay = 'm2
   );
 }
 function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
+  const { profile } = useAuth();
+  const userInitials = (profile?.prenom && profile?.nom) ? getCurrentUserInitials(profile) : 'TB';
   const [data, setData] = useState(mandat || {
     nom: '', adresse: '', ville: '', marche: 'b2b', type: '', sousType: '', prix: 0, prixM2: 0,
     surface: 0, loyersAnnuels: 0, rendement: 0, nbLots: 1,
