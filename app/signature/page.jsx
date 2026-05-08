@@ -97,8 +97,8 @@ export default function SignaturePage() {
   };
 
   // Style du bloc signature (largeur cible = 580px)
-  const SIG_WIDTH = 580;
-  const LOGO_SIZE = 180;
+  const SIG_WIDTH = 620;
+  const LOGO_SIZE = 240;
 
   return (
     <div style={{ padding: 40, fontFamily: 'sans-serif', maxWidth: 900, margin: '0 auto' }}>
