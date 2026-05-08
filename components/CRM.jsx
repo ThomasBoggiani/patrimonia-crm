@@ -9,7 +9,7 @@ import {
   Circle, CheckCircle2, Eye, Copy, Sparkles,
   FileUp, Loader2, AlertTriangle, Info, Wand2, Mic,
   User as UserIcon, LogOut, Shield, Menu,
-  Image as ImageIcon, Camera, Plug, FolderOpen, Trophy, TrendingUp, Inbox
+  Image as ImageIcon, Camera, Plug, FolderOpen, Trophy, TrendingUp, Inbox, Video
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
@@ -33,7 +33,7 @@ import QuestionnaireResponseModal from './QuestionnaireResponseModal';
 import ClientMatches from './ClientMatches';
 import ContactsImportModal from './ContactsImportModal';
 import PdfExportButtons from '@/components/PdfExportButtons';
-import { PhotosModal, VisiteModal, MandantModal } from './MandatModals';
+import { PhotosModal, VisiteModal, MandantModal } from './MandatModals'; import MediasModal from './MediasModal';
 // ═══ HELPERS PRIX ═══
 const eurFormatter = new Intl.NumberFormat('fr-FR', {
   style: 'currency',
@@ -2195,6 +2195,9 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
         <button onClick={() => setOpenModal('documents')} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
           <FolderOpen className="w-3.5 h-3.5" /> Documents
         </button>
+        <button onClick={() => setOpenModal('medias')} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
+          <Video className="w-3.5 h-3.5" /> Médias {(mandat.medias || []).length > 0 && <span className="text-[10px] bg-sage-100 text-sage-dark px-1.5 py-0.5 rounded-full">{mandat.medias.length}</span>}
+        </button>
 
         <div className="flex-1" />
 
@@ -2311,6 +2314,9 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
       )}
       {openModal === 'documents' && (
         <DocumentsModal mandat={mandat} onClose={() => setOpenModal(null)} />
+      )}
+      {openModal === 'medias' && (
+        <MediasModal mandat={mandat} onClose={() => setOpenModal(null)} onUpdate={reload} />
       )}
     {/* Quelque chose */}
 
