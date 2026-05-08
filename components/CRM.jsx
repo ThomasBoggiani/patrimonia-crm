@@ -33,9 +33,10 @@ import QuestionnaireResponseModal from './QuestionnaireResponseModal';
 import ClientMatches from './ClientMatches';
 import ContactsImportModal from './ContactsImportModal';
 import PdfExportButtons from '@/components/PdfExportButtons';
-import { PhotosModal, VisiteModal, MandantModal } from './MandatModals'; 
+import { PhotosModal, VisiteModal, MandantModal } from './MandatModals';
+import CascadeSelect from './CascadeSelect';
 import MediasModal from './MediasModal'; 
-import {   formatPrix,   formatPrixCompact,   toCamel,   toSnake,   isManager,   getDPEClass,   getDPEColor,   STATUTS_MANDAT,   STATUTS_DEAL,   TYPES_ACTIF,   TYPOLOGIES_CLIENT,   ZONES,   PORTAILS,   STATUTS_PORTAIL, } from '@/lib/crm-constants';
+import {   formatPrix,   formatPrixCompact,   toCamel,   toSnake,   isManager,   getDPEClass,   getDPEColor,   STATUTS_MANDAT,   STATUTS_DEAL,   TYPES_ACTIF,   TYPES_ACTIF_B2B_TREE,   TYPES_HABITATION_B2C,   TYPOLOGIES_CLIENT,   ZONES,   PORTAILS,   STATUTS_PORTAIL, } from '@/lib/crm-constants';
 import {
   Field,
   DetailItem,
@@ -1174,7 +1175,7 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   const { profile } = useAuth();
   const userInitials = (profile?.prenom && profile?.nom) ? getCurrentUserInitials(profile) : 'TB';
   const [data, setData] = useState(mandat || {
-    nom: '', adresse: '', ville: '', type: "Immeuble d'habitation", sousType: '', prix: 0, prixM2: 0,
+    nom: '', adresse: '', ville: '', marche: 'b2b', type: '', sousType: '', prix: 0, prixM2: 0,
     surface: 0, loyersAnnuels: 0, rendement: 0, nbLots: 1,
     commercialisation: 'Off-market', dateSignature: null,
     statut: 'Sourcing', owner: userInitials, description: '',
@@ -1200,7 +1201,10 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   const [newClientPrefill, setNewClientPrefill] = useState('');
   const folderInputRef = React.useRef(null);
 
-  const update = (k, v) => setData({ ...data, [k]: v });
+  const update = (k, v) => setData({ ...data, [k]: v });  
+  
+  // Si le marché change, on reset type + sousType pour éviter de garder un sous-type incohérent 
+  const updateMarche = (m) => setData({ ...data, marche: m, type: '', sousType: '' });
 
   const REQUIRED_FIELDS = {
     nom: 'Nom du bien', adresse: 'Adresse', type: "Type d'actif",
@@ -1505,14 +1509,41 @@ async function handleFolderImport(event) {
                 <Field label="Ville"><input type="text" value={data.ville || ''} onChange={e => update('ville', e.target.value)} className={fieldClass('ville')} /></Field>
                 <Field label="Surface (m²)"><input type="number" value={data.surface} onChange={e => update('surface', +e.target.value)} className={fieldClass('surface')} /></Field>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Type d'actif">
-                  <select value={data.type} onChange={e => update('type', e.target.value)} className={fieldClass('type')}>
-                    {TYPES_ACTIF.map(t => <option key={t}>{t}</option>)}
+              <Field label="Marché">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateMarche('b2b')}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm border ${data.marche === 'b2b' ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200 hover:border-stone-400'}`}
+                  >
+                    Investissement (B2B)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateMarche('b2c')}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm border ${data.marche === 'b2c' ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200 hover:border-stone-400'}`}
+                  >
+                    Habitation (B2C)
+                  </button>
+                </div>
+              </Field>
+              {data.marche === 'b2b' ? (
+                <CascadeSelect
+                  tree={TYPES_ACTIF_B2B_TREE}
+                  famille={data.type || ''}
+                  sousType={data.sousType || ''}
+                  onChange={({ famille, sousType }) => setData(d => ({ ...d, type: famille, sousType: sousType }))}
+                  labelFamille="Famille d'actif"
+                  labelSousType="Sous-type"
+                />
+              ) : (
+                <Field label="Type d'habitation">
+                  <select value={data.type || ''} onChange={e => update('type', e.target.value)} className={fieldClass('type')}>
+                    <option value="">— Choisir —</option>
+                    {TYPES_HABITATION_B2C.map(t => <option key={t}>{t}</option>)}
                   </select>
                 </Field>
-                <Field label="Sous-catégorie"><input type="text" value={data.sousType || ''} onChange={e => update('sousType', e.target.value)} className={fieldClass('sousType')} /></Field>
-              </div>
+              )}
             </div>
           </div>
 
