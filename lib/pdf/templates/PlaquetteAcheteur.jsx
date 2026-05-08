@@ -352,7 +352,30 @@ export default function PlaquetteAcheteur({
               {mandat.cadastre_description}
             </Text>
           )}
-          <Image src={cadastreSrc} style={{ width: '100%', height: 380, objectFit: 'contain', marginTop: 16 }} />
+
+          {locationImages?.parcelle && (
+            <View style={{ marginTop: 16, marginHorizontal: 30, padding: 12, borderWidth: 0.5, borderColor: palette.muted || '#999', borderRadius: 4 }}>
+              <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: palette.accent || '#9CAF88', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
+                Référence cadastrale
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                {locationImages.parcelle.commune && (
+                  <ParcelleField label="Commune" value={locationImages.parcelle.commune} />
+                )}
+                {locationImages.parcelle.section && (
+                  <ParcelleField label="Section" value={locationImages.parcelle.section} />
+                )}
+                {locationImages.parcelle.numero && (
+                  <ParcelleField label="N° parcelle" value={locationImages.parcelle.numero} />
+                )}
+                {locationImages.parcelle.contenance && (
+                  <ParcelleField label="Contenance" value={`${locationImages.parcelle.contenance.toLocaleString('fr-FR')} m²`} />
+                )}
+              </View>
+            </View>
+          )}
+
+          <Image src={cadastreSrc} style={{ width: '100%', height: 340, objectFit: 'contain', marginTop: 16 }} />
           <PageFooter isOffMarket={isOffMarket} />
         </Page>
       )}
@@ -523,5 +546,17 @@ export default function PlaquetteAcheteur({
         <PageFooter isOffMarket={isOffMarket} />
       </Page>
     </Document>
+  );
+// Petit composant pour afficher un label/valeur de la parcelle cadastrale
+function ParcelleField({ label, value }) {
+  return (
+    <View style={{ width: '50%', marginBottom: 6 }}>
+      <Text style={{ fontSize: 8, color: '#666', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        {label}
+      </Text>
+      <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', marginTop: 2 }}>
+        {value}
+      </Text>
+    </View>
   );
 }
