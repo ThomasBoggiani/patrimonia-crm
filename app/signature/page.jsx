@@ -97,9 +97,9 @@ export default function SignaturePage() {
   };
 
   // Style du bloc signature (largeur cible = 580px)
-  const SIG_WIDTH = 480;
-  const LOGO_SIZE = 110;
-
+  const SIG_WIDTH = 500;
+  const LOGO_SIZE = 150;
+  
   return (
     <div style={{ padding: 40, fontFamily: 'sans-serif', maxWidth: 900, margin: '0 auto' }}>
       <h1>Aper&ccedil;u de ta signature email</h1>
@@ -144,76 +144,73 @@ export default function SignaturePage() {
       <div id="signature-content">
         <table cellPadding="0" cellSpacing="0" border="0" style={{ borderCollapse: 'collapse', width: SIG_WIDTH }}>
           <tbody>
+            {/* En-tête : titre Immeubles & Patrimoine pleine largeur */}
+            <tr>
+              <td colSpan={2} style={{ padding: '0 0 12px 0', borderBottom: '1px solid #e7e5e4' }}>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 13, fontWeight: 700, color: '#4a5d3a', letterSpacing: '1.2px', textTransform: 'uppercase' }}>
+                  Immeubles &amp; Patrimoine
+                </div>
+              </td>
+            </tr>
+
             {/* Ligne 1 : Logo + Infos */}
             <tr>
-              <td style={{ verticalAlign: 'top', width: LOGO_SIZE, padding: 0 }}>
+              <td style={{ verticalAlign: 'top', width: LOGO_SIZE, padding: '14px 0 0 0' }}>
                 <img
                   src="https://patrimonia-crm.vercel.app/logo-light.png"
                   alt="Immeubles &amp; Patrimoine"
                   width={LOGO_SIZE}
                   height={LOGO_SIZE}
-                  style={{ display: 'block', border: 0, width: LOGO_SIZE, height: LOGO_SIZE, objectFit: 'contain', backgroundColor: '#f5f3ee' }}
+                  style={{ display: 'block', border: 0, width: LOGO_SIZE, height: LOGO_SIZE, objectFit: 'contain' }}
                 />
               </td>
-              <td style={{ verticalAlign: 'top', borderLeft: '1px solid #d6d3d1', padding: '4px 0 0 20px', height: LOGO_SIZE }}>
-                {/* BLOC 1 - Identité personnelle */}
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, fontWeight: 700, color: '#1c1917', lineHeight: 1.15, marginBottom: 3 }}>
+              <td style={{ verticalAlign: 'top', padding: '14px 0 0 22px' }}>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, fontWeight: 700, color: '#1c1917', lineHeight: 1.1, marginBottom: 4 }}>
                   {fullName}
                 </div>
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 13, color: '#78716c', fontStyle: 'italic', marginBottom: 12 }}>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 12, color: '#78716c', fontStyle: 'italic', marginBottom: 12 }}>
                   {fonction}
                 </div>
                 {tel && (
-                  <div style={{ fontFamily: 'Georgia, serif', fontSize: 13, color: '#1c1917', lineHeight: 1.6 }}>
-                    <a href={`tel:${telDigits}`} style={{ color: '#1c1917', textDecoration: 'none', fontWeight: 700 }}>{tel}</a>
+                  <div style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 12, color: '#1c1917', lineHeight: 1.7 }}>
+                    <a href={`tel:${telDigits}`} style={{ color: '#1c1917', textDecoration: 'none', fontWeight: 600 }}>{tel}</a>
                   </div>
                 )}
                 {email && (
-                  <div style={{ fontFamily: 'Georgia, serif', fontSize: 13, color: '#1c1917', lineHeight: 1.6 }}>
+                  <div style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 12, color: '#1c1917', lineHeight: 1.7 }}>
                     <a href={`mailto:${email}`} style={{ color: '#1c1917', textDecoration: 'none' }}>{email}</a>
                   </div>
                 )}
-
-                {/* Séparateur fin */}
-                <div style={{ height: 1, backgroundColor: '#e7e5e4', margin: '12px 0' }} />
-
-                {/* BLOC 2 - Identité agence */}
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 14, fontWeight: 700, color: '#4a5d3a', marginBottom: 3 }}>
-                  Immeubles &amp; Patrimoine
-                </div>
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 12, color: '#57534e', lineHeight: 1.6 }}>
+                <div style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 11, color: '#78716c', lineHeight: 1.7, marginTop: 6 }}>
                   7 rue de Penthi&egrave;vre &middot; 75008 Paris
                 </div>
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 12, color: '#57534e', lineHeight: 1.6 }}>
-                  <a href="https://www.immeubles-patrimoine.fr" style={{ color: '#57534e', textDecoration: 'none' }}>www.immeubles-patrimoine.fr</a>
+                <div style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 11, color: '#78716c', lineHeight: 1.7 }}>
+                  <a href="https://www.immeubles-patrimoine.fr" style={{ color: '#78716c', textDecoration: 'none' }}>www.immeubles-patrimoine.fr</a>
                 </div>
               </td>
             </tr>
 
-            {/* Bandeau off-market — pleine largeur, discret avec trait fin */}
+            {/* Bandeau off-market */}
             {questionnaireUrl && (
               <tr>
-                <td colSpan={2} style={{ paddingTop: 0 }}>
-                  <a
+                <td colSpan={2} style={{ padding: 0 }}>
+                  <div style={{ height: 16 }}></div>
+                  
                     href={questionnaireUrl}
                     style={{
                       display: 'block',
-                      borderTop: '1px solid #e7e5e4',
-                      marginTop: 16,
-                      paddingTop: 14,
+                      backgroundColor: '#f5f3ee',
+                      borderLeft: '3px solid #4a5d3a',
+                      padding: '13px 16px',
                       textDecoration: 'none',
-                      fontFamily: 'Georgia, serif',
                       width: SIG_WIDTH,
                       boxSizing: 'border-box'
                     }}
                   >
-                    <div style={{ fontFamily: 'Georgia, serif', fontSize: 13, fontWeight: 700, color: '#1c1917', marginBottom: 4, lineHeight: 1.4 }}>
-                      Rejoignez notre r&eacute;seau d&rsquo;investisseurs et acc&eacute;dez &agrave; nos biens confidentiels
+                    <div style={{ fontFamily: 'Georgia, serif', fontSize: 14, fontWeight: 700, color: '#1c1917', marginBottom: 4 }}>
+                      Investisseurs : acc&eacute;dez ici &agrave; nos biens off-market.
                     </div>
-                    <div style={{ fontFamily: 'Georgia, serif', fontSize: 12, color: '#4a5d3a', textDecoration: 'underline', marginBottom: 5 }}>
-                      80% de nos biens sont off-market, les d&eacute;couvrir ici &rarr;
-                    </div>
-                    <div style={{ fontFamily: 'Georgia, serif', fontSize: 11, color: '#a8a29e', fontStyle: 'italic' }}>
+                    <div style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 11, color: '#a8a29e', fontStyle: 'italic' }}>
                       Questionnaire confidentiel &middot; 3 minutes
                     </div>
                   </a>
@@ -222,7 +219,6 @@ export default function SignaturePage() {
             )}
           </tbody>
         </table>
-      </div>
 
       <div style={{ marginTop: 40, padding: 20, background: '#F5F5F4', borderRadius: 8, fontSize: 13, color: '#57534e' }}>
         <strong>Ton lien questionnaire :</strong>
