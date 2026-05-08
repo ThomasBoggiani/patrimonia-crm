@@ -2,27 +2,88 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/lib/auth';
-import { Copy, Loader2, AlertCircle } from 'lucide-react';
+import { Copy, Loader2 } from 'lucide-react';
 
 export default function SignaturePage() {
-  const { user, profile, loading: authLoading } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState(null);
+  const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
 
-  if (authLoading) {
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        // Récupère la session actuelle
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+        if (sessionError) throw sessionError;
+        if (!session?.user) {
+          if (mounted) {
+            setError('non-connecte');
+            setLoading(false);
+          }
+          return;
+        }
+
+        // Récupère le profil complet
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, prenom, nom, email, telephone, fonction, questionnaire_token')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (profileError) throw profileError;
+        if (!profileData) {
+          if (mounted) {
+            setError('profil-introuvable');
+            setLoading(false);
+          }
+          return;
+        }
+
+        if (mounted) {
+          setProfile(profileData);
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('[signature] Erreur chargement:', err);
+        if (mounted) {
+          setError(err.message || 'Erreur inconnue');
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => { mounted = false; };
+  }, []);
+
+  if (loading) {
     return (
-      <div style={{ padding: 40, textAlign: 'center' }}>
-        <Loader2 className="w-6 h-6 animate-spin" style={{ display: 'inline-block' }} />
+      <div style={{ padding: 80, textAlign: 'center', fontFamily: 'sans-serif' }}>
+        <Loader2 className="w-6 h-6 animate-spin" style={{ display: 'inline-block', color: '#4a5d3a' }} />
+        <p style={{ color: '#666', marginTop: 16 }}>Chargement de ta signature...</p>
       </div>
     );
   }
 
-  if (!user || !profile) {
+  if (error === 'non-connecte') {
     return (
       <div style={{ padding: 40, fontFamily: 'sans-serif', maxWidth: 800, margin: '0 auto' }}>
-        <h1>Accès restreint</h1>
-        <p>Connecte-toi pour voir ta signature email personnalisée.</p>
-        <a href="/" style={{ color: '#4a5d3a' }}>Retour à l'accueil</a>
+        <h1>Acc&egrave;s restreint</h1>
+        <p>Tu dois &ecirc;tre connect&eacute; pour voir ta signature email.</p>
+        <a href="/" style={{ color: '#4a5d3a', textDecoration: 'underline' }}>&rarr; Retour &agrave; l'accueil</a>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: 40, fontFamily: 'sans-serif', maxWidth: 800, margin: '0 auto' }}>
+        <h1>Erreur</h1>
+        <p style={{ color: '#dc2626' }}>{error}</p>
+        <a href="/" style={{ color: '#4a5d3a', textDecoration: 'underline' }}>&rarr; Retour</a>
       </div>
     );
   }
@@ -64,7 +125,7 @@ export default function SignaturePage() {
 
       {!questionnaireUrl && (
         <div style={{ padding: 16, background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 8, marginBottom: 24, color: '#92400E', fontSize: 14 }}>
-          <strong>⚠️ Pas de token questionnaire</strong> — Contacte un admin pour qu'il en g&eacute;n&egrave;re un.
+          <strong>&#9888; Pas de token questionnaire</strong> &mdash; Contacte un admin pour qu'il en g&eacute;n&egrave;re un.
         </div>
       )}
 
@@ -86,7 +147,7 @@ export default function SignaturePage() {
           }}
         >
           <Copy className="w-4 h-4" />
-          {copied ? '✓ Copi&eacute; !' : 'Copier la signature'}
+          {copied ? 'Copi\u00e9 !' : 'Copier la signature'}
         </button>
         <span style={{ fontSize: 13, color: '#666', alignSelf: 'center' }}>
           ou s&eacute;lectionne (Cmd+A), copie (Cmd+C) puis colle dans Mac Mail
@@ -95,7 +156,6 @@ export default function SignaturePage() {
 
       <hr style={{ marginBottom: 32 }} />
 
-      {/* Signature copiable */}
       <div id="signature-content">
         <table cellPadding="0" cellSpacing="0" border="0" style={{ fontFamily: 'Georgia, serif', maxWidth: 580 }}>
           <tbody>
@@ -152,7 +212,7 @@ export default function SignaturePage() {
       </div>
 
       <div style={{ marginTop: 40, padding: 20, background: '#F5F5F4', borderRadius: 8, fontSize: 13, color: '#57534e' }}>
-        <strong>💡 Ton lien questionnaire :</strong>
+        <strong>Ton lien questionnaire :</strong>
         <div style={{ fontFamily: 'monospace', marginTop: 6, wordBreak: 'break-all', color: '#1c1917' }}>
           {questionnaireUrl || 'Non disponible'}
         </div>
