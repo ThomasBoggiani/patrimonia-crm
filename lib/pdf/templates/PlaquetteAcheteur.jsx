@@ -144,6 +144,7 @@ export default function PlaquetteAcheteur({
   conseiller,
   logoUrl,
   teamMembers,
+  locationImages,
 }) {
   const isOffMarket = mandat?.is_off_market === true;
   const styles = getStyles(isOffMarket);
@@ -152,9 +153,13 @@ export default function PlaquetteAcheteur({
   const photos = normalizePhotos(mandat?.photos);
   const photoChunks = chunkPhotos(photos, 9); // 9 photos par page (3×3)
 
+  // Images de localisation : priorité aux URLs custom du mandat, sinon fallback auto via Google/IGN
+  const aerialSrc = mandat?.aerial_image_url || locationImages?.satellite || null;
+  const cadastreSrc = mandat?.cadastre_image_url || locationImages?.cadastre || null;
+
   const hasMapImage = !!mandat?.map_image_url;
-  const hasAerialImage = !!mandat?.aerial_image_url;
-  const hasCadastreImage = !!mandat?.cadastre_image_url;
+  const hasAerialImage = !!aerialSrc;
+  const hasCadastreImage = !!cadastreSrc;
   const hasEtatLocatif = mandat?.etat_locatif && Array.isArray(mandat.etat_locatif) && mandat.etat_locatif.length > 0;
   const hasPlans = mandat?.plans && Array.isArray(mandat.plans) && mandat.plans.length > 0;
   const hasPhotos = photos.length > 0;
@@ -333,7 +338,7 @@ export default function PlaquetteAcheteur({
             </Text>
             {'\n'}{safeText(mandat?.ville, '')}
           </Text>
-          <Image src={mandat.aerial_image_url} style={{ width: '100%', height: 380, objectFit: 'contain' }} />
+          <Image src={aerialSrc} style={{ width: '100%', height: 380, objectFit: 'contain' }} />
           <PageFooter isOffMarket={isOffMarket} />
         </Page>
       )}
@@ -347,7 +352,7 @@ export default function PlaquetteAcheteur({
               {mandat.cadastre_description}
             </Text>
           )}
-          <Image src={mandat.cadastre_image_url} style={{ width: '100%', height: 380, objectFit: 'contain', marginTop: 16 }} />
+          <Image src={cadastreSrc} style={{ width: '100%', height: 380, objectFit: 'contain', marginTop: 16 }} />
           <PageFooter isOffMarket={isOffMarket} />
         </Page>
       )}
