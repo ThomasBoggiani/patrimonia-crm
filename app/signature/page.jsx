@@ -144,7 +144,7 @@ export default function SignaturePage() {
       <div id="signature-content">
         <table cellPadding="0" cellSpacing="0" border="0" style={{ borderCollapse: 'collapse', width: SIG_WIDTH }}>
           <tbody>
-            {/* Ligne 1 : Logo grand carré + Infos perso */}
+            {/* Ligne 1 : Logo + Infos */}
             <tr>
               <td style={{ verticalAlign: 'top', width: LOGO_SIZE, padding: 0 }}>
                 <img
@@ -155,65 +155,65 @@ export default function SignaturePage() {
                   style={{ display: 'block', border: 0, width: LOGO_SIZE, height: LOGO_SIZE, objectFit: 'contain', backgroundColor: '#f5f3ee' }}
                 />
               </td>
-              <td style={{ verticalAlign: 'top', borderLeft: '2px solid #4a5d3a', padding: '4px 0 0 24px', height: LOGO_SIZE }}>
+              <td style={{ verticalAlign: 'top', borderLeft: '1px solid #d6d3d1', padding: '4px 0 0 20px', height: LOGO_SIZE }}>
                 {/* BLOC 1 - Identité personnelle */}
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 24, fontWeight: 700, color: '#1c1917', lineHeight: 1.1, marginBottom: 4 }}>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, fontWeight: 700, color: '#1c1917', lineHeight: 1.15, marginBottom: 3 }}>
                   {fullName}
                 </div>
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 14, color: '#78716c', fontStyle: 'italic', marginBottom: 10 }}>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 13, color: '#78716c', fontStyle: 'italic', marginBottom: 12 }}>
                   {fonction}
                 </div>
                 {tel && (
-                  <div style={{ fontFamily: 'Georgia, serif', fontSize: 14, color: '#292524', lineHeight: 1.6 }}>
-                    <a href={`tel:${telDigits}`} style={{ color: '#1c1917', textDecoration: 'none', fontWeight: 600 }}>{tel}</a>
+                  <div style={{ fontFamily: 'Georgia, serif', fontSize: 13, color: '#1c1917', lineHeight: 1.6 }}>
+                    <a href={`tel:${telDigits}`} style={{ color: '#1c1917', textDecoration: 'none', fontWeight: 700 }}>{tel}</a>
                   </div>
                 )}
                 {email && (
-                  <div style={{ fontFamily: 'Georgia, serif', fontSize: 14, color: '#292524', lineHeight: 1.6 }}>
+                  <div style={{ fontFamily: 'Georgia, serif', fontSize: 13, color: '#1c1917', lineHeight: 1.6 }}>
                     <a href={`mailto:${email}`} style={{ color: '#1c1917', textDecoration: 'none' }}>{email}</a>
                   </div>
                 )}
 
-                {/* Séparateur entre bloc personnel et bloc agence */}
-                <div style={{ height: 1, backgroundColor: '#d6d3d1', margin: '14px 0' }} />
+                {/* Séparateur fin */}
+                <div style={{ height: 1, backgroundColor: '#e7e5e4', margin: '12px 0' }} />
 
                 {/* BLOC 2 - Identité agence */}
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 16, fontWeight: 700, color: '#4a5d3a', marginBottom: 4 }}>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 14, fontWeight: 700, color: '#4a5d3a', marginBottom: 3 }}>
                   Immeubles &amp; Patrimoine
                 </div>
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 13, color: '#292524', lineHeight: 1.6 }}>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 12, color: '#57534e', lineHeight: 1.6 }}>
                   7 rue de Penthi&egrave;vre &middot; 75008 Paris
                 </div>
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 13, color: '#292524', lineHeight: 1.6 }}>
-                  <a href="https://www.immeubles-patrimoine.fr" style={{ color: '#292524', textDecoration: 'none' }}>www.immeubles-patrimoine.fr</a>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 12, color: '#57534e', lineHeight: 1.6 }}>
+                  <a href="https://www.immeubles-patrimoine.fr" style={{ color: '#57534e', textDecoration: 'none' }}>www.immeubles-patrimoine.fr</a>
                 </div>
               </td>
             </tr>
 
-            {/* Bandeau off-market — pleine largeur sous logo + infos */}
+            {/* Bandeau off-market — pleine largeur, discret avec trait fin */}
             {questionnaireUrl && (
               <tr>
-                <td colSpan={2} style={{ paddingTop: 16 }}>
-                  <a
+                <td colSpan={2} style={{ paddingTop: 0 }}>
+                  
                     href={questionnaireUrl}
                     style={{
                       display: 'block',
-                      backgroundColor: '#f0ede4',
-                      borderLeft: '4px solid #4a5d3a',
-                      padding: '18px 24px',
+                      borderTop: '1px solid #e7e5e4',
+                      marginTop: 16,
+                      paddingTop: 14,
                       textDecoration: 'none',
                       fontFamily: 'Georgia, serif',
-                      width: SIG_WIDTH - 8,
+                      width: SIG_WIDTH,
                       boxSizing: 'border-box'
                     }}
                   >
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1917', marginBottom: 4 }}>
-                      Inscrivez-vous ici pour d&eacute;couvrir nos biens off-market
+                    <div style={{ fontFamily: 'Georgia, serif', fontSize: 13, fontWeight: 700, color: '#1c1917', marginBottom: 4, lineHeight: 1.4 }}>
+                      Rejoignez notre r&eacute;seau d&rsquo;investisseurs et acc&eacute;dez &agrave; nos biens confidentiels
                     </div>
-                    <div style={{ fontSize: 13, color: '#4a5d3a', textDecoration: 'underline', marginBottom: 6 }}>
+                    <div style={{ fontFamily: 'Georgia, serif', fontSize: 12, color: '#4a5d3a', textDecoration: 'underline', marginBottom: 5 }}>
                       80% de nos biens sont off-market, les d&eacute;couvrir ici &rarr;
                     </div>
-                    <div style={{ fontSize: 11, color: '#78716c', fontStyle: 'italic' }}>
+                    <div style={{ fontFamily: 'Georgia, serif', fontSize: 11, color: '#a8a29e', fontStyle: 'italic' }}>
                       Questionnaire confidentiel &middot; 3 minutes
                     </div>
                   </a>
@@ -223,16 +223,3 @@ export default function SignaturePage() {
           </tbody>
         </table>
       </div>
-
-      <div style={{ marginTop: 40, padding: 20, background: '#F5F5F4', borderRadius: 8, fontSize: 13, color: '#57534e' }}>
-        <strong>Ton lien questionnaire :</strong>
-        <div style={{ fontFamily: 'monospace', marginTop: 6, wordBreak: 'break-all', color: '#1c1917' }}>
-          {questionnaireUrl || 'Non disponible'}
-        </div>
-        <p style={{ marginTop: 12, marginBottom: 0, fontSize: 12 }}>
-          Ce lien est <strong>permanent</strong>. Toute personne qui le remplit cr&eacute;e automatiquement une fiche client/mandat dans ton CRM.
-        </p>
-      </div>
-    </div>
-  );
-}
