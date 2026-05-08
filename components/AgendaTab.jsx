@@ -7,7 +7,6 @@ import { useAuth, getCurrentUserName } from '@/lib/auth';
 const JOURS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
-// Palette de couleurs pour les agendas (sage = moi, le reste = collègues)
 const COLLEAGUE_COLORS = [
   { bg: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-900', dot: 'bg-blue-500', solid: 'bg-blue-500' },
   { bg: 'bg-purple-50', border: 'border-purple-300', text: 'text-purple-900', dot: 'bg-purple-500', solid: 'bg-purple-500' },
@@ -21,16 +20,16 @@ export default function AgendaTab() {
   const { user, profile } = useAuth();
   const [view, setView] = useState('week');
   const [myEvents, setMyEvents] = useState([]);
-  const [colleagueEvents, setColleagueEvents] = useState({}); // { email: events[] }
+  const [colleagueEvents, setColleagueEvents] = useState({});
   const [recurrents, setRecurrents] = useState([]);
   const [colleagues, setColleagues] = useState([]);
-  const [selectedColleagues, setSelectedColleagues] = useState([]); // emails
+  const [selectedColleagues, setSelectedColleagues] = useState([]);
   const [loading, setLoading] = useState(false);
   const [outlookConnected, setOutlookConnected] = useState(null);
   const [error, setError] = useState(null);
   const [showNewEvent, setShowNewEvent] = useState(false);
   const [editingRec, setEditingRec] = useState(null);
-  
+
   const [currentWeekStart, setCurrentWeekStart] = useState(() => {
     const d = new Date();
     const day = d.getDay() || 7;
@@ -73,7 +72,6 @@ export default function AgendaTab() {
   }
 
   async function loadColleagues() {
-    // Tous les profils actifs sauf moi
     const { data } = await supabase
       .from('profiles')
       .select('id, email, prenom, nom')
@@ -113,14 +111,14 @@ export default function AgendaTab() {
       setColleagueEvents({});
       return;
     }
-    
+
     const start = new Date(currentWeekStart);
     const end = new Date(currentWeekStart);
     end.setDate(end.getDate() + 7);
-    
+
     const { data: { session } } = await supabase.auth.getSession();
     const newEvents = {};
-    
+
     await Promise.all(selectedColleagues.map(async (email) => {
       try {
         const res = await fetch(
@@ -137,12 +135,12 @@ export default function AgendaTab() {
         newEvents[email] = [];
       }
     }));
-    
+
     setColleagueEvents(newEvents);
   }
 
   const toggleColleague = (email) => {
-    setSelectedColleagues(prev => 
+    setSelectedColleagues(prev =>
       prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email]
     );
   };
@@ -160,13 +158,11 @@ export default function AgendaTab() {
     setCurrentWeekStart(d);
   };
 
-  // Couleur attribuée à un collègue (par index dans la liste)
   const getColleagueColor = (email) => {
     const idx = colleagues.findIndex(c => c.email === email);
     return COLLEAGUE_COLORS[idx % COLLEAGUE_COLORS.length] || COLLEAGUE_COLORS[0];
   };
 
-  // Construire la liste des évents par jour pour tous (moi + collègues sélectionnés)
   const eventsByDay = {};
   for (let i = 0; i < 7; i++) {
     const d = new Date(currentWeekStart);
@@ -174,16 +170,14 @@ export default function AgendaTab() {
     const key = d.toISOString().split('T')[0];
     eventsByDay[key] = [];
   }
-  
-  // Mes events
+
   myEvents.forEach(ev => {
     const dateKey = ev.start.dateTime.split('T')[0];
     if (eventsByDay[dateKey]) {
       eventsByDay[dateKey].push({ ...ev, _owner: 'me', _color: ME_COLOR });
     }
   });
-  
-  // Events des collègues
+
   Object.entries(colleagueEvents).forEach(([email, events]) => {
     const colleague = colleagues.find(c => c.email === email);
     if (!colleague) return;
@@ -191,8 +185,8 @@ export default function AgendaTab() {
     events.forEach(ev => {
       const dateKey = ev.start.dateTime.split('T')[0];
       if (eventsByDay[dateKey]) {
-        eventsByDay[dateKey].push({ 
-          ...ev, 
+        eventsByDay[dateKey].push({
+          ...ev,
           _owner: 'colleague',
           _ownerName: `${colleague.prenom} ${colleague.nom}`,
           _ownerInitials: `${colleague.prenom[0]}${colleague.nom[0]}`,
@@ -201,10 +195,9 @@ export default function AgendaTab() {
       }
     });
   });
-  
-  // Trier chaque jour par heure
+
   Object.keys(eventsByDay).forEach(key => {
-    eventsByDay[key].sort((a, b) => 
+    eventsByDay[key].sort((a, b) =>
       new Date(a.start.dateTime).getTime() - new Date(b.start.dateTime).getTime()
     );
   });
@@ -217,7 +210,7 @@ export default function AgendaTab() {
   const weekLabel = (() => {
     const end = new Date(currentWeekStart);
     end.setDate(end.getDate() + 6);
-    return `${currentWeekStart.getDate()} ${MOIS[currentWeekStart.getMonth()]} — ${end.getDate()} ${MOIS[end.getMonth()]} ${end.getFullYear()}`;
+    return `${currentWeekStart.getDate()} ${MOIS[currentWeekStart.getMonth()]} - ${end.getDate()} ${MOIS[end.getMonth()]} ${end.getFullYear()}`;
   })();
 
   return (
@@ -268,19 +261,16 @@ export default function AgendaTab() {
 
           {outlookConnected && (
             <div className="grid grid-cols-1 lg:grid-cols-[200px_1fr] gap-4">
-              {/* Sidebar : sélection des agendas à afficher */}
               <aside className="bg-white border border-cream-dark rounded-lg p-3 h-fit">
                 <div className="text-xs uppercase tracking-wide text-sage-dark font-medium mb-3">
                   Agendas affichés
                 </div>
-                
-                {/* Mon agenda (toujours coché) */}
+
                 <div className="flex items-center gap-2 px-2 py-1.5 rounded mb-2">
                   <div className={`w-3 h-3 rounded-sm ${ME_COLOR.solid}`} />
                   <span className="text-sm font-medium text-ink">Moi</span>
                 </div>
-                
-                {/* Collègues */}
+
                 {colleagues.length === 0 ? (
                   <div className="text-xs text-ink/50 italic">Aucun collègue</div>
                 ) : (
@@ -293,7 +283,7 @@ export default function AgendaTab() {
                       const color = getColleagueColor(c.email);
                       return (
                         <label key={c.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-cream-50 cursor-pointer">
-                          <input 
+                          <input
                             type="checkbox"
                             checked={checked}
                             onChange={() => toggleColleague(c.email)}
@@ -304,15 +294,15 @@ export default function AgendaTab() {
                         </label>
                       );
                     })}
-                    
+
                     <div className="flex gap-2 mt-3 pt-3 border-t border-cream">
-                      <button 
+                      <button
                         onClick={() => setSelectedColleagues(colleagues.map(c => c.email))}
                         className="text-[10px] text-sage-dark hover:underline flex-1"
                       >
                         Tout afficher
                       </button>
-                      <button 
+                      <button
                         onClick={() => setSelectedColleagues([])}
                         className="text-[10px] text-ink/60 hover:underline flex-1"
                       >
@@ -323,7 +313,6 @@ export default function AgendaTab() {
                 )}
               </aside>
 
-              {/* Zone principale : agenda */}
               <div>
                 <div className="flex items-center justify-between bg-white border border-cream-dark rounded-lg p-3 mb-4">
                   <div className="flex gap-1">
@@ -356,7 +345,7 @@ export default function AgendaTab() {
                         </div>
                         <div className="space-y-1">
                           {events.length === 0 ? (
-                            <div className="text-[10px] text-ink/40 italic">—</div>
+                            <div className="text-[10px] text-ink/40 italic">-</div>
                           ) : events.map((ev, i) => (
                             <EventCard
                               key={`${ev._owner}-${ev.id}-${i}`}
@@ -372,7 +361,7 @@ export default function AgendaTab() {
                   })}
                 </div>
 
-                {/* Vue mobile : liste verticale, jours seulement non-vides */}
+                {/* Vue mobile : liste verticale */}
                 <div className="md:hidden space-y-3">
                   {Object.entries(eventsByDay).map(([dateKey, events]) => {
                     const date = new Date(dateKey);
@@ -423,7 +412,7 @@ export default function AgendaTab() {
       {showNewEvent && (
         <NewEventModal onClose={() => setShowNewEvent(false)} onCreated={() => { setShowNewEvent(false); loadMyEvents(); }} />
       )}
-      
+
       {editingRec && (
         <RecurrentForm rec={editingRec} onClose={() => setEditingRec(null)} onSaved={() => { setEditingRec(null); loadRecurrents(); }} />
       )}
@@ -485,143 +474,7 @@ function EventCard({ event, formatTime, onDelete, onUpdate }) {
   );
 }
 
-function NewEventModal({ onClose, onCreated, editEvent = null }) {
-  const isEdit = !!editEvent;
-
-  const [titre, setTitre] = useState(editEvent?.subject || '');
-  const [debut, setDebut] = useState(() => {
-    if (editEvent?.start?.dateTime) {
-      const d = new Date(editEvent.start.dateTime);
-      // Compense le décalage timezone pour datetime-local
-      const offset = d.getTimezoneOffset();
-      const local = new Date(d.getTime() - offset * 60000);
-      return local.toISOString().slice(0, 16);
-    }
-    const d = new Date();
-    d.setMinutes(0, 0, 0);
-    d.setHours(d.getHours() + 1);
-    return d.toISOString().slice(0, 16);
-  });
-  const [fin, setFin] = useState(() => {
-    if (editEvent?.end?.dateTime) {
-      const d = new Date(editEvent.end.dateTime);
-      const offset = d.getTimezoneOffset();
-      const local = new Date(d.getTime() - offset * 60000);
-      return local.toISOString().slice(0, 16);
-    }
-    const d = new Date();
-    d.setMinutes(0, 0, 0);
-    d.setHours(d.getHours() + 2);
-    return d.toISOString().slice(0, 16);
-  });
-  const [lieu, setLieu] = useState(editEvent?.location?.displayName || '');
-  const [description, setDescription] = useState(() => {
-    // bodyPreview est plus safe que body.content (qui contient du HTML)
-    return editEvent?.bodyPreview || '';
-  });
-  const [participants, setParticipants] = useState(() => {
-    if (!editEvent?.attendees) return '';
-    return editEvent.attendees
-      .map(a => a.emailAddress?.address)
-      .filter(Boolean)
-      .join(', ');
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const url = isEdit
-        ? `/api/microsoft/events/${editEvent.id}`
-        : '/api/microsoft/events';
-      const method = isEdit ? 'PATCH' : 'POST';
-
-      const res = await fetch(url, {
-        method,
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          titre,
-          description,
-          debut: new Date(debut).toISOString(),
-          fin: new Date(fin).toISOString(),
-          lieu,
-          participants: participants.split(',').map(s => s.trim()).filter(Boolean)
-        })
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Erreur');
-      }
-      onCreated();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-ink/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-cream-dark">
-          <h2 className="font-display text-xl font-semibold text-ink">{isEdit ? 'Modifier le rendez-vous' : 'Nouveau rendez-vous'}</h2>
-          <button onClick={onClose} className="text-stone-500 hover:text-ink"><X className="w-5 h-5" /></button>
-        </div>
-        
-        {error && (
-          <div className="mx-5 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /><div>{error}</div>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="p-5 space-y-3">
-          <div>
-            <label className="text-xs text-ink/70 block mb-1">Titre *</label>
-            <input type="text" value={titre} onChange={e => setTitre(e.target.value)} required autoFocus
-              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-ink/70 block mb-1">Début *</label>
-              <input type="datetime-local" value={debut} onChange={e => setDebut(e.target.value)} required
-                className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm" />
-            </div>
-            <div>
-              <label className="text-xs text-ink/70 block mb-1">Fin *</label>
-              <input type="datetime-local" value={fin} onChange={e => setFin(e.target.value)} required
-                className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm" />
-            </div>
-          </div>
-          <div>
-            <label className="text-xs text-ink/70 block mb-1">Lieu</label>
-            <input type="text" value={lieu} onChange={e => setLieu(e.target.value)}
-              placeholder="Adresse ou lien Teams"
-              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm" />
-          </div>
-          <div>
-            <label className="text-xs text-ink/70 block mb-1">Participants (emails séparés par virgule)</label>
-            <input type="text" value={participants} onChange={e => setParticipants(e.target.value)}
-              placeholder="lucas@..., philippe@..."
-              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm" />
-          </div>
-          <div>
-            <label className="text-xs text-ink/70 block mb-1">Description</label>
-            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
-              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm" />
-          </div>
-          
-          <div className="flex gap-2 justify-end pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-ink/70 hover:bg-cream-100 rounded-lg">Annuler</button>
-            <button type="submit" disabled={loading}
-              className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink disabled:opacity-50 flex items-center gap-1.5">
-              function EventDetailModal({ event, onClose, onEdit, onDelete }) {
+function EventDetailModal({ event, onClose, onEdit, onDelete }) {
   const isMine = event._owner === 'me';
   const start = new Date(event.start.dateTime);
   const end = new Date(event.end.dateTime);
@@ -676,7 +529,7 @@ function NewEventModal({ onClose, onCreated, editEvent = null }) {
             <Clock className="w-4 h-4 text-sage-dark flex-shrink-0 mt-0.5" />
             <div className="text-sm text-ink">
               {event.isAllDay ? (
-                <div>Toute la journée — {start.toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long' })}</div>
+                <div>Toute la journée - {start.toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long' })}</div>
               ) : (
                 <>
                   <div>Début : <span className="font-medium">{formatDateTime(start)}</span></div>
@@ -756,6 +609,139 @@ function NewEventModal({ onClose, onCreated, editEvent = null }) {
     </div>
   );
 }
+
+function NewEventModal({ onClose, onCreated, editEvent = null }) {
+  const isEdit = !!editEvent;
+
+  const [titre, setTitre] = useState(editEvent?.subject || '');
+  const [debut, setDebut] = useState(() => {
+    if (editEvent?.start?.dateTime) {
+      const d = new Date(editEvent.start.dateTime);
+      const offset = d.getTimezoneOffset();
+      const local = new Date(d.getTime() - offset * 60000);
+      return local.toISOString().slice(0, 16);
+    }
+    const d = new Date();
+    d.setMinutes(0, 0, 0);
+    d.setHours(d.getHours() + 1);
+    return d.toISOString().slice(0, 16);
+  });
+  const [fin, setFin] = useState(() => {
+    if (editEvent?.end?.dateTime) {
+      const d = new Date(editEvent.end.dateTime);
+      const offset = d.getTimezoneOffset();
+      const local = new Date(d.getTime() - offset * 60000);
+      return local.toISOString().slice(0, 16);
+    }
+    const d = new Date();
+    d.setMinutes(0, 0, 0);
+    d.setHours(d.getHours() + 2);
+    return d.toISOString().slice(0, 16);
+  });
+  const [lieu, setLieu] = useState(editEvent?.location?.displayName || '');
+  const [description, setDescription] = useState(editEvent?.bodyPreview || '');
+  const [participants, setParticipants] = useState(() => {
+    if (!editEvent?.attendees) return '';
+    return editEvent.attendees
+      .map(a => a.emailAddress?.address)
+      .filter(Boolean)
+      .join(', ');
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const url = isEdit
+        ? `/api/microsoft/events/${editEvent.id}`
+        : '/api/microsoft/events';
+      const method = isEdit ? 'PATCH' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          titre,
+          description,
+          debut: new Date(debut).toISOString(),
+          fin: new Date(fin).toISOString(),
+          lieu,
+          participants: participants.split(',').map(s => s.trim()).filter(Boolean)
+        })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Erreur');
+      }
+      onCreated();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-ink/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-cream-dark">
+          <h2 className="font-display text-xl font-semibold text-ink">{isEdit ? 'Modifier le rendez-vous' : 'Nouveau rendez-vous'}</h2>
+          <button onClick={onClose} className="text-stone-500 hover:text-ink"><X className="w-5 h-5" /></button>
+        </div>
+
+        {error && (
+          <div className="mx-5 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /><div>{error}</div>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-3">
+          <div>
+            <label className="text-xs text-ink/70 block mb-1">Titre *</label>
+            <input type="text" value={titre} onChange={e => setTitre(e.target.value)} required autoFocus
+              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-ink/70 block mb-1">Début *</label>
+              <input type="datetime-local" value={debut} onChange={e => setDebut(e.target.value)} required
+                className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-ink/70 block mb-1">Fin *</label>
+              <input type="datetime-local" value={fin} onChange={e => setFin(e.target.value)} required
+                className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-ink/70 block mb-1">Lieu</label>
+            <input type="text" value={lieu} onChange={e => setLieu(e.target.value)}
+              placeholder="Adresse ou lien Teams"
+              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-ink/70 block mb-1">Participants (emails séparés par virgule)</label>
+            <input type="text" value={participants} onChange={e => setParticipants(e.target.value)}
+              placeholder="lucas@..., philippe@..."
+              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-ink/70 block mb-1">Description</label>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
+              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm" />
+          </div>
+
+          <div className="flex gap-2 justify-end pt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-ink/70 hover:bg-cream-100 rounded-lg">Annuler</button>
+            <button type="submit" disabled={loading}
+              className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink disabled:opacity-50 flex items-center gap-1.5">
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
               {isEdit ? 'Enregistrer' : 'Créer dans Outlook'}
             </button>
@@ -795,11 +781,11 @@ function RecurrentList({ recurrents, onEdit, reload }) {
             <div className="text-xs text-ink/60 flex flex-wrap gap-2 mt-1">
               <span className="flex items-center gap-1"><Repeat className="w-3 h-3" />{rec.frequence}</span>
               {rec.jour_semaine !== null && rec.jour_semaine !== undefined && (
-                <span>· {JOURS[rec.jour_semaine]}</span>
+                <span>&middot; {JOURS[rec.jour_semaine]}</span>
               )}
-              {rec.heure && <span className="flex items-center gap-1">· <Clock className="w-3 h-3" />{rec.heure}</span>}
-              {rec.duree_minutes && <span>· {rec.duree_minutes} min</span>}
-              {rec.lieu && <span className="flex items-center gap-1">· <MapPin className="w-3 h-3" />{rec.lieu}</span>}
+              {rec.heure && <span className="flex items-center gap-1">&middot; <Clock className="w-3 h-3" />{rec.heure}</span>}
+              {rec.duree_minutes && <span>&middot; {rec.duree_minutes} min</span>}
+              {rec.lieu && <span className="flex items-center gap-1">&middot; <MapPin className="w-3 h-3" />{rec.lieu}</span>}
             </div>
             {rec.description && <div className="text-xs text-ink/60 mt-1 line-clamp-2">{rec.description}</div>}
           </div>
@@ -831,7 +817,7 @@ function RecurrentForm({ rec, onClose, onSaved }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
+
     const data = {
       titre, description, frequence,
       jour_semaine: frequence === 'Hebdomadaire' ? parseInt(jourSemaine) : null,
@@ -839,7 +825,7 @@ function RecurrentForm({ rec, onClose, onSaved }) {
       heure, duree_minutes: parseInt(duree), lieu,
       actif: true
     };
-    
+
     if (rec.id) {
       await supabase.from('evenements_recurrents').update(data).eq('id', rec.id);
     } else {
