@@ -184,7 +184,7 @@ function QuestionnaireSection({ profile, isManager, allProfiles }) {
           >
             <Eye className="w-3.5 h-3.5" /> Aperçu
           </a>
-          
+          <a
             href="/signature"
             target="_blank"
             rel="noopener noreferrer"
