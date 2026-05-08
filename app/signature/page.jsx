@@ -223,3 +223,17 @@ export default function SignaturePage() {
           </tbody>
         </table>
       </div>
+
+      <div style={{ marginTop: 40, padding: 20, background: '#F5F5F4', borderRadius: 8, fontSize: 13, color: '#57534e' }}>
+        <strong>Ton lien questionnaire :</strong>
+        <div style={{ fontFamily: 'monospace', marginTop: 6, wordBreak: 'break-all', color: '#1c1917' }}>
+          {questionnaireUrl || 'Non disponible'}
+        </div>
+        <p style={{ marginTop: 12, marginBottom: 0, fontSize: 12 }}>
+          Ce lien est <strong>permanent</strong>. Toute personne qui le remplit cr&eacute;e automatiquement une fiche client/mandat dans ton CRM.
+        </p>
+      </div>
+    </div>
+  );
+}
+}
