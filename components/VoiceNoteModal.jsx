@@ -2,10 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, Square, Loader2, X, Check, AlertCircle, CheckCircle2, Sparkles, Info, RotateCw } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-
-const TYPES_ACTIF = ['Immeuble d\'habitation', 'Immeuble mixte', 'Immeuble tertiaire', 'Local commercial', 'Local d\'activité', 'Hôtel', 'Hébergement hôtelier', 'Appartement', 'Maison', 'Studio', 'Terrain', 'Bureau', 'Promotion immobilière'];
-const TYPOLOGIES_CLIENT = ['Foncières', 'Marchands de biens', 'Particuliers', 'Fonds', 'Promoteurs', 'Family Office'];
-const ZONES = ['Paris 3e', 'Paris 4e', 'Paris 8e', 'Paris 9e', 'Paris 10e', 'Paris 11e', 'Paris 13e', 'Paris 15e', 'Paris 16e', 'Paris 17e', 'Paris 18e', 'Paris 19e', 'Paris 20e', 'Hauts-de-Seine (92)', 'Seine-Saint-Denis (93)', 'Val-de-Marne (94)', 'Val-d\'Oise (95)', 'Yvelines (78)', 'Seine-et-Marne (77)', 'Essonne (91)', 'Province'];
+import { TYPES_ACTIF, TYPOLOGIES_CLIENT, ZONES } from '@/lib/crm-constants';
 
 export default function VoiceNoteModal({ existingClients, onClose, onSuccess }) {
   const [step, setStep] = useState('ready'); // ready | recording | transcribing | processing | review | saving
