@@ -308,28 +308,14 @@ function MediaCard({ media, onPreview, onDelete }) {
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">
         {canEmbed && (
-          <button
-            onClick={onPreview}
-            className="p-1.5 text-stone-600 hover:bg-stone-100 rounded"
-            title="Aperçu intégré"
-          >
+          <button onClick={onPreview} className="p-1.5 text-stone-600 hover:bg-stone-100 rounded" title="Apercu integre">
             <Globe className="w-4 h-4" />
           </button>
         )}
-        
-          href={media.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="p-1.5 text-stone-600 hover:bg-stone-100 rounded"
-          title="Ouvrir dans un nouvel onglet"
-        >
+        <a href={media.url} target="_blank" rel="noopener noreferrer" className="p-1.5 text-stone-600 hover:bg-stone-100 rounded" title="Ouvrir dans un nouvel onglet">
           <ExternalLink className="w-4 h-4" />
         </a>
-        <button
-          onClick={onDelete}
-          className="p-1.5 text-stone-600 hover:text-red-600 hover:bg-red-50 rounded"
-          title="Supprimer"
-        >
+        <button onClick={onDelete} className="p-1.5 text-stone-600 hover:text-red-600 hover:bg-red-50 rounded" title="Supprimer">
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
