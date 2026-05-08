@@ -156,30 +156,35 @@ export default function SignaturePage() {
                 />
               </td>
               <td style={{ verticalAlign: 'top', borderLeft: '2px solid #4a5d3a', padding: '4px 0 0 24px', height: LOGO_SIZE }}>
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 24, fontWeight: 700, color: '#1c1917', lineHeight: 1.1, marginBottom: 6 }}>
+                {/* BLOC 1 - Identité personnelle */}
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 24, fontWeight: 700, color: '#1c1917', lineHeight: 1.1, marginBottom: 4 }}>
                   {fullName}
                 </div>
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 14, color: '#78716c', fontStyle: 'italic', marginBottom: 18 }}>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 14, color: '#78716c', fontStyle: 'italic', marginBottom: 10 }}>
                   {fonction}
                 </div>
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 16, fontWeight: 700, color: '#4a5d3a', marginBottom: 6 }}>
-                  Immeubles &amp; Patrimoine
-                </div>
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 14, color: '#292524', lineHeight: 1.6 }}>
-                  7 rue de Penthi&egrave;vre &middot; 75008 Paris
-                </div>
-                {(tel || email) && (
+                {tel && (
                   <div style={{ fontFamily: 'Georgia, serif', fontSize: 14, color: '#292524', lineHeight: 1.6 }}>
-                    {tel && (
-                      <a href={`tel:${telDigits}`} style={{ color: '#292524', textDecoration: 'none' }}>{tel}</a>
-                    )}
-                    {tel && email && <span> &middot; </span>}
-                    {email && (
-                      <a href={`mailto:${email}`} style={{ color: '#292524', textDecoration: 'none' }}>{email}</a>
-                    )}
+                    <a href={`tel:${telDigits}`} style={{ color: '#1c1917', textDecoration: 'none', fontWeight: 600 }}>{tel}</a>
                   </div>
                 )}
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 14, color: '#292524', lineHeight: 1.6 }}>
+                {email && (
+                  <div style={{ fontFamily: 'Georgia, serif', fontSize: 14, color: '#292524', lineHeight: 1.6 }}>
+                    <a href={`mailto:${email}`} style={{ color: '#1c1917', textDecoration: 'none' }}>{email}</a>
+                  </div>
+                )}
+
+                {/* Séparateur entre bloc personnel et bloc agence */}
+                <div style={{ height: 1, backgroundColor: '#d6d3d1', margin: '14px 0' }} />
+
+                {/* BLOC 2 - Identité agence */}
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 16, fontWeight: 700, color: '#4a5d3a', marginBottom: 4 }}>
+                  Immeubles &amp; Patrimoine
+                </div>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 13, color: '#292524', lineHeight: 1.6 }}>
+                  7 rue de Penthi&egrave;vre &middot; 75008 Paris
+                </div>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 13, color: '#292524', lineHeight: 1.6 }}>
                   <a href="https://www.immeubles-patrimoine.fr" style={{ color: '#292524', textDecoration: 'none' }}>www.immeubles-patrimoine.fr</a>
                 </div>
               </td>
