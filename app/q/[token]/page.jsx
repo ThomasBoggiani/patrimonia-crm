@@ -9,6 +9,7 @@ import {
   getInitialAnswers,
   validateAnswers
 } from '@/lib/questionnaires';
+import { getSousTypesForFamille, familleHasSousTypes } from '@/lib/crm-constants';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -71,6 +72,12 @@ export default function PublicQuestionnairePage() {
   function updateAnswer(id, value) {
     setAnswers(a => ({ ...a, [id]: value }));
     setErrors(errs => errs.filter(e => e.field !== id));
+  }
+
+  // Pour les cascades : met à jour famille ET sous-type d'un coup
+  function updateCascade(familleId, sousTypeId, { famille, sousType }) {
+    setAnswers(a => ({ ...a, [familleId]: famille, [sousTypeId]: sousType }));
+    setErrors(errs => errs.filter(e => e.field !== familleId));
   }
 
   async function handleSubmit() {
@@ -232,6 +239,7 @@ export default function PublicQuestionnairePage() {
           answers={answers}
           errors={errors}
           onUpdate={updateAnswer}
+          onUpdateCascade={updateCascade}
         />
       ))}
 
@@ -335,7 +343,7 @@ function Shell({ children }) {
   );
 }
 
-function SectionBlock({ section, answers, errors, onUpdate }) {
+function SectionBlock({ section, answers, errors, onUpdate, onUpdateCascade }) {
   return (
     <div className="mb-8">
       <div className="mb-4 pb-2 border-b border-stone-200">
@@ -347,21 +355,27 @@ function SectionBlock({ section, answers, errors, onUpdate }) {
         )}
       </div>
       <div className="space-y-4">
-        {section.questions.map(q => (
-          <QuestionField
-            key={q.id}
-            q={q}
-            value={answers[q.id]}
-            error={errors.find(e => e.field === q.id)}
-            onChange={(v) => onUpdate(q.id, v)}
-          />
-        ))}
+        {section.questions.map(q => {
+          // Affichage conditionnel via showIf
+          if (typeof q.showIf === 'function' && !q.showIf(answers)) return null;
+          return (
+            <QuestionField
+              key={q.id}
+              q={q}
+              value={answers[q.id]}
+              sousTypeValue={q.sousTypeId ? answers[q.sousTypeId] : ''}
+              error={errors.find(e => e.field === q.id)}
+              onChange={(v) => onUpdate(q.id, v)}
+              onChangeCascade={(payload) => onUpdateCascade(q.id, q.sousTypeId, payload)}
+            />
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function QuestionField({ q, value, error, onChange }) {
+function QuestionField({ q, value, sousTypeValue, error, onChange, onChangeCascade }) {
   const baseInput = `w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-stone-300 ${
     error ? 'border-red-300 bg-red-50' : 'border-stone-200 bg-white'
   }`;
@@ -446,6 +460,30 @@ function QuestionField({ q, value, error, onChange }) {
               </button>
             );
           })}
+        </div>
+      )}
+
+      {q.type === 'cascade' && q.tree && (
+        <div className={`grid grid-cols-1 ${familleHasSousTypes(q.tree, value) ? 'sm:grid-cols-2' : ''} gap-3`}>
+          <select
+            value={value || ''}
+            onChange={(e) => onChangeCascade({ famille: e.target.value, sousType: '' })}
+            className={baseInput}
+          >
+            <option value="">&mdash; {q.labelFamille || 'Famille'} &mdash;</option>
+            {Object.keys(q.tree).map(f => <option key={f} value={f}>{f}</option>)}
+          </select>
+
+          {familleHasSousTypes(q.tree, value) && (
+            <select
+              value={sousTypeValue || ''}
+              onChange={(e) => onChangeCascade({ famille: value, sousType: e.target.value })}
+              className={baseInput}
+            >
+              <option value="">&mdash; {q.labelSousType || 'Sous-type'} &mdash;</option>
+              {getSousTypesForFamille(q.tree, value).map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
         </div>
       )}
 
