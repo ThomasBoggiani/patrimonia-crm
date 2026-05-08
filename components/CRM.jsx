@@ -818,7 +818,12 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
                       <MapPin className="w-3 h-3 flex-shrink-0" /><span className="truncate">{m.adresse}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-3 text-sm text-stone-700">{m.type}</td>
+                  <td className="px-3 py-3 text-sm text-stone-700">
+                    {m.type || <span className="text-stone-400">—</span>}
+                    {m.sousType && (
+                      <span className="text-stone-400"> &middot; <span className="text-stone-600">{m.sousType}</span></span>
+                    )}
+                  </td>
                   <td className="px-3 py-3">
                     <div className="font-medium text-stone-900 text-sm">{formatPrix(getPriceTTC(m))}</div>
                     {secondaryDisplay === 'm2' ? (
@@ -1832,7 +1837,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
             </div>
             <div className="grid grid-cols-5 gap-4 mt-4 pt-4 border-t border-cream">
               <DetailItem label="Surface" value={mandat.surface ? `${mandat.surface} m²` : '—'} />
-              <DetailItem label="Type" value={mandat.type} />
+              <DetailItem label="Type" value={mandat.sousType ? `${mandat.type} · ${mandat.sousType}` : mandat.type} />
               <DetailItem label="DPE" value={mandat.dpeConsommation ? <span className="text-2xl font-bold" style={{color: getDPEColor(mandat.dpeConsommation)}}>{getDPEClass(mandat.dpeConsommation)}</span> : '—'} />
               <DetailItem label="Taxe foncière" value={mandat.taxeFonciere ? `${parseFloat(mandat.taxeFonciere).toLocaleString('fr')} €` : '—'} />
               <DetailItem label="Charges annuelles" value={mandat.chargesAnnuelles ? `${parseFloat(mandat.chargesAnnuelles).toLocaleString('fr')} €` : '—'} />
