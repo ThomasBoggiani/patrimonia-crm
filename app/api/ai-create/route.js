@@ -25,17 +25,53 @@ async function verifyToken(token) {
 }
 
 const SYSTEM_PROMPT = `Tu es un expert immobilier patrimonial et acquisition off-market.
-Tu reçois du contenu (texte de message, document, transcription vocale) et tu dois :
+Tu reçois du contenu (texte, document, transcription vocale) et tu dois :
 
 1. DÉTECTER le type de contenu :
-   - "mandat" : un bien immobilier à vendre (vendeur, off-market, mandat)
+   - "mandat" : un bien immobilier à vendre
    - "client" : un acheteur potentiel / investisseur
    - "both" : les 2 (ex: un email avec un bien ET un acheteur)
    - "unknown" : impossible à déterminer
 
 2. EXTRAIRE les données pour la (les) fiche(s).
 
-Réponds UNIQUEMENT avec un JSON valide (pas de backticks markdown). Format :
+═══════════════════════════════════════════════════════════════════
+ARBORESCENCE DES TYPES DE BIENS (CRITIQUE)
+═══════════════════════════════════════════════════════════════════
+
+Pour chaque mandat, tu dois identifier :
+- "marche" : "b2b" (investissement) OU "b2c" (habitation pour habiter)
+- "type" : la famille principale
+- "sous_type" : le sous-type précis (peut être absent si pas pertinent)
+
+═══ MARCHÉ B2B (investissement professionnel) ═══
+
+Famille "Immeubles" → sous_type parmi : "Immeuble d'habitation", "Mixte", "Commercial"
+Famille "Hôtels" → sous_type parmi : "Hébergements hôteliers", "Hôtels classiques", "Sociaux"
+Famille "Terrains" → pas de sous_type
+Famille "Parking" → pas de sous_type
+Famille "Locaux commerciaux" → sous_type parmi : "Bureaux", "Boutiques", "Retails Park"
+
+═══ MARCHÉ B2C (habitation pour particulier) ═══
+
+Type parmi : "Appartement", "Maison", "Hôtel particulier"
+(Pas de sous_type pour le B2C)
+
+═══ COMMENT CHOISIR ═══
+
+- Si on parle d'un **immeuble entier** d'appartements → b2b, type="Immeubles", sous_type="Immeuble d'habitation"
+- Si on parle d'un **appartement T3** vendu individuellement → b2c, type="Appartement"
+- Si on parle d'une **maison** vendue à un particulier → b2c, type="Maison"
+- Si on parle d'un **hôtel particulier** comme résidence → b2c, type="Hôtel particulier"
+- Si on parle d'un **immeuble mixte** (commerces RDC + appartements) → b2b, type="Immeubles", sous_type="Mixte"
+- Si on parle d'un **hôtel** au sens commercial (hôtellerie) → b2b, type="Hôtels", sous_type="Hôtels classiques"
+- Si on parle de **bureaux** d'entreprise → b2b, type="Locaux commerciaux", sous_type="Bureaux"
+- Si on parle d'un **terrain** → b2b, type="Terrains"
+- Dans le doute, B2B est le défaut (le métier de l'agence est l'investissement)
+
+═══════════════════════════════════════════════════════════════════
+FORMAT DE RÉPONSE (JSON STRICT, pas de markdown)
+═══════════════════════════════════════════════════════════════════
 
 {
   "type": "mandat|client|both|unknown",
@@ -45,8 +81,9 @@ Réponds UNIQUEMENT avec un JSON valide (pas de backticks markdown). Format :
     "nom": "...",
     "adresse": "...",
     "ville": "...",
-    "type": "Appartement|Studio|Maison|Immeuble|Terrain|Local commercial|Bureau",
-    "sous_type": "T1|T2|T3|...",
+    "marche": "b2b|b2c",
+    "type": "...",
+    "sous_type": "...",
     "surface": 28.36,
     "nb_pieces": 2,
     "nb_chambres": 1,
@@ -78,13 +115,14 @@ Réponds UNIQUEMENT avec un JSON valide (pas de backticks markdown). Format :
     "societe": "...",
     "tel": "...",
     "email": "...",
-    "typologie": "Investisseur|Promoteur|Particulier|SCPI|Family office|Mandant",
+    "typologie": "Foncières|Marchands de biens|Particuliers|Fonds|Promoteurs|Family Office",
+    "sous_typologie": "Privées|Publiques",
     "nature": "Personne physique|SCI|SARL|SAS|...",
     "budget_min": 0,
     "budget_max": 0,
     "rendement_min": 0,
     "zones": ["Paris 7e", "Paris 8e"],
-    "typologies_recherchees": ["Immeuble d'habitation", "Bureau"],
+    "typologies_recherchees": ["Immeubles", "Hôtels"],
     "origine": "Apporteur|Réseau|Site web|Email|...",
     "maturite": "Chaud|Moyen|Froid"
   }
@@ -93,10 +131,14 @@ Réponds UNIQUEMENT avec un JSON valide (pas de backticks markdown). Format :
 RÈGLES :
 - Ne mets PAS les clés que tu ne peux pas extraire (pas de null, pas de '').
 - "type" est OBLIGATOIRE.
+- Pour mandat : "marche" et "type" sont OBLIGATOIRES si on identifie un bien.
+- "sous_type" UNIQUEMENT si pertinent (selon l'arborescence ci-dessus).
+- Pour client.typologies_recherchees : utiliser les FAMILLES B2B (Immeubles, Hôtels, Terrains, Parking, Locaux commerciaux) ou B2C (Appartement, Maison, Hôtel particulier).
+- Pour client.sous_typologie : uniquement si typologie="Foncières" → "Privées" ou "Publiques".
 - Si type='mandat', n'inclus PAS la clé "client" (et vice-versa).
-- Si type='both', inclus les 2 (mandat + client).
+- Si type='both', inclus les 2.
 - Si type='unknown', n'inclus ni "mandat" ni "client".
-- TÉLÉPHONE CLIENT : si la source mentionne plusieurs numéros (fixe + mobile, ou pro + perso), TOUJOURS prendre le mobile/portable en priorité dans le champ "tel". Ignore le fixe. Un numéro mobile français commence par 06, 07, +336, +337, ou indicatif international avec ces chiffres.
+- TÉLÉPHONE CLIENT : si la source mentionne plusieurs numéros (fixe + mobile, ou pro + perso), TOUJOURS prendre le mobile/portable en priorité dans le champ "tel". Ignore le fixe. Un numéro mobile français commence par 06, 07, +336, +337.
 - Pas de préambule, juste le JSON.`;
 
 async function callClaude(userContent) {
@@ -124,7 +166,6 @@ async function findDuplicates(parsed) {
     const m = parsed.mandat;
     let query = supabaseAdmin.from('mandats').select('id, nom, adresse, ville, prix');
     if (m.adresse) {
-      // On normalise un peu l'adresse pour le matching
       const adr = m.adresse.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '');
       const adrParts = adr.split(/\s+/).filter(p => p.length > 3).slice(0, 3).join(' ');
       if (adrParts) query = query.ilike('adresse', '%' + adrParts.split(' ')[0] + '%');
@@ -158,7 +199,6 @@ export async function POST(request) {
       return new Response(JSON.stringify({ ok: false, error: 'Authentification requise' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
     }
 
-    // ─── Construire le contenu utilisateur selon le mode ───
     let userContent = [];
     let allTextContent = '';
 
@@ -169,7 +209,6 @@ export async function POST(request) {
       allTextContent = audioTranscription;
       userContent = [{ type: 'text', text: 'Voici une transcription vocale à analyser :\n\n' + audioTranscription }];
     } else if (mode === 'files' && Array.isArray(files) && files.length > 0) {
-      // Pour chaque fichier (storage_path), récupérer le contenu
       const parts = [{ type: 'text', text: 'Voici les contenus à analyser :\n\n' }];
       for (let i = 0; i < files.length; i++) {
         const filePath = files[i];
@@ -206,15 +245,17 @@ export async function POST(request) {
       return new Response(JSON.stringify({ ok: false, error: 'Aucun contenu à analyser' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
 
-    // ─── Appel IA ───
     const { parsed, usage } = await callClaude(userContent);
 
-    // ─── Force type si demandé ───
     if (forceType && ['mandat', 'client', 'both'].includes(forceType)) {
       parsed.type = forceType;
     }
 
-    // ─── Détection doublons ───
+    // Defaults : si l'IA a oublié le marché, on déduit b2b par défaut
+    if (parsed.mandat && !parsed.mandat.marche) {
+      parsed.mandat.marche = 'b2b';
+    }
+
     const duplicates = await findDuplicates(parsed);
 
     return new Response(JSON.stringify({
