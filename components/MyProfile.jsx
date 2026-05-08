@@ -33,7 +33,7 @@ export default function MyProfile({ mandats = [], todos = [], clients = [], allP
 
       <div className="flex gap-1 mb-6 border-b border-cream-dark overflow-x-auto">
         <TabButton active={tab === 'profil'} onClick={() => setTab('profil')} icon={User} label="Profil" />
-        <TabButton active={tab === 'questionnaire'} onClick={() => setTab('questionnaire')} icon={Link2} label="Mon questionnaire" />
+        <TabButton active={tab === 'questionnaire'} onClick={() => setTab('questionnaire')} icon={Link2} label="Off-market" />
         <TabButton active={tab === 'remuneration'} onClick={() => setTab('remuneration')} icon={TrendingUp} label="Ma rémunération" />
         <TabButton active={tab === 'raccourcis'} onClick={() => setTab('raccourcis')} icon={Building2} label="Mes raccourcis" />
       </div>
