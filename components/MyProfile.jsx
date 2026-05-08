@@ -176,7 +176,7 @@ function QuestionnaireSection({ profile, isManager, allProfiles }) {
           >
             <Copy className="w-3.5 h-3.5" /> Copier le lien
           </button>
-          
+          <a
             href={myLink}
             target="_blank"
             rel="noopener noreferrer"
@@ -233,7 +233,7 @@ function QuestionnaireSection({ profile, isManager, allProfiles }) {
                   >
                     <Copy className="w-4 h-4" />
                   </button>
-                  
+                  <a
                     href={link}
                     target="_blank"
                     rel="noopener noreferrer"
