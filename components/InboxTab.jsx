@@ -406,7 +406,7 @@ function MessageDetail({ msg, onReply, onCreateOrLink, onOpenClient, onBack }) {
           Répondre
         </button>
         {msg.webLink && (
-           
+           <a
             href={msg.webLink}
             target="_blank"
             rel="noopener noreferrer"
