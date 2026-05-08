@@ -142,20 +142,20 @@ export default function SignaturePage() {
 
       {/* SIGNATURE COPIABLE */}
       <div id="signature-content">
-        <table cellPadding="0" cellSpacing="0" border="0" style={{ borderCollapse: 'collapse', width: SIG_WIDTH }}>
+        <table cellPadding="0" cellSpacing="0" border="0" style={{ borderCollapse: 'collapse', width: SIG_WIDTH, backgroundColor: '#ffffff' }}>
           <tbody>
             {/* En-tête : titre Immeubles & Patrimoine pleine largeur */}
             <tr>
-              <td colSpan={2} style={{ padding: '0 0 12px 0', borderBottom: '1px solid #e7e5e4' }}>
+              <td colSpan={3} style={{ padding: '0 0 12px 0', borderBottom: '1px solid #e7e5e4' }}>
                 <div style={{ fontFamily: 'Georgia, serif', fontSize: 13, fontWeight: 700, color: '#4a5d3a', letterSpacing: '1.2px', textTransform: 'uppercase' }}>
                   Immeubles &amp; Patrimoine
                 </div>
               </td>
             </tr>
 
-            {/* Ligne 1 : Logo + Infos */}
+            {/* Ligne logo + barre + bloc droit */}
             <tr>
-              <td style={{ verticalAlign: 'top', width: LOGO_SIZE, padding: '14px 0 0 0' }}>
+              <td style={{ verticalAlign: 'top', width: LOGO_SIZE, padding: '14px 18px 0 0' }}>
                 <img
                   src="https://patrimonia-crm.vercel.app/logo-light.png"
                   alt="Immeubles &amp; Patrimoine"
@@ -164,36 +164,39 @@ export default function SignaturePage() {
                   style={{ display: 'block', border: 0, width: LOGO_SIZE, height: LOGO_SIZE, objectFit: 'contain' }}
                 />
               </td>
-              <td style={{ verticalAlign: 'top', padding: '14px 0 0 22px' }}>
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, fontWeight: 700, color: '#1c1917', lineHeight: 1.1, marginBottom: 4 }}>
+              <td style={{ verticalAlign: 'top', width: 1, padding: '14px 0 0 0' }}>
+                <div style={{ width: 1, height: LOGO_SIZE, backgroundColor: '#d6d3d1' }}></div>
+              </td>
+              <td style={{ verticalAlign: 'top', padding: '14px 0 0 18px' }}>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, fontWeight: 400, color: '#1c1917', lineHeight: 1.1, marginBottom: 4 }}>
                   {fullName}
                 </div>
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 12, color: '#78716c', fontStyle: 'italic', marginBottom: 12 }}>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 12, color: '#6b8051', fontStyle: 'italic', marginBottom: 12 }}>
                   {fonction}
                 </div>
                 {tel && (
                   <div style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 12, color: '#1c1917', lineHeight: 1.7 }}>
-                    <a href={`tel:${telDigits}`} style={{ color: '#1c1917', textDecoration: 'none', fontWeight: 600 }}>{tel}</a>
+                    <a href={`tel:${telDigits}`} style={{ color: '#1c1917', textDecoration: 'none' }}>{tel}</a>
                   </div>
                 )}
                 {email && (
-                  <div style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 12, color: '#1c1917', lineHeight: 1.7 }}>
-                    <a href={`mailto:${email}`} style={{ color: '#1c1917', textDecoration: 'none' }}>{email}</a>
+                  <div style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 12, color: '#4a5d3a', lineHeight: 1.7 }}>
+                    <a href={`mailto:${email}`} style={{ color: '#4a5d3a', textDecoration: 'none' }}>{email}</a>
                   </div>
                 )}
                 <div style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 11, color: '#78716c', lineHeight: 1.7, marginTop: 6 }}>
                   7 rue de Penthi&egrave;vre &middot; 75008 Paris
                 </div>
-                <div style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 11, color: '#78716c', lineHeight: 1.7 }}>
-                  <a href="https://www.immeubles-patrimoine.fr" style={{ color: '#78716c', textDecoration: 'none' }}>www.immeubles-patrimoine.fr</a>
+                <div style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 11, color: '#4a5d3a', lineHeight: 1.7 }}>
+                  <a href="https://www.immeubles-patrimoine.fr" style={{ color: '#4a5d3a', textDecoration: 'none' }}>www.immeubles-patrimoine.fr</a>
                 </div>
               </td>
             </tr>
 
-            {/* Bandeau off-market */}
+            {/* Bandeau off-market pleine largeur */}
             {questionnaireUrl && (
               <tr>
-                <td colSpan={2} style={{ padding: 0 }}>
+                <td colSpan={3} style={{ padding: 0 }}>
                   <div style={{ height: 16 }}></div>
                   <a
                     href={questionnaireUrl}
@@ -219,17 +222,3 @@ export default function SignaturePage() {
             )}
           </tbody>
         </table>
-      </div>
-
-      <div style={{ marginTop: 40, padding: 20, background: '#F5F5F4', borderRadius: 8, fontSize: 13, color: '#57534e' }}>
-        <strong>Ton lien questionnaire :</strong>
-        <div style={{ fontFamily: 'monospace', marginTop: 6, wordBreak: 'break-all', color: '#1c1917' }}>
-          {questionnaireUrl || 'Non disponible'}
-        </div>
-        <p style={{ marginTop: 12, marginBottom: 0, fontSize: 12 }}>
-          Ce lien est <strong>permanent</strong>. Toute personne qui le remplit cr&eacute;e automatiquement une fiche client/mandat dans ton CRM.
-        </p>
-      </div>
-    </div>
-  );
-}
