@@ -2267,8 +2267,9 @@ function ClientForm({ client, onSave, onClose }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Typologie">
-              <select value={data.typologie} onChange={e => update('typologie', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
-                {TYPOLOGIES_CLIENT.map(t => <option key={t}>{t}</option>)}
+              <select value={data.typologie || ''} onChange={e => handleTypologieChange(e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
+                <option value="">— Choisir —</option>
+                {TYPOLOGIES_CLIENT.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </Field>
             <Field label="Maturité">
