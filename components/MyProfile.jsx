@@ -50,8 +50,22 @@ export default function MyProfile({ mandats = [], todos = [], clients = [], allP
         <RemunerationComponent mandats={mandats} allProfiles={allProfiles} />
       )}
 
-      {tab === 'raccourcis' && (
-        <Shortcuts profile={profile} mandats={mandats} todos={todos} clients={clients} onNavigate={onNavigate} />
+      {tab === 'signature' && (
+        <div className="bg-white rounded-xl border border-cream-dark p-6">
+          <h2 className="font-display text-xl font-semibold text-ink mb-2">Ma signature email</h2>
+          <p className="text-sm text-ink/60 mb-4">
+            Aperçu et copie de ta signature email avec ton lien questionnaire personnel.
+          </p>
+          
+            href="/signature"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink"
+          >
+            <ExternalLink className="w-4 h-4" />
+            Ouvrir ma signature
+          </a>
+        </div>
       )}
     </div>
   );
