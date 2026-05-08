@@ -36,6 +36,26 @@ import PdfExportButtons from '@/components/PdfExportButtons';
 import { PhotosModal, VisiteModal, MandantModal } from './MandatModals'; 
 import MediasModal from './MediasModal'; 
 import {   formatPrix,   formatPrixCompact,   toCamel,   toSnake,   isManager,   getDPEClass,   getDPEColor,   STATUTS_MANDAT,   STATUTS_DEAL,   TYPES_ACTIF,   TYPOLOGIES_CLIENT,   ZONES,   PORTAILS,   STATUTS_PORTAIL, } from '@/lib/crm-constants';
+import {
+  Field,
+  DetailItem,
+  KpiCard,
+  KpiBox,
+  TaskRow,
+  AlertRow,
+  CommerceBadge,
+  StatutBadge,
+  DealStatutBadge,
+  MaturiteBadge,
+  TypeInteractionBadge,
+  TaskInline,
+  QuickAddTask,
+} from '@/components/crm/SharedComponents';
+import {
+  DashboardDirection,
+  RemunerationTab,
+} from '@/components/crm/DirectionTabs';
+
 // ═══ Helpers et constantes : voir lib/crm-constants.js ═══
 
 // === COMPOSANT PRINCIPAL ===
