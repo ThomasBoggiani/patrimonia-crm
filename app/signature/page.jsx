@@ -219,6 +219,7 @@ export default function SignaturePage() {
             )}
           </tbody>
         </table>
+      </div>
 
       <div style={{ marginTop: 40, padding: 20, background: '#F5F5F4', borderRadius: 8, fontSize: 13, color: '#57534e' }}>
         <strong>Ton lien questionnaire :</strong>
