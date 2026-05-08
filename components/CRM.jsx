@@ -653,7 +653,7 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
   const filtered = mandats.filter(m => {
     if (search && !m.nom.toLowerCase().includes(search.toLowerCase()) && !(m.adresse || '').toLowerCase().includes(search.toLowerCase())) return false;
     if (filterComm !== 'Tous' && m.commercialisation !== filterComm) return false;
-    if (filterType !== 'Tous' && m.type !== filterType) return false;
+    if (filterType !== 'Tous' && m.type !== filterType && m.sousType !== filterType) return false;
     if (filterStatut === 'Actifs' && ['Perdu', 'Vendu par autres', 'Acte'].includes(m.statut)) return false;
     if (filterStatut !== 'Tous' && filterStatut !== 'Actifs' && m.statut !== filterStatut) return false;
     return true;
@@ -762,8 +762,20 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
           <option>Mandat simple</option>
         </select>
         <select value={filterType} onChange={e => setFilterType(e.target.value)} className="px-4 py-2.5 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
-          <option>Tous</option>
-          {TYPES_ACTIF.map(t => <option key={t}>{t}</option>)}
+          <option value="Tous">Type : Tous</option>
+          <optgroup label="Investissement (B2B)">
+            {Object.entries(TYPES_ACTIF_B2B_TREE).map(([famille, sousTypes]) => (
+              <React.Fragment key={famille}>
+                <option value={famille}>{famille}</option>
+                {sousTypes.map(s => (
+                  <option key={`${famille}-${s}`} value={s}>&nbsp;&nbsp;&middot; {s}</option>
+                ))}
+              </React.Fragment>
+            ))}
+          </optgroup>
+          <optgroup label="Habitation (B2C)">
+            {TYPES_HABITATION_B2C.map(t => <option key={t} value={t}>{t}</option>)}
+          </optgroup>
         </select>
         <select value={filterStatut} onChange={e => setFilterStatut(e.target.value)} className="px-4 py-2.5 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
           <option value="Actifs">En cours</option>
