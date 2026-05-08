@@ -1191,8 +1191,13 @@ function MandatsKanban({ mandats, onSelectMandat, reload, secondaryDisplay = 'm2
 function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   const { profile } = useAuth();
   const userInitials = (profile?.prenom && profile?.nom) ? getCurrentUserInitials(profile) : 'TB';
-  const [data, setData] = useState(mandat || {
-    nom: '', adresse: '', ville: '', marche: 'b2b', type: '', sousType: '', prix: 0, prixM2: 0,
+  // Si on édite un mandat existant sans marché défini, on le déduit du type
+  useEffect(() => {
+    if (mandat && !data.marche) {
+      const isB2C = ['Appartement', 'Maison', 'Hôtel particulier'].includes(mandat.type);
+      setData(d => ({ ...d, marche: isB2C ? 'b2c' : 'b2b' }));
+    }
+  }, [mandat]);
     surface: 0, loyersAnnuels: 0, rendement: 0, nbLots: 1,
     commercialisation: 'Off-market', dateSignature: null,
     statut: 'Sourcing', owner: userInitials, description: '',
