@@ -56,7 +56,7 @@ export default function MyProfile({ mandats = [], todos = [], clients = [], allP
           <p className="text-sm text-ink/60 mb-4">
             Aperçu et copie de ta signature email avec ton lien questionnaire personnel.
           </p>
-          >a
+          <a
             href="/signature"
             target="_blank"
             rel="noopener noreferrer"
