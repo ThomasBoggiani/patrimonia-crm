@@ -12,50 +12,30 @@ export default function SignaturePage() {
 
   useEffect(() => {
     let mounted = true;
-
     (async () => {
       try {
-        // Récupère la session actuelle
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
         if (sessionError) throw sessionError;
         if (!session?.user) {
-          if (mounted) {
-            setError('non-connecte');
-            setLoading(false);
-          }
+          if (mounted) { setError('non-connecte'); setLoading(false); }
           return;
         }
-
-        // Récupère le profil complet
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('id, prenom, nom, email, telephone, fonction, questionnaire_token')
           .eq('id', session.user.id)
           .maybeSingle();
-
         if (profileError) throw profileError;
         if (!profileData) {
-          if (mounted) {
-            setError('profil-introuvable');
-            setLoading(false);
-          }
+          if (mounted) { setError('profil-introuvable'); setLoading(false); }
           return;
         }
-
-        if (mounted) {
-          setProfile(profileData);
-          setLoading(false);
-        }
+        if (mounted) { setProfile(profileData); setLoading(false); }
       } catch (err) {
         console.error('[signature] Erreur chargement:', err);
-        if (mounted) {
-          setError(err.message || 'Erreur inconnue');
-          setLoading(false);
-        }
+        if (mounted) { setError(err.message || 'Erreur inconnue'); setLoading(false); }
       }
     })();
-
     return () => { mounted = false; };
   }, []);
 
@@ -116,8 +96,12 @@ export default function SignaturePage() {
     }
   };
 
+  // Style du bloc signature (largeur cible = 580px)
+  const SIG_WIDTH = 580;
+  const LOGO_SIZE = 180;
+
   return (
-    <div style={{ padding: 40, fontFamily: 'sans-serif', maxWidth: 800, margin: '0 auto' }}>
+    <div style={{ padding: 40, fontFamily: 'sans-serif', maxWidth: 900, margin: '0 auto' }}>
       <h1>Aper&ccedil;u de ta signature email</h1>
       <p style={{ color: '#666', marginBottom: 16 }}>
         Bonjour <strong>{profile.prenom}</strong>, voici ta signature personnalis&eacute;e avec ton lien questionnaire unique.
@@ -156,57 +140,81 @@ export default function SignaturePage() {
 
       <hr style={{ marginBottom: 32 }} />
 
+      {/* SIGNATURE COPIABLE */}
       <div id="signature-content">
-        <table cellPadding="0" cellSpacing="0" border="0" style={{ fontFamily: 'Georgia, serif', maxWidth: 580 }}>
+        <table cellPadding="0" cellSpacing="0" border="0" style={{ borderCollapse: 'collapse', width: SIG_WIDTH }}>
           <tbody>
+            {/* Ligne 1 : Logo grand carré + Infos perso */}
             <tr>
-              <td style={{ verticalAlign: 'top', padding: '0 24px 0 0', width: 150 }}>
-                <img src="https://patrimonia-crm.vercel.app/logo-light.png" alt="Immeubles &amp; Patrimoine" width="150" style={{ display: 'block', border: 0 }} />
+              <td style={{ verticalAlign: 'top', width: LOGO_SIZE, padding: 0 }}>
+                <img
+                  src="https://patrimonia-crm.vercel.app/logo-light.png"
+                  alt="Immeubles &amp; Patrimoine"
+                  width={LOGO_SIZE}
+                  height={LOGO_SIZE}
+                  style={{ display: 'block', border: 0, width: LOGO_SIZE, height: LOGO_SIZE, objectFit: 'contain', backgroundColor: '#f5f3ee' }}
+                />
               </td>
-              <td style={{ verticalAlign: 'top', borderLeft: '1px solid #d6d3d1', paddingLeft: 24 }}>
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 22, fontWeight: 600, color: '#1c1917', lineHeight: 1.1, marginBottom: 4 }}>
+              <td style={{ verticalAlign: 'top', borderLeft: '2px solid #4a5d3a', padding: '4px 0 0 24px', height: LOGO_SIZE }}>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 24, fontWeight: 700, color: '#1c1917', lineHeight: 1.1, marginBottom: 6 }}>
                   {fullName}
                 </div>
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 13, color: '#4a5d3a', fontStyle: 'italic', marginBottom: 16 }}>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 14, color: '#78716c', fontStyle: 'italic', marginBottom: 18 }}>
                   {fonction}
                 </div>
-                <table cellPadding="0" cellSpacing="0" border="0" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 12, color: '#57534e', lineHeight: 1.7 }}>
-                  <tbody>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 16, fontWeight: 700, color: '#4a5d3a', marginBottom: 6 }}>
+                  Immeubles &amp; Patrimoine
+                </div>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 14, color: '#292524', lineHeight: 1.6 }}>
+                  7 rue de Penthi&egrave;vre &middot; 75008 Paris
+                </div>
+                {(tel || email) && (
+                  <div style={{ fontFamily: 'Georgia, serif', fontSize: 14, color: '#292524', lineHeight: 1.6 }}>
                     {tel && (
-                      <tr>
-                        <td style={{ paddingRight: 8, color: '#8a9a78', fontWeight: 'bold' }}>M</td>
-                        <td><a href={`tel:${telDigits}`} style={{ color: '#292524', textDecoration: 'none' }}>{tel}</a></td>
-                      </tr>
+                      <a href={`tel:${telDigits}`} style={{ color: '#292524', textDecoration: 'none' }}>{tel}</a>
                     )}
+                    {tel && email && <span> &middot; </span>}
                     {email && (
-                      <tr>
-                        <td style={{ paddingRight: 8, color: '#8a9a78', fontWeight: 'bold' }}>E</td>
-                        <td><a href={`mailto:${email}`} style={{ color: '#292524', textDecoration: 'none' }}>{email}</a></td>
-                      </tr>
+                      <a href={`mailto:${email}`} style={{ color: '#292524', textDecoration: 'none' }}>{email}</a>
                     )}
-                    <tr>
-                      <td style={{ paddingRight: 8, color: '#8a9a78', fontWeight: 'bold' }}>W</td>
-                      <td><a href="https://www.immeubles-patrimoine.fr" style={{ color: '#292524', textDecoration: 'none' }}>www.immeubles-patrimoine.fr</a></td>
-                    </tr>
-                    <tr>
-                      <td style={{ paddingRight: 8, color: '#8a9a78', fontWeight: 'bold' }}>A</td>
-                      <td>7 rue de Penthi&egrave;vre, 75008 Paris</td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                {questionnaireUrl && (
-                  <div style={{ marginTop: 18 }}>
-                    <a href={questionnaireUrl} style={{ display: 'inline-block', backgroundColor: '#4a5d3a', color: '#ffffff', padding: '10px 18px', textDecoration: 'none', fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 12, fontWeight: 600, borderRadius: 4 }}>
-                      D&eacute;finir mon profil &rarr;
-                    </a>
-                    <div style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 10, color: '#a8a29e', marginTop: 6, fontStyle: 'italic' }}>
-                      3 minutes &middot; Confidentiel &middot; R&eacute;ponse sous 24h
-                    </div>
                   </div>
                 )}
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 14, color: '#292524', lineHeight: 1.6 }}>
+                  <a href="https://www.immeubles-patrimoine.fr" style={{ color: '#292524', textDecoration: 'none' }}>www.immeubles-patrimoine.fr</a>
+                </div>
               </td>
             </tr>
+
+            {/* Bandeau off-market — pleine largeur sous logo + infos */}
+            {questionnaireUrl && (
+              <tr>
+                <td colSpan={2} style={{ paddingTop: 16 }}>
+                  
+                    href={questionnaireUrl}
+                    style={{
+                      display: 'block',
+                      backgroundColor: '#f0ede4',
+                      borderLeft: '4px solid #4a5d3a',
+                      padding: '18px 24px',
+                      textDecoration: 'none',
+                      fontFamily: 'Georgia, serif',
+                      width: SIG_WIDTH - 8,
+                      boxSizing: 'border-box'
+                    }}
+                  >
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1917', marginBottom: 4 }}>
+                      Inscrivez-vous ici pour d&eacute;couvrir nos biens off-market
+                    </div>
+                    <div style={{ fontSize: 13, color: '#4a5d3a', textDecoration: 'underline', marginBottom: 6 }}>
+                      80% de nos biens sont off-market, les d&eacute;couvrir ici &rarr;
+                    </div>
+                    <div style={{ fontSize: 11, color: '#78716c', fontStyle: 'italic' }}>
+                      Questionnaire confidentiel &middot; 3 minutes
+                    </div>
+                  </a>
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
