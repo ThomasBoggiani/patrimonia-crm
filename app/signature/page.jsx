@@ -194,7 +194,7 @@ export default function SignaturePage() {
             {questionnaireUrl && (
               <tr>
                 <td colSpan={2} style={{ paddingTop: 0 }}>
-                  
+                  <a
                     href={questionnaireUrl}
                     style={{
                       display: 'block',
