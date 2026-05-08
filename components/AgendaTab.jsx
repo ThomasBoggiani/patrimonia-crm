@@ -196,6 +196,49 @@ export default function AgendaTab() {
     });
   });
 
+  // Expansion des récurrents BDD en events virtuels pour la semaine affichée
+  recurrents.forEach(rec => {
+    if (!rec.actif) return;
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(currentWeekStart);
+      d.setDate(d.getDate() + i);
+
+      let matches = false;
+      if (rec.frequence === 'Quotidien') {
+        matches = true;
+      } else if (rec.frequence === 'Hebdomadaire' && rec.jour_semaine !== null && rec.jour_semaine !== undefined) {
+        // jour_semaine: 0=dimanche, 1=lundi... même convention que Date.getDay()
+        matches = d.getDay() === rec.jour_semaine;
+      } else if (rec.frequence === 'Mensuel' && rec.jour_mois) {
+        matches = d.getDate() === rec.jour_mois;
+      }
+
+      if (!matches) continue;
+
+      // Construire l'horaire de début/fin
+      const [h, m] = (rec.heure || '09:00').split(':').map(Number);
+      const startDate = new Date(d);
+      startDate.setHours(h, m, 0, 0);
+      const endDate = new Date(startDate);
+      endDate.setMinutes(endDate.getMinutes() + (rec.duree_minutes || 60));
+
+      const dateKey = d.toISOString().split('T')[0];
+      if (eventsByDay[dateKey]) {
+        eventsByDay[dateKey].push({
+          id: `rec-${rec.id}-${dateKey}`,
+          subject: rec.titre,
+          start: { dateTime: startDate.toISOString() },
+          end: { dateTime: endDate.toISOString() },
+          location: rec.lieu ? { displayName: rec.lieu } : null,
+          isAllDay: false,
+          _owner: 'recurrent',
+          _recurrent: rec
+        });
+      }
+    }
+  });
+
   Object.keys(eventsByDay).forEach(key => {
     eventsByDay[key].sort((a, b) =>
       new Date(a.start.dateTime).getTime() - new Date(b.start.dateTime).getTime()
@@ -347,13 +390,21 @@ export default function AgendaTab() {
                           {events.length === 0 ? (
                             <div className="text-[10px] text-ink/40 italic">-</div>
                           ) : events.map((ev, i) => (
-                            <EventCard
-                              key={`${ev._owner}-${ev.id}-${i}`}
-                              event={ev}
-                              formatTime={formatTime}
-                              onDelete={loadMyEvents}
-                              onUpdate={loadMyEvents}
-                            />
+                            ev._owner === 'recurrent' ? (
+                              <RecurrentEventCard
+                                key={`${ev._owner}-${ev.id}-${i}`}
+                                event={ev}
+                                formatTime={formatTime}
+                              />
+                            ) : (
+                              <EventCard
+                                key={`${ev._owner}-${ev.id}-${i}`}
+                                event={ev}
+                                formatTime={formatTime}
+                                onDelete={loadMyEvents}
+                                onUpdate={loadMyEvents}
+                              />
+                            )
                           ))}
                         </div>
                       </div>
@@ -380,13 +431,21 @@ export default function AgendaTab() {
                           {events.length === 0 ? (
                             <div className="text-xs text-ink/40 italic py-2">Aucun événement</div>
                           ) : events.map((ev, i) => (
-                            <EventCard
-                              key={`${ev._owner}-${ev.id}-${i}`}
-                              event={ev}
-                              formatTime={formatTime}
-                              onDelete={loadMyEvents}
-                              onUpdate={loadMyEvents}
-                            />
+                            ev._owner === 'recurrent' ? (
+                              <RecurrentEventCard
+                                key={`${ev._owner}-${ev.id}-${i}`}
+                                event={ev}
+                                formatTime={formatTime}
+                              />
+                            ) : (
+                              <EventCard
+                                key={`${ev._owner}-${ev.id}-${i}`}
+                                event={ev}
+                                formatTime={formatTime}
+                                onDelete={loadMyEvents}
+                                onUpdate={loadMyEvents}
+                              />
+                            )
                           ))}
                         </div>
                       </div>
@@ -420,6 +479,29 @@ export default function AgendaTab() {
   );
 }
 
+function RecurrentEventCard({ event, formatTime }) {
+  return (
+    <div
+      className="bg-cream-50 border border-dashed border-stone-400 rounded-md px-1.5 py-1 text-xs"
+      title="Événement récurrent (modifiable depuis l'onglet Récurrents)"
+    >
+      <div className="flex items-start gap-1">
+        <Repeat className="w-2.5 h-2.5 text-stone-500 mt-0.5 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="font-medium text-stone-700 text-[10px]">
+            {formatTime(event.start.dateTime)}
+          </div>
+          <div className="font-medium text-stone-700 line-clamp-2 leading-tight text-[11px]">
+            {event.subject}
+          </div>
+          {event.location?.displayName && (
+            <div className="text-[9px] text-stone-500 mt-0.5 truncate">📍 {event.location.displayName}</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 function EventCard({ event, formatTime, onDelete, onUpdate }) {
   const [showDetail, setShowDetail] = useState(false);
   const [editing, setEditing] = useState(false);
