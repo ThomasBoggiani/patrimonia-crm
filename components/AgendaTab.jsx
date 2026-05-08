@@ -341,7 +341,8 @@ export default function AgendaTab() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
+                {/* Vue desktop : grille 7 colonnes */}
+                <div className="hidden md:grid md:grid-cols-7 gap-2">
                   {Object.entries(eventsByDay).map(([dateKey, events]) => {
                     const date = new Date(dateKey);
                     const isToday = dateKey === new Date().toISOString().split('T')[0];
@@ -357,17 +358,57 @@ export default function AgendaTab() {
                           {events.length === 0 ? (
                             <div className="text-[10px] text-ink/40 italic">—</div>
                           ) : events.map((ev, i) => (
-                            <EventCard 
+                            <EventCard
                               key={`${ev._owner}-${ev.id}-${i}`}
-                              event={ev} 
-                              formatTime={formatTime} 
+                              event={ev}
+                              formatTime={formatTime}
                               onDelete={loadMyEvents}
+                              onUpdate={loadMyEvents}
                             />
                           ))}
                         </div>
                       </div>
                     );
                   })}
+                </div>
+
+                {/* Vue mobile : liste verticale, jours seulement non-vides */}
+                <div className="md:hidden space-y-3">
+                  {Object.entries(eventsByDay).map(([dateKey, events]) => {
+                    const date = new Date(dateKey);
+                    const isToday = dateKey === new Date().toISOString().split('T')[0];
+                    if (events.length === 0 && !isToday) return null;
+                    return (
+                      <div key={dateKey} className={`bg-white border rounded-lg p-3 ${isToday ? 'border-sage ring-2 ring-sage/20' : 'border-cream-dark'}`}>
+                        <div className="flex items-baseline gap-2 mb-2 pb-2 border-b border-cream">
+                          <div className={`text-base font-display font-semibold ${isToday ? 'text-sage-dark' : 'text-ink'}`}>
+                            {JOURS[date.getDay()]} {date.getDate()}
+                          </div>
+                          {isToday && <span className="text-xs text-sage-dark font-medium">Aujourd'hui</span>}
+                          <span className="ml-auto text-xs text-ink/40">{events.length} évt{events.length > 1 ? 's' : ''}</span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {events.length === 0 ? (
+                            <div className="text-xs text-ink/40 italic py-2">Aucun événement</div>
+                          ) : events.map((ev, i) => (
+                            <EventCard
+                              key={`${ev._owner}-${ev.id}-${i}`}
+                              event={ev}
+                              formatTime={formatTime}
+                              onDelete={loadMyEvents}
+                              onUpdate={loadMyEvents}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {Object.values(eventsByDay).every(evts => evts.length === 0) && (
+                    <div className="bg-white border border-cream-dark rounded-lg p-12 text-center">
+                      <Calendar className="w-10 h-10 text-cream-300 mx-auto mb-3" />
+                      <p className="text-sm text-ink/60">Aucun événement cette semaine</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
