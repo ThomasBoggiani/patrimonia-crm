@@ -9,6 +9,7 @@ import { createClient } from '@supabase/supabase-js';
 import PlaquetteAcheteur from '@/lib/pdf/templates/PlaquetteAcheteur';
 import RapportVendeur from '@/lib/pdf/templates/RapportVendeur';
 import FicheInterne from '@/lib/pdf/templates/FicheInterne';
+import { getLocationImages } from '@/lib/maps';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -306,11 +307,28 @@ export async function GET(request, { params }) {
       }
       const mandatEnriched = { ...mandat, ownerInitials };
 
+      // Fetch les images de localisation (vue satellite + cadastre)
+      let locationImages = { satellite: null, cadastre: null, geocode: null };
+      if (mandat.adresse) {
+        try {
+          locationImages = await getLocationImages(mandat.adresse);
+          console.log('[PDF] Location images:', {
+            address: mandat.adresse,
+            satellite: !!locationImages.satellite,
+            cadastre: !!locationImages.cadastre,
+            geocoded: !!locationImages.geocode
+          });
+        } catch (e) {
+          console.warn('[PDF] getLocationImages KO:', e.message);
+        }
+      }
+
       pdfElement = React.createElement(PlaquetteAcheteur, {
         mandat: mandatEnriched,
         conseiller: conseillerEnriched,
         logoUrl,
         teamMembers,
+        locationImages,
       });
 
       filename = `Plaquette_${slugify(mandat.nom)}.pdf`;
