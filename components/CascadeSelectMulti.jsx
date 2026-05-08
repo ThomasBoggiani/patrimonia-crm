@@ -13,21 +13,17 @@ import { TYPES_ACTIF_B2B_TREE, getSousTypesForFamille, familleHasSousTypes } fro
  * - Décocher une famille → on retire la famille ET tous ses sous-types
  * - Cocher un sous-type → on ajoute le sous-type (et la famille si pas déjà cochée)
  * - Décocher un sous-type → on retire juste le sous-type
- *
- * @param {string[]} value - Tableau à plat (familles + sous-types mélangés)
- * @param {Function} onChange - (newArray) => void
  */
-export default function CascadeSelectMulti({ value = [], onChange }) {
+export default function CascadeSelectMulti({ value = [], onChange, tree = TYPES_ACTIF_B2B_TREE }) {
   const items = Array.isArray(value) ? value : [];
-  const familles = Object.keys(TYPES_ACTIF_B2B_TREE);
+  const familles = Object.keys(tree);
 
   const isFamilleSelected = (fam) => items.includes(fam);
   const isSousTypeSelected = (st) => items.includes(st);
 
   const toggleFamille = (fam) => {
     if (isFamilleSelected(fam)) {
-      // Retire la famille + tous ses sous-types
-      const sousTypes = getSousTypesForFamille(fam);
+      const sousTypes = getSousTypesForFamille(tree, fam);
       const newItems = items.filter(i => i !== fam && !sousTypes.includes(i));
       onChange(newItems);
     } else {
@@ -39,7 +35,6 @@ export default function CascadeSelectMulti({ value = [], onChange }) {
     if (isSousTypeSelected(st)) {
       onChange(items.filter(i => i !== st));
     } else {
-      // Ajoute le sous-type + la famille si pas déjà cochée
       const additions = [st];
       if (!isFamilleSelected(fam)) additions.unshift(fam);
       onChange([...items, ...additions]);
@@ -50,8 +45,8 @@ export default function CascadeSelectMulti({ value = [], onChange }) {
     <div className="space-y-2.5">
       {familles.map(fam => {
         const selected = isFamilleSelected(fam);
-        const hasChildren = familleHasSousTypes(fam);
-        const sousTypes = getSousTypesForFamille(fam);
+        const hasChildren = familleHasSousTypes(tree, fam);
+        const sousTypes = getSousTypesForFamille(tree, fam);
 
         return (
           <div key={fam} className={`border rounded-lg p-2.5 transition-colors ${selected ? 'border-sage-dark bg-sage-50/40' : 'border-stone-200 bg-white'}`}>
