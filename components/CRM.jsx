@@ -17,6 +17,7 @@ import { getPriceTTC, getPriceNV, isNVEstimated, getCommission, isCommissionEsti
 import AICreateModal from './AICreateModal';
 import MarkAsSoldModal from './MarkAsSoldModal';
 import VoiceNoteModal from './VoiceNoteModal';
+import CascadeSelectMulti from './CascadeSelectMulti';
 import MandatAIAssistant from './MandatAIAssistant';
 import DocumentsModal from './DocumentsModal';
 import AgendaTab from './AgendaTab';
@@ -35,8 +36,8 @@ import ContactsImportModal from './ContactsImportModal';
 import PdfExportButtons from '@/components/PdfExportButtons';
 import { PhotosModal, VisiteModal, MandantModal } from './MandatModals';
 import CascadeSelect from './CascadeSelect';
-import MediasModal from './MediasModal'; 
-import {   formatPrix,   formatPrixCompact,   toCamel,   toSnake,   isManager,   getDPEClass,   getDPEColor,   STATUTS_MANDAT,   STATUTS_DEAL,   TYPES_ACTIF,   TYPES_ACTIF_B2B_TREE,   TYPES_HABITATION_B2C,   TYPOLOGIES_CLIENT,   ZONES,   PORTAILS,   STATUTS_PORTAIL, } from '@/lib/crm-constants';
+import MediasModal from './MediasModal';
+import {   formatPrix,   formatPrixCompact,   toCamel,   toSnake,   isManager,   getDPEClass,   getDPEColor,   STATUTS_MANDAT,   STATUTS_DEAL,   TYPES_ACTIF,   TYPES_ACTIF_B2B_TREE,   TYPES_HABITATION_B2C,   TYPOLOGIES_CLIENT,   ZONES,   NB_PIECES,   PORTAILS,   STATUTS_PORTAIL,   getSousTypesForFamille,   familleHasSousTypes,   getMarcheFromTypologieClient,   getSousTypologiesForClient,   clientHasSousTypologie,   groupTypologiesRecherchees, } from '@/lib/crm-constants';
 import {
   Field,
   DetailItem,
