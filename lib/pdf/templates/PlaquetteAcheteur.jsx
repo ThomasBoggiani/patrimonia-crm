@@ -560,3 +560,4 @@ function ParcelleField({ label, value }) {
     </View>
   );
 }
+}
