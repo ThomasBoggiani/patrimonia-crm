@@ -578,7 +578,7 @@ function EventDetailModal({ event, onClose, onEdit, onDelete }) {
         <div className="flex items-center justify-between p-4 bg-cream-50 border-t border-cream-dark gap-2">
           <div className="flex gap-2">
             {event.webLink && (
-              
+              <a
                 href={event.webLink}
                 target="_blank"
                 rel="noopener"
