@@ -431,84 +431,101 @@ export default function AgendaTab() {
   );
 }
 
-function EventCard({ event, formatTime, onDelete }) {
-  const [showActions, setShowActions] = useState(false);
+function EventCard({ event, formatTime, onDelete, onUpdate }) {
+  const [showDetail, setShowDetail] = useState(false);
+  const [editing, setEditing] = useState(false);
   const isMine = event._owner === 'me';
   const color = event._color;
 
-  const handleDelete = async () => {
-    if (!confirm(`Supprimer "${event.subject}" de votre agenda Outlook ?`)) return;
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      await fetch(`/api/microsoft/events/${event.id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
-      });
-      onDelete();
-    } catch (err) {
-      alert('Erreur lors de la suppression');
-    }
-  };
-
   return (
-    <div 
-      className={`group ${color.bg} border ${color.border} rounded-md px-1.5 py-1 text-xs cursor-pointer hover:opacity-90 relative`}
-      onClick={() => isMine && setShowActions(!showActions)}
-    >
-      <div className="flex items-start gap-1">
-        {!isMine && (
-          <div className={`w-1.5 h-1.5 rounded-full ${color.solid} mt-1 flex-shrink-0`} 
-               title={event._ownerName} />
-        )}
-        <div className="flex-1 min-w-0">
-          {!event.isAllDay && (
-            <div className={`font-medium ${color.text} text-[10px]`}>
-              {formatTime(event.start.dateTime)}
-              {!isMine && <span className="ml-1 opacity-70">· {event._ownerInitials}</span>}
+    <>
+      <div
+        className={`${color.bg} border ${color.border} rounded-md px-1.5 py-1 text-xs cursor-pointer hover:opacity-90 hover:shadow-sm transition`}
+        onClick={() => setShowDetail(true)}
+      >
+        <div className="flex items-start gap-1">
+          {!isMine && (
+            <div className={`w-1.5 h-1.5 rounded-full ${color.solid} mt-1 flex-shrink-0`}
+                 title={event._ownerName} />
+          )}
+          <div className="flex-1 min-w-0">
+            {!event.isAllDay && (
+              <div className={`font-medium ${color.text} text-[10px]`}>
+                {formatTime(event.start.dateTime)}
+                {!isMine && <span className="ml-1 opacity-70">&middot; {event._ownerInitials}</span>}
+              </div>
+            )}
+            <div className={`font-medium ${color.text} line-clamp-2 leading-tight text-[11px]`}>
+              {event.subject || '(Sans titre)'}
             </div>
-          )}
-          <div className={`font-medium ${color.text} line-clamp-2 leading-tight text-[11px]`}>
-            {event.subject || '(Sans titre)'}
+            {event.location?.displayName && (
+              <div className="text-[9px] text-ink/60 mt-0.5 truncate">📍 {event.location.displayName}</div>
+            )}
           </div>
-          {event.location?.displayName && (
-            <div className="text-[9px] text-ink/60 mt-0.5 truncate">📍 {event.location.displayName}</div>
-          )}
         </div>
       </div>
-      
-      {isMine && showActions && (
-        <div className="absolute top-1 right-1 flex gap-1 bg-white rounded shadow p-1 z-10" onClick={e => e.stopPropagation()}>
-          {event.webLink && (
-            <a href={event.webLink} target="_blank" rel="noopener" className="p-1 hover:bg-cream-100 rounded" title="Ouvrir dans Outlook">
-              <ExternalLink className="w-3 h-3" />
-            </a>
-          )}
-          <button onClick={handleDelete} className="p-1 hover:bg-red-50 hover:text-red-600 rounded" title="Supprimer">
-            <Trash2 className="w-3 h-3" />
-          </button>
-        </div>
+
+      {showDetail && !editing && (
+        <EventDetailModal
+          event={event}
+          onClose={() => setShowDetail(false)}
+          onEdit={() => setEditing(true)}
+          onDelete={onDelete}
+        />
       )}
-    </div>
+
+      {editing && (
+        <NewEventModal
+          editEvent={event}
+          onClose={() => { setEditing(false); setShowDetail(false); }}
+          onCreated={() => { setEditing(false); setShowDetail(false); onUpdate(); }}
+        />
+      )}
+    </>
   );
 }
 
-function NewEventModal({ onClose, onCreated }) {
-  const [titre, setTitre] = useState('');
+function NewEventModal({ onClose, onCreated, editEvent = null }) {
+  const isEdit = !!editEvent;
+
+  const [titre, setTitre] = useState(editEvent?.subject || '');
   const [debut, setDebut] = useState(() => {
+    if (editEvent?.start?.dateTime) {
+      const d = new Date(editEvent.start.dateTime);
+      // Compense le décalage timezone pour datetime-local
+      const offset = d.getTimezoneOffset();
+      const local = new Date(d.getTime() - offset * 60000);
+      return local.toISOString().slice(0, 16);
+    }
     const d = new Date();
     d.setMinutes(0, 0, 0);
     d.setHours(d.getHours() + 1);
     return d.toISOString().slice(0, 16);
   });
   const [fin, setFin] = useState(() => {
+    if (editEvent?.end?.dateTime) {
+      const d = new Date(editEvent.end.dateTime);
+      const offset = d.getTimezoneOffset();
+      const local = new Date(d.getTime() - offset * 60000);
+      return local.toISOString().slice(0, 16);
+    }
     const d = new Date();
     d.setMinutes(0, 0, 0);
     d.setHours(d.getHours() + 2);
     return d.toISOString().slice(0, 16);
   });
-  const [lieu, setLieu] = useState('');
-  const [description, setDescription] = useState('');
-  const [participants, setParticipants] = useState('');
+  const [lieu, setLieu] = useState(editEvent?.location?.displayName || '');
+  const [description, setDescription] = useState(() => {
+    // bodyPreview est plus safe que body.content (qui contient du HTML)
+    return editEvent?.bodyPreview || '';
+  });
+  const [participants, setParticipants] = useState(() => {
+    if (!editEvent?.attendees) return '';
+    return editEvent.attendees
+      .map(a => a.emailAddress?.address)
+      .filter(Boolean)
+      .join(', ');
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -518,9 +535,14 @@ function NewEventModal({ onClose, onCreated }) {
     setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/microsoft/events', {
-        method: 'POST',
-        headers: { 
+      const url = isEdit
+        ? `/api/microsoft/events/${editEvent.id}`
+        : '/api/microsoft/events';
+      const method = isEdit ? 'PATCH' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         },
@@ -549,7 +571,7 @@ function NewEventModal({ onClose, onCreated }) {
     <div className="fixed inset-0 bg-ink/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-5 border-b border-cream-dark">
-          <h2 className="font-display text-xl font-semibold text-ink">Nouveau rendez-vous</h2>
+          <h2 className="font-display text-xl font-semibold text-ink">{isEdit ? 'Modifier le rendez-vous' : 'Nouveau rendez-vous'}</h2>
           <button onClick={onClose} className="text-stone-500 hover:text-ink"><X className="w-5 h-5" /></button>
         </div>
         
@@ -599,8 +621,143 @@ function NewEventModal({ onClose, onCreated }) {
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-ink/70 hover:bg-cream-100 rounded-lg">Annuler</button>
             <button type="submit" disabled={loading}
               className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink disabled:opacity-50 flex items-center gap-1.5">
+              function EventDetailModal({ event, onClose, onEdit, onDelete }) {
+  const isMine = event._owner === 'me';
+  const start = new Date(event.start.dateTime);
+  const end = new Date(event.end.dateTime);
+
+  const formatDateTime = (d) => {
+    return d.toLocaleString('fr-FR', {
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const handleDelete = async () => {
+    if (!confirm(`Supprimer "${event.subject}" de votre agenda Outlook ?`)) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/microsoft/events/${event.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      if (!res.ok) throw new Error('Erreur de suppression');
+      onDelete();
+      onClose();
+    } catch (err) {
+      alert('Erreur lors de la suppression : ' + err.message);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-ink/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between p-5 border-b border-cream-dark">
+          <div className="flex-1 min-w-0 pr-3">
+            <h2 className="font-display text-xl font-semibold text-ink leading-tight break-words">
+              {event.subject || '(Sans titre)'}
+            </h2>
+            {!isMine && event._ownerName && (
+              <div className="text-sm text-ink/60 mt-1">
+                Agenda de <span className="font-medium">{event._ownerName}</span>
+              </div>
+            )}
+          </div>
+          <button onClick={onClose} className="text-stone-500 hover:text-ink flex-shrink-0">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div className="flex items-start gap-3">
+            <Clock className="w-4 h-4 text-sage-dark flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-ink">
+              {event.isAllDay ? (
+                <div>Toute la journée — {start.toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long' })}</div>
+              ) : (
+                <>
+                  <div>Début : <span className="font-medium">{formatDateTime(start)}</span></div>
+                  <div>Fin : <span className="font-medium">{formatDateTime(end)}</span></div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {event.location?.displayName && (
+            <div className="flex items-start gap-3">
+              <MapPin className="w-4 h-4 text-sage-dark flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-ink break-words">{event.location.displayName}</div>
+            </div>
+          )}
+
+          {event.attendees && event.attendees.length > 0 && (
+            <div className="flex items-start gap-3">
+              <UsersIcon className="w-4 h-4 text-sage-dark flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-ink flex-1 min-w-0">
+                <div className="text-xs text-ink/60 mb-1">Participants ({event.attendees.length})</div>
+                <div className="space-y-0.5">
+                  {event.attendees.map((a, i) => (
+                    <div key={i} className="truncate">
+                      {a.emailAddress?.name || a.emailAddress?.address}
+                      {a.status?.response && a.status.response !== 'none' && (
+                        <span className="text-xs text-ink/50 ml-2">
+                          ({a.status.response === 'accepted' ? 'accepté' : a.status.response === 'declined' ? 'refusé' : a.status.response === 'tentativelyAccepted' ? 'peut-être' : a.status.response})
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {event.bodyPreview && (
+            <div className="pt-2 border-t border-cream">
+              <div className="text-xs text-ink/60 mb-1">Description</div>
+              <div className="text-sm text-ink whitespace-pre-wrap">{event.bodyPreview}</div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between p-4 bg-cream-50 border-t border-cream-dark gap-2">
+          <div className="flex gap-2">
+            {event.webLink && (
+              
+                href={event.webLink}
+                target="_blank"
+                rel="noopener"
+                className="flex items-center gap-1.5 px-3 py-2 text-sm text-ink/70 hover:bg-cream-100 rounded-lg"
+              >
+                <ExternalLink className="w-4 h-4" /> Outlook
+              </a>
+            )}
+          </div>
+          {isMine && (
+            <div className="flex gap-2">
+              <button
+                onClick={handleDelete}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg"
+              >
+                <Trash2 className="w-4 h-4" /> Supprimer
+              </button>
+              <button
+                onClick={onEdit}
+                className="flex items-center gap-1.5 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink"
+              >
+                <Edit2 className="w-4 h-4" /> Modifier
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
-              Créer dans Outlook
+              {isEdit ? 'Enregistrer' : 'Créer dans Outlook'}
             </button>
           </div>
         </form>
