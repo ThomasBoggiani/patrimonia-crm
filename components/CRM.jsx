@@ -2238,14 +2238,60 @@ function ClientsTab({ clients, reload, mandats, deals, interactions, pendingClie
 function ClientForm({ client, onSave, onClose }) {
   const [data, setData] = useState(client || {
     nom: '', prenom: '', societe: '', tel: '', email: '',
-    typologie: 'Foncières', nature: 'Privée', budgetMin: 0, budgetMax: 0,
+    marche: 'b2b',
+    typologie: 'Foncières', sous_typologie: '',
+    nature: 'Privée',
+    budgetMin: 0, budgetMax: 0,
     rendementMin: 0, zones: [], typologiesRecherchees: [],
     statut: 'Actif', maturite: 'Moyen', origine: 'Apporteur', owner: 'TB'
   });
+
+  // Si on édite un client existant sans `marche`, on le déduit de la typologie
+  useEffect(() => {
+    if (client && !data.marche) {
+      const inferred = getMarcheFromTypologieClient(data.typologie) || 'b2b';
+      setData(d => ({ ...d, marche: inferred }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const update = (k, v) => setData({ ...data, [k]: v });
   const toggleArray = (key, value) => {
     const arr = data[key] || [];
     update(key, arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value]);
+  };
+
+  const marche = data.marche || 'b2b';
+
+  // Liste des typologies dispos selon le marché
+  const TYPOLOGIES_B2C = ['Particuliers'];
+  const TYPOLOGIES_B2B = ['Foncières', 'Marchands de biens', 'Fonds', 'Promoteurs', 'Family Office'];
+  const typologiesAvailable = marche === 'b2c' ? TYPOLOGIES_B2C : TYPOLOGIES_B2B;
+
+  const showSousTypologie = clientHasSousTypologie(data.typologie);
+  const sousTypologiesOptions = getSousTypologiesForClient(data.typologie);
+
+  // Switch marché : reset typologie + typologies recherchées (catalogue différent)
+  const handleMarcheChange = (newMarche) => {
+    if (newMarche === marche) return;
+    const defaultTypologie = newMarche === 'b2c' ? 'Particuliers' : 'Foncières';
+    setData({
+      ...data,
+      marche: newMarche,
+      typologie: defaultTypologie,
+      sous_typologie: '',
+      typologiesRecherchees: []
+    });
+  };
+
+  // Switch typologie (à l'intérieur d'un même marché)
+  const handleTypologieChange = (newTypologie) => {
+    const newSousTypologies = getSousTypologiesForClient(newTypologie);
+    setData({
+      ...data,
+      typologie: newTypologie,
+      sous_typologie: newSousTypologies.length > 0 ? (newSousTypologies.includes(data.sous_typologie) ? data.sous_typologie : '') : '',
+    });
   };
 
   return (
@@ -2255,34 +2301,82 @@ function ClientForm({ client, onSave, onClose }) {
           <h2 className="font-display text-2xl font-semibold text-stone-900">{client ? 'Modifier' : 'Nouveau'} client</h2>
           <button onClick={onClose}><X className="w-5 h-5 text-stone-500" /></button>
         </div>
+
         <div className="p-6 space-y-4">
+          {/* TOGGLE MARCHÉ — toujours en haut, pilote le reste du formulaire */}
+          <Field label="Marché">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleMarcheChange('b2b')}
+                className={`px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${marche === 'b2b' ? 'bg-sage-100 border-sage-dark text-sage-darker' : 'bg-white border-stone-200 text-stone-600 hover:border-sage-light'}`}
+              >
+                <div className="font-semibold">Investissement</div>
+                <div className="text-[11px] opacity-70 mt-0.5">B2B &middot; Foncières, Fonds, Promoteurs...</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMarcheChange('b2c')}
+                className={`px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${marche === 'b2c' ? 'bg-blue-100 border-blue-600 text-blue-900' : 'bg-white border-stone-200 text-stone-600 hover:border-blue-300'}`}
+              >
+                <div className="font-semibold">Habitation</div>
+                <div className="text-[11px] opacity-70 mt-0.5">B2C &middot; Particuliers</div>
+              </button>
+            </div>
+          </Field>
+
           <div className="grid grid-cols-2 gap-3">
             <Field label="Prénom"><input type="text" value={data.prenom || ''} onChange={e => update('prenom', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
             <Field label="Nom"><input type="text" value={data.nom} onChange={e => update('nom', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
           </div>
+
           <Field label="Société"><input type="text" value={data.societe || ''} onChange={e => update('societe', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
+
           <div className="grid grid-cols-2 gap-3">
             <Field label="Téléphone"><input type="tel" value={data.tel || ''} onChange={e => update('tel', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
             <Field label="Email"><input type="email" value={data.email || ''} onChange={e => update('email', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
           </div>
+
           <div className="grid grid-cols-2 gap-3">
             <Field label="Typologie">
-              <select value={data.typologie || ''} onChange={e => handleTypologieChange(e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
-                <option value="">— Choisir —</option>
-                {TYPOLOGIES_CLIENT.map(t => <option key={t} value={t}>{t}</option>)}
+              <select
+                value={data.typologie || ''}
+                onChange={e => handleTypologieChange(e.target.value)}
+                className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900"
+              >
+                {typologiesAvailable.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </Field>
+            {showSousTypologie ? (
+              <Field label="Sous-typologie">
+                <select value={data.sous_typologie || ''} onChange={e => update('sous_typologie', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
+                  <option value="">&mdash; Choisir &mdash;</option>
+                  {sousTypologiesOptions.map(st => <option key={st} value={st}>{st}</option>)}
+                </select>
+              </Field>
+            ) : (
+              <Field label="Maturité">
+                <select value={data.maturite} onChange={e => update('maturite', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
+                  <option>Haute</option><option>Moyen</option><option>Basse</option>
+                </select>
+              </Field>
+            )}
+          </div>
+
+          {showSousTypologie && (
             <Field label="Maturité">
               <select value={data.maturite} onChange={e => update('maturite', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
                 <option>Haute</option><option>Moyen</option><option>Basse</option>
               </select>
             </Field>
-          </div>
+          )}
+
           <div className="grid grid-cols-3 gap-3">
             <Field label="Budget min (€)"><input type="number" value={data.budgetMin} onChange={e => update('budgetMin', +e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
             <Field label="Budget max (€)"><input type="number" value={data.budgetMax} onChange={e => update('budgetMax', +e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
             <Field label="Rdt min (%)"><input type="number" step="0.1" value={data.rendementMin} onChange={e => update('rendementMin', +e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
           </div>
+
           <Field label="Zones recherchées">
             <div className="flex flex-wrap gap-2">
               {ZONES.map(z => (
@@ -2291,14 +2385,37 @@ function ClientForm({ client, onSave, onClose }) {
               ))}
             </div>
           </Field>
-          <Field label="Typologies recherchées">
-            <div className="flex flex-wrap gap-2">
-              {TYPES_ACTIF.map(t => (
-                <button key={t} type="button" onClick={() => toggleArray('typologiesRecherchees', t)}
-                  className={`px-3 py-1 text-xs rounded-full border ${(data.typologiesRecherchees || []).includes(t) ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{t}</button>
-              ))}
-            </div>
-          </Field>
+
+          {marche === 'b2b' && (
+            <Field label="Typologies recherchées (Investissement)">
+              <CascadeSelectMulti
+                value={data.typologiesRecherchees || []}
+                onChange={(arr) => update('typologiesRecherchees', arr)}
+              />
+            </Field>
+          )}
+
+          {marche === 'b2c' && (
+            <>
+              <Field label="Types d'habitation recherchés">
+                <div className="flex flex-wrap gap-2">
+                  {TYPES_HABITATION_B2C.map(t => (
+                    <button key={t} type="button" onClick={() => toggleArray('typologiesRecherchees', t)}
+                      className={`px-3 py-1 text-xs rounded-full border ${(data.typologiesRecherchees || []).includes(t) ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{t}</button>
+                  ))}
+                </div>
+              </Field>
+              <Field label="Nombre de pièces recherchées">
+                <div className="flex flex-wrap gap-2">
+                  {NB_PIECES.map(p => (
+                    <button key={p} type="button" onClick={() => toggleArray('typologiesRecherchees', p)}
+                      className={`px-3 py-1 text-xs rounded-full border ${(data.typologiesRecherchees || []).includes(p) ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{p}</button>
+                  ))}
+                </div>
+              </Field>
+            </>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <Field label="Origine">
               <select value={data.origine} onChange={e => update('origine', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
@@ -2312,265 +2429,10 @@ function ClientForm({ client, onSave, onClose }) {
             </Field>
           </div>
         </div>
+
         <div className="flex gap-2 justify-end p-6 border-t border-stone-200 bg-cream-50">
           <button onClick={onClose} className="px-4 py-2 text-sm text-stone-700 hover:bg-cream-200 rounded-lg">Annuler</button>
           <button onClick={() => onSave(data)} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Enregistrer</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ClientDetail({ client, reload, interactions, onBack, onEdit, deals, mandats, onOpenMandat }) {
-  const { user } = useAuth();
-  const [showNewInter, setShowNewInter] = useState(false);
-  const [newInter, setNewInter] = useState({ date: new Date().toISOString().split('T')[0], type: 'Appel', resume: '', nextStep: '', dateNextStep: '' });
-  const [outlookConnected, setOutlookConnected] = useState(false);
-  const [pushingOutlook, setPushingOutlook] = useState(false);
-  const [pushFeedback, setPushFeedback] = useState(null);
-
-  useEffect(() => {
-    if (!user) return;
-    supabase.from('user_integrations')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('provider', 'microsoft')
-      .maybeSingle()
-      .then(({ data }) => setOutlookConnected(!!data));
-  }, [user]);
-
-  const clientDeals = deals.filter(d => d.clientId === client.id);
-  const clientInteractions = interactions.filter(i => i.clientId === client.id);
-
-  const addInteraction = async () => {
-    if (!newInter.resume) return;
-    await supabase.from('interactions').insert({
-      client_id: client.id,
-      date: newInter.date,
-      type: newInter.type,
-      resume: newInter.resume,
-      next_step: newInter.nextStep,
-      date_next_step: newInter.dateNextStep || null
-    });
-    setNewInter({ date: new Date().toISOString().split('T')[0], type: 'Appel', resume: '', nextStep: '', dateNextStep: '' });
-    setShowNewInter(false);
-    reload();
-  };
-
-  const deleteInteraction = async (id) => {
-    await supabase.from('interactions').delete().eq('id', id);
-    reload();
-  };
-
-  const pushToOutlook = async () => {
-    if (!client.email) {
-      setPushFeedback({ type: 'error', text: 'Email du client requis' });
-      return;
-    }
-    setPushingOutlook(true);
-    setPushFeedback(null);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/microsoft/contacts/push', {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ clientId: client.id })
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Erreur');
-      }
-      setPushFeedback({ type: 'success', text: client.outlook_contact_id ? 'Contact mis à jour dans Outlook' : 'Contact ajouté à Outlook' });
-      reload();
-      setTimeout(() => setPushFeedback(null), 4000);
-    } catch (err) {
-      setPushFeedback({ type: 'error', text: err.message });
-    } finally {
-      setPushingOutlook(false);
-    }
-  };
-
-  return (
-    <div className="p-8 max-w-5xl">
-      <button onClick={onBack} className="flex items-center gap-2 text-sm text-stone-600 hover:text-stone-900 mb-6">
-        <ChevronRight className="w-4 h-4 rotate-180" /> Retour aux clients
-      </button>
-
-      {/* ✨ Assistant IA — en tête de fiche client */}
-      <div className="mb-6 bg-white rounded-xl shadow-luxe border border-cream-dark overflow-hidden" style={{ height: '600px' }}>
-        <ClientAIAssistant
-          client={client}
-          mandats={mandats}
-        />
-      </div>
-
-      {pushFeedback && (
-        <div className={`mb-4 p-3 rounded-lg flex items-start gap-2 text-sm ${
-          pushFeedback.type === 'success' 
-            ? 'bg-sage-50 border border-sage-light text-sage-darker' 
-            : 'bg-red-50 border border-red-200 text-red-800'
-        }`}>
-          {pushFeedback.type === 'success' ? <Check className="w-4 h-4 flex-shrink-0 mt-0.5" /> : <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />}
-          <div>{pushFeedback.text}</div>
-        </div>
-      )}
-      
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1 className="font-display text-4xl font-semibold text-stone-900 mb-1">{client.prenom} {client.nom}</h1>
-          <p className="text-stone-500">{client.societe}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <OwnerSelector entity="client" client={client} reload={reload} />
-          {outlookConnected && (
-            <button onClick={pushToOutlook} disabled={pushingOutlook || !client.email}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-cream-dark text-ink rounded-lg text-sm hover:bg-cream-50 disabled:opacity-50">
-              {pushingOutlook ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              {client.outlook_contact_id ? 'MAJ Outlook' : 'Pousser Outlook'}
-            </button>
-          )}
-          <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
-            <Edit2 className="w-4 h-4" /> Modifier
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2 space-y-4">
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-            <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Critères d'investissement</h2>
-            <div className="grid grid-cols-3 gap-4">
-              <DetailItem label="Typologie" value={client.typologie} />
-              <DetailItem label="Maturité" value={<MaturiteBadge maturite={client.maturite} />} />
-              <DetailItem label="Origine" value={client.origine} />
-              <DetailItem label="Budget" value={`${formatPrixCompact(client.budgetMin)} – ${formatPrixCompact(client.budgetMax)}`} highlight />
-              <DetailItem label="Rendement min" value={`${client.rendementMin}%`} highlight />
-              <DetailItem label="Statut" value={client.statut} />
-            </div>
-            {(client.zones || []).length > 0 && (
-              <div className="mt-4 pt-4 border-t border-cream">
-                <div className="text-xs text-stone-500 uppercase mb-2">Zones</div>
-                <div className="flex flex-wrap gap-1.5">{(client.zones || []).map(z => <span key={z} className="text-xs px-2 py-1 bg-sage-50 text-sage-dark rounded-full">{z}</span>)}</div>
-              </div>
-            )}
-            {(client.typologiesRecherchees || []).length > 0 && (
-              <div className="mt-3">
-                <div className="text-xs text-stone-500 uppercase mb-2">Typologies recherchées</div>
-                <div className="flex flex-wrap gap-1.5">{(client.typologiesRecherchees || []).map(t => <span key={t} className="text-xs px-2 py-1 bg-cream-100 text-ink rounded-full">{t}</span>)}</div>
-              </div>
-            )}
-          </div>
-
-          {/* Biens correspondants (matching) */}
-          <ClientMatches
-            client={client}
-            mandats={mandats}
-            interactions={interactions}
-            onOpenMandat={onOpenMandat}
-            reload={reload}
-          />
-
-          {/* Emails Outlook avec ce client */}
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-            <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
-              <Mail className="w-5 h-5 text-sage-dark" />Emails Outlook
-            </h2>
-            <ClientEmails client={client} />
-          </div>
-
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-display text-xl font-semibold text-stone-900">Historique des interactions</h2>
-              <button onClick={() => setShowNewInter(!showNewInter)} className="flex items-center gap-1.5 text-sm px-3 py-1.5 bg-stone-100 hover:bg-cream-200 rounded-lg">
-                <Plus className="w-3.5 h-3.5" /> Nouvelle
-              </button>
-            </div>
-
-            {showNewInter && (
-              <div className="bg-stone-50 rounded-lg p-4 mb-4 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-medium text-stone-600 uppercase mb-1 block">Date <span className="text-red-500">*</span></label>
-                    <input type="date" value={newInter.date} onChange={e => setNewInter({...newInter, date: e.target.value})} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-white focus:outline-none focus:border-stone-900" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-stone-600 uppercase mb-1 block">Type</label>
-                    <select value={newInter.type} onChange={e => setNewInter({...newInter, type: e.target.value})} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-white focus:outline-none focus:border-stone-900">
-                      <option>Appel</option><option>Email</option><option>Rendez-vous</option><option>Visite</option><option>Message</option>
-                    </select>
-                  </div>
-                </div>
-                <textarea value={newInter.resume} onChange={e => setNewInter({...newInter, resume: e.target.value})} rows={2} placeholder="Décrivez l'échange…" className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-white focus:outline-none focus:border-stone-900" />
-                <div className="grid grid-cols-2 gap-3">
-                  <input type="text" value={newInter.nextStep} onChange={e => setNewInter({...newInter, nextStep: e.target.value})} placeholder="Prochaine action" className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-white focus:outline-none focus:border-stone-900" />
-                  <input type="date" value={newInter.dateNextStep} onChange={e => setNewInter({...newInter, dateNextStep: e.target.value})} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-white focus:outline-none focus:border-stone-900" />
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <button onClick={() => setShowNewInter(false)} className="px-3 py-1.5 text-sm text-stone-700 hover:bg-cream-200 rounded-lg">Annuler</button>
-                  <button onClick={addInteraction} className="px-3 py-1.5 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Ajouter</button>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-3">
-              {clientInteractions.length === 0 ? (
-                <p className="text-sm text-stone-500 italic text-center py-6">Aucune interaction</p>
-              ) : clientInteractions.map(i => (
-                <div key={i.id} className="border-l-2 border-sage-light pl-4 py-2 group">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <TypeInteractionBadge type={i.type} />
-                      <span className="text-xs font-medium text-stone-900 bg-sage-50 px-2 py-0.5 rounded-md">
-                        {new Date(i.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                      </span>
-                    </div>
-                    <button onClick={() => deleteInteraction(i.id)} className="opacity-0 group-hover:opacity-100 text-cream-400 hover:text-red-600">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <p className="text-sm text-stone-700 mb-1">{i.resume}</p>
-                  {i.nextStep && (
-                    <div className="flex items-center gap-2 text-xs text-stone-500 mt-1.5">
-                      <ChevronRight className="w-3 h-3" />
-                      <span>{i.nextStep}</span>
-                      {i.dateNextStep && <span className="text-sage-dark font-medium">• {new Date(i.dateNextStep).toLocaleDateString('fr-FR')}</span>}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-            <h3 className="font-display text-lg font-semibold text-stone-900 mb-3">Coordonnées</h3>
-            <div className="space-y-2 text-sm">
-              {client.tel && <div className="flex items-center gap-2 text-stone-700"><Phone className="w-3.5 h-3.5 text-stone-400" />{client.tel}</div>}
-              {client.email && <div className="flex items-center gap-2 text-stone-700"><Mail className="w-3.5 h-3.5 text-stone-400" />{client.email}</div>}
-            </div>
-          </div>
-
-          {clientDeals.length > 0 && (
-            <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-              <h3 className="font-display text-lg font-semibold text-stone-900 mb-3">Deals ({clientDeals.length})</h3>
-              <div className="space-y-2">
-                {clientDeals.map(d => {
-                  const m = mandats.find(x => x.id === d.mandatId);
-                  if (!m) return null;
-                  return (
-                    <div key={d.id} className="p-3 bg-stone-50 rounded-lg">
-                      <div className="text-sm font-medium text-stone-900 mb-1">{m.nom}</div>
-                      <DealStatutBadge statut={d.statut} />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
