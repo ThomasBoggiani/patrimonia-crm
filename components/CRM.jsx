@@ -37,7 +37,7 @@ import PdfExportButtons from '@/components/PdfExportButtons';
 import { PhotosModal, VisiteModal, MandantModal } from './MandatModals';
 import CascadeSelect from './CascadeSelect';
 import MediasModal from './MediasModal';
-import {   formatPrix,   formatPrixCompact,   toCamel,   toSnake,   isManager,   getDPEClass,   getDPEColor,   STATUTS_MANDAT,   STATUTS_DEAL,   TYPES_ACTIF,   TYPES_ACTIF_B2B_TREE,   TYPES_HABITATION_B2C,   TYPOLOGIES_CLIENT,   ZONES,   NB_PIECES,   PORTAILS,   STATUTS_PORTAIL,   getSousTypesForFamille,   familleHasSousTypes,   getMarcheFromTypologieClient,   getSousTypologiesForClient,   clientHasSousTypologie,   groupTypologiesRecherchees, } from '@/lib/crm-constants';
+import {   formatPrix,   formatPrixCompact,   toCamel,   toSnake,   isManager,   getDPEClass,   getDPEColor,   STATUTS_MANDAT,   STATUTS_DEAL,   TYPES_ACTIF,   TYPES_ACTIF_B2B_TREE,   TYPES_HABITATION_B2C,   TYPOLOGIES_CLIENT,   ZONES,   NB_PIECES,   PORTAILS,   STATUTS_PORTAIL,   getSousTypesForFamille,   familleHasSousTypes,   getMarcheFromTypologieClient,   getSousTypologiesForClient,   clientHasSousTypologie,   groupTypologiesRecherchees,   getCoverPhoto,   getPhotos, } from '@/lib/crm-constants';
 import {
   Field,
   DetailItem,
@@ -463,10 +463,13 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [] })
 
   const mandatsSansPhotos = mandats.filter(m => {
     if (['Perdu', 'Acte'].includes(m.statut)) return false;
-    const photos = m.photos || m.docs;
-    if (!photos) return true;
-    if (Array.isArray(photos)) return photos.length === 0;
-    return false;
+    // Nouveau : on regarde dans medias (photos uniquement)
+    const mediasPhotos = Array.isArray(m.medias) ? m.medias.filter(x => x && x.type === 'photo') : [];
+    if (mediasPhotos.length > 0) return false;
+    // Fallback legacy : photos
+    const legacyPhotos = m.photos;
+    if (Array.isArray(legacyPhotos) && legacyPhotos.length > 0) return false;
+    return true;
   });
 
   // Salutation contextuelle
@@ -847,7 +850,7 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
           </thead>
           <tbody>
             {filtered.map(m => {
-              const photoUrl = (m.photos && m.photos[0]) ? (m.photos[0].url || m.photos[0]) : null;
+              const photoUrl = getCoverPhoto(m);
               return (
                 <tr key={m.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer group" onClick={() => setSelectedMandat(m)}>
                   <td className="px-3 py-2">
@@ -1870,19 +1873,23 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
 
       {/* ═══ PHOTO + TAGS IA (côte à côte) ═══ */}
       <div className="flex items-stretch gap-4 mb-4">
-        {(mandat.photos && mandat.photos.length > 0) ? (
-          <button onClick={() => setOpenModal('photos')} className="flex-shrink-0 w-48 h-32 rounded-lg overflow-hidden bg-cream-100 border border-cream-dark hover:opacity-90 relative">
-            <img src={mandat.photos[0].url || mandat.photos[0]} alt={mandat.nom} className="w-full h-full object-cover" />
-            {mandat.photos.length > 1 && (
-              <div className="absolute bottom-1.5 right-1.5 bg-stone-900/70 text-white text-[10px] px-1.5 py-0.5 rounded-full">+{mandat.photos.length - 1}</div>
-            )}
-          </button>
-        ) : (
-          <button onClick={() => setOpenModal('photos')} className="flex-shrink-0 w-48 h-32 rounded-lg bg-cream-100 border border-dashed border-cream-dark hover:bg-cream-200 flex flex-col items-center justify-center text-stone-400 text-xs gap-1">
-            <ImageIcon className="w-6 h-6" />
-            <span>Ajouter photos</span>
-          </button>
-        )}
+        {(() => {
+          const mandatPhotos = getPhotos(mandat);
+          const cover = getCoverPhoto(mandat);
+          return mandatPhotos.length > 0 ? (
+            <button onClick={() => setOpenModal('medias')} className="flex-shrink-0 w-48 h-32 rounded-lg overflow-hidden bg-cream-100 border border-cream-dark hover:opacity-90 relative">
+              <img src={cover} alt={mandat.nom} className="w-full h-full object-cover" />
+              {mandatPhotos.length > 1 && (
+                <div className="absolute bottom-1.5 right-1.5 bg-stone-900/70 text-white text-[10px] px-1.5 py-0.5 rounded-full">+{mandatPhotos.length - 1}</div>
+              )}
+            </button>
+          ) : (
+            <button onClick={() => setOpenModal('medias')} className="flex-shrink-0 w-48 h-32 rounded-lg bg-cream-100 border border-dashed border-cream-dark hover:bg-cream-200 flex flex-col items-center justify-center text-stone-400 text-xs gap-1">
+              <ImageIcon className="w-6 h-6" />
+              <span>Ajouter photos</span>
+            </button>
+          );
+        })()}
 
         <div className="flex-1 min-w-0 bg-amber-50/30 border border-amber-100 rounded-lg p-3">
           {highlights.length > 0 ? (
@@ -1904,8 +1911,8 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
       {/* ═══ BARRE D'ACTIONS COMPACTE (1 ligne) ═══ */}
       <div className="mb-6 pb-4 border-b border-stone-200 flex items-center gap-2 flex-wrap">
         <PdfExportButtons mandatId={mandat.id} mandatNom={mandat.nom} isOffMarket={mandat.is_off_market} />
-        <button onClick={() => setOpenModal('photos')} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
-          <ImageIcon className="w-3.5 h-3.5" /> Photos {(mandat.photos || []).length > 0 && <span className="text-[10px] bg-sage-100 text-sage-dark px-1.5 py-0.5 rounded-full">{mandat.photos.length}</span>}
+        <button onClick={() => setOpenModal('medias')} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
+          <ImageIcon className="w-3.5 h-3.5" /> Photos {getPhotos(mandat).length > 0 && <span className="text-[10px] bg-sage-100 text-sage-dark px-1.5 py-0.5 rounded-full">{getPhotos(mandat).length}</span>}
         </button>
         <button onClick={() => setOpenModal('visite')} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
           <Eye className="w-3.5 h-3.5" /> Visite {(mandat.visiteInfo || mandat.visite_info) && Object.values(mandat.visiteInfo || mandat.visite_info).some(v => v) && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
@@ -1916,9 +1923,15 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
         <button onClick={() => setOpenModal('documents')} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
           <FolderOpen className="w-3.5 h-3.5" /> Documents
         </button>
-        <button onClick={() => setOpenModal('medias')} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
-          <Video className="w-3.5 h-3.5" /> Médias {(mandat.medias || []).length > 0 && <span className="text-[10px] bg-sage-100 text-sage-dark px-1.5 py-0.5 rounded-full">{mandat.medias.length}</span>}
-        </button>
+        {(() => {
+          // Compte uniquement videos + visites virtuelles + plans (pas les photos, qui ont leur propre bouton)
+          const nonPhotoMedias = (mandat.medias || []).filter(m => m && m.type !== 'photo');
+          return (
+            <button onClick={() => setOpenModal('medias')} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
+              <Video className="w-3.5 h-3.5" /> M&eacute;dias {nonPhotoMedias.length > 0 && <span className="text-[10px] bg-sage-100 text-sage-dark px-1.5 py-0.5 rounded-full">{nonPhotoMedias.length}</span>}
+            </button>
+          );
+        })()}
 
         <div className="flex-1" />
 
