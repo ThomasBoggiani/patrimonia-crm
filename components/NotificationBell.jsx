@@ -1,13 +1,11 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { Bell, X, CheckSquare, Building2, Users, Check, FileQuestion, Target } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 
 export default function NotificationBell() {
   const { user } = useAuth();
-  const router = useRouter();
   const [notifications, setNotifications] = useState([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -16,7 +14,6 @@ export default function NotificationBell() {
     if (!user) return;
     loadNotifications();
 
-    // Nom de channel unique par user pour éviter les conflits
     const channelName = `notifications-${user.id}-${Date.now()}`;
     const channel = supabase.channel(channelName);
 
@@ -60,19 +57,16 @@ export default function NotificationBell() {
     loadNotifications();
   };
 
-  // Clic sur notif : marque comme lue + navigate vers la ressource
+  // Clic sur notif : marque comme lue + dispatch event pour ouvrir la ressource
   const handleNotifClick = async (n) => {
     await markAsRead(n.id);
     setOpen(false);
 
     if (n.lien_type === 'mandat' && n.lien_id) {
-      router.push(`/?tab=mandats&open=${n.lien_id}`);
+      window.dispatchEvent(new CustomEvent('crm:openMandat', { detail: { mandatId: n.lien_id } }));
     } else if (n.lien_type === 'client' && n.lien_id) {
-      router.push(`/?tab=clients&open=${n.lien_id}`);
-    } else if (n.lien_type === 'deal' && n.lien_id) {
-      router.push(`/?tab=deals&open=${n.lien_id}`);
+      window.dispatchEvent(new CustomEvent('crm:openClient', { detail: { clientId: n.lien_id } }));
     }
-    // Sinon, rien (juste markAsRead)
   };
 
   const formatTime = (ts) => {
@@ -119,7 +113,7 @@ export default function NotificationBell() {
 
             <div className="overflow-y-auto flex-1">
               {loading ? (
-                <div className="text-center py-6 text-xs text-ink/60">Chargement…</div>
+                <div className="text-center py-6 text-xs text-ink/60">Chargement&hellip;</div>
               ) : notifications.length === 0 ? (
                 <div className="text-center py-10 px-4">
                   <Bell className="w-8 h-8 text-cream-300 mx-auto mb-2" />
