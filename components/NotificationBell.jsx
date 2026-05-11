@@ -75,13 +75,6 @@ export default function NotificationBell() {
     }
   };
 
-    if (n.lien_type === 'mandat' && n.lien_id) {
-      window.dispatchEvent(new CustomEvent('crm:openMandat', { detail: { mandatId: n.lien_id } }));
-    } else if (n.lien_type === 'client' && n.lien_id) {
-      window.dispatchEvent(new CustomEvent('crm:openClient', { detail: { clientId: n.lien_id } }));
-    }
-  };
-
   const formatTime = (ts) => {
     const diff = (Date.now() - new Date(ts).getTime()) / 1000 / 60;
     if (diff < 1) return "À l'instant";
