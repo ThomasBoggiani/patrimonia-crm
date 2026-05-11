@@ -1,11 +1,13 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Bell, X, CheckSquare, Building2, Users, Check, FileQuestion } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Bell, X, CheckSquare, Building2, Users, Check, FileQuestion, Target } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 
 export default function NotificationBell() {
   const { user } = useAuth();
+  const router = useRouter();
   const [notifications, setNotifications] = useState([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -13,13 +15,13 @@ export default function NotificationBell() {
   useEffect(() => {
     if (!user) return;
     loadNotifications();
-    
+
     // Nom de channel unique par user pour éviter les conflits
     const channelName = `notifications-${user.id}-${Date.now()}`;
     const channel = supabase.channel(channelName);
-    
+
     channel
-      .on('postgres_changes', 
+      .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
         () => { loadNotifications(); }
       )
@@ -28,8 +30,8 @@ export default function NotificationBell() {
           console.warn('Realtime notifications channel error:', status);
         }
       });
-    
-    return () => { 
+
+    return () => {
       try { supabase.removeChannel(channel); } catch (e) {}
     };
   }, [user]);
@@ -58,6 +60,21 @@ export default function NotificationBell() {
     loadNotifications();
   };
 
+  // Clic sur notif : marque comme lue + navigate vers la ressource
+  const handleNotifClick = async (n) => {
+    await markAsRead(n.id);
+    setOpen(false);
+
+    if (n.lien_type === 'mandat' && n.lien_id) {
+      router.push(`/?tab=mandats&open=${n.lien_id}`);
+    } else if (n.lien_type === 'client' && n.lien_id) {
+      router.push(`/?tab=clients&open=${n.lien_id}`);
+    } else if (n.lien_type === 'deal' && n.lien_id) {
+      router.push(`/?tab=deals&open=${n.lien_id}`);
+    }
+    // Sinon, rien (juste markAsRead)
+  };
+
   const formatTime = (ts) => {
     const diff = (Date.now() - new Date(ts).getTime()) / 1000 / 60;
     if (diff < 1) return "À l'instant";
@@ -71,6 +88,7 @@ export default function NotificationBell() {
     if (type === 'questionnaire_response') return FileQuestion;
     if (type === 'client_assigned') return Users;
     if (type === 'mandat_assigned') return Building2;
+    if (type === 'matching_batch') return Target;
     return Bell;
   };
 
@@ -98,7 +116,7 @@ export default function NotificationBell() {
                 </button>
               )}
             </div>
-            
+
             <div className="overflow-y-auto flex-1">
               {loading ? (
                 <div className="text-center py-6 text-xs text-ink/60">Chargement…</div>
@@ -111,8 +129,9 @@ export default function NotificationBell() {
                 notifications.map(n => {
                   const Icon = iconForType(n.type);
                   const author = n.created_by_profile ? `${n.created_by_profile.prenom} ${n.created_by_profile.nom}` : null;
+                  const isClickable = n.lien_id && n.lien_type;
                   return (
-                    <div key={n.id} onClick={() => markAsRead(n.id)}
+                    <div key={n.id} onClick={() => handleNotifClick(n)}
                       className={`p-3 border-b border-cream cursor-pointer hover:bg-cream-50 ${!n.lue ? 'bg-sage-50/50' : ''}`}>
                       <div className="flex items-start gap-2">
                         <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${!n.lue ? 'bg-sage-100 text-sage-darker' : 'bg-cream-100 text-ink/60'}`}>
@@ -127,8 +146,9 @@ export default function NotificationBell() {
                           )}
                           <div className="text-[10px] text-ink/50 mt-1 flex items-center gap-1.5">
                             {author && <span>Par {author}</span>}
-                            {author && <span>·</span>}
+                            {author && <span>&middot;</span>}
                             <span>{formatTime(n.created_at)}</span>
+                            {isClickable && <span className="text-sage-dark">&middot; Cliquer pour ouvrir</span>}
                           </div>
                         </div>
                         {!n.lue && <div className="w-2 h-2 bg-sage rounded-full flex-shrink-0 mt-1" />}
