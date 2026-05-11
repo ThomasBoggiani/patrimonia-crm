@@ -126,6 +126,17 @@ export default function CRM() {
     setTabKey(k => k + 1);
   }
 
+  // Modal EmailDrafts : state + helper + listener event
+  const [emailDraftsState, setEmailDraftsState] = useState(null); // { mandatId, clientIds: [] } | null
+  function openEmailDrafts(mandatId, clientIds = []) {
+    setEmailDraftsState({ mandatId, clientIds });
+  }
+  useEffect(() => {
+    const handleOpenEmailDrafts = (e) => openEmailDrafts(e.detail?.mandatId, e.detail?.clientIds || []);
+    window.addEventListener('crm:openEmailDrafts', handleOpenEmailDrafts);
+    return () => window.removeEventListener('crm:openEmailDrafts', handleOpenEmailDrafts);
+  }, []);
+
   // Modal EmailDrafts : ouverture depuis fiche mandat ou notif
   const [emailDraftsState, setEmailDraftsState] = useState(null); // { mandatId, clientIds: [] } | null
   function openEmailDrafts(mandatId, clientIds = []) {
@@ -419,6 +430,14 @@ export default function CRM() {
       )}
 
       {/* Modal ✨ Créer avec l'IA */}
+      {emailDraftsState && (
+        <EmailDraftsModal
+          mandat={mandats.find(m => m.id === emailDraftsState.mandatId)}
+          clients={clients}
+          initialClientIds={emailDraftsState.clientIds}
+          onClose={() => setEmailDraftsState(null)}
+        />
+      )}
       <AICreateModal
         open={showAICreate}
         onClose={() => setShowAICreate(false)}
