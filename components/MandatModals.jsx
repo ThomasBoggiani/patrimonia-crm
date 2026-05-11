@@ -5,54 +5,6 @@ import { supabase } from '@/lib/supabase';
 import PhotoUploader from './PhotoUploader';
 
 // ════════════════════════════════════════════════════════════════
-// MODAL PHOTOS — réutilise PhotoUploader dans une modal
-// ════════════════════════════════════════════════════════════════
-export function PhotosModal({ mandat, onClose, onUpdate }) {
-  const [photos, setPhotos] = useState(mandat.photos || []);
-  const [saving, setSaving] = useState(false);
-
-  const handleChange = async (newPhotos) => {
-    setPhotos(newPhotos);
-    setSaving(true);
-    try {
-      await supabase.from('mandats').update({ photos: newPhotos }).eq('id', mandat.id);
-      if (onUpdate) onUpdate();
-    } catch (e) {
-      console.error('Erreur sauvegarde photos:', e);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-luxe-hover max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-cream-dark">
-          <div>
-            <h2 className="font-display text-xl font-semibold text-stone-900 flex items-center gap-2">
-              <ImageIcon className="w-5 h-5 text-sage-dark" />Photos du bien
-            </h2>
-            <p className="text-xs text-stone-500 mt-0.5">{photos.length} photo{photos.length > 1 ? 's' : ''} · La 1re est utilisée comme couverture</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {saving && <Loader2 className="w-4 h-4 animate-spin text-sage-dark" />}
-            <button onClick={onClose} className="text-stone-500 hover:text-stone-900"><X className="w-5 h-5" /></button>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto p-5">
-          <PhotoUploader 
-            mandatId={mandat.id}
-            photos={photos}
-            onChange={handleChange}
-            storage="supabase"
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════
 // MODAL VISITE — codes, gardien, accès
 // ════════════════════════════════════════════════════════════════
 export function VisiteModal({ mandat, onClose, onUpdate }) {
