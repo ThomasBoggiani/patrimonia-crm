@@ -243,7 +243,6 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
           'mandat_numero', 'mandat_type', 'mandat_date_echeance',
           'nb_lots', 'description', 'commercialisation', 'statut'
         ];
-        ];
         const filteredMandat = {};
         for (const k of ALLOWED_MANDAT_COLUMNS) {
           if (result.mandat[k] !== undefined) filteredMandat[k] = result.mandat[k];
