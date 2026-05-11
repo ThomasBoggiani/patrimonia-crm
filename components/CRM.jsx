@@ -645,6 +645,7 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
   const [filterComm, setFilterComm] = useState('Tous');
   const [filterType, setFilterType] = useState('Tous');
   const [filterStatut, setFilterStatut] = useState('Actifs'); // 'Actifs' = exclut Perdu/Vendu par autres
+  const [filterMarche, setFilterMarche] = useState('Tous'); // 'Tous' | 'b2b' | 'b2c'
   const [view, setView] = useState('list'); // 'list' | 'kanban'
   const [editingMandat, setEditingMandat] = useState(null);
   const [showNew, setShowNew] = useState(false);
@@ -657,6 +658,18 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
     if (filterType !== 'Tous' && m.type !== filterType && m.sousType !== filterType) return false;
     if (filterStatut === 'Actifs' && ['Perdu', 'Vendu par autres', 'Acte'].includes(m.statut)) return false;
     if (filterStatut !== 'Tous' && filterStatut !== 'Actifs' && m.statut !== filterStatut) return false;
+
+    // Filtre marché B2B/B2C : utilise m.marche, sinon déduit du type
+    if (filterMarche !== 'Tous') {
+      let mMarche = m.marche;
+      if (!mMarche) {
+        if (TYPES_HABITATION_B2C.includes(m.type)) mMarche = 'b2c';
+        else if (Object.keys(TYPES_ACTIF_B2B_TREE).includes(m.type)) mMarche = 'b2b';
+        else if (Object.values(TYPES_ACTIF_B2B_TREE).flat().includes(m.type)) mMarche = 'b2b';
+      }
+      if (mMarche !== filterMarche) return false;
+    }
+
     return true;
   });
 
@@ -762,6 +775,29 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
           <option>Mandat exclusif</option>
           <option>Mandat simple</option>
         </select>
+        {/* Toggle marché B2B / B2C */}
+        <div className="flex bg-white border border-stone-200 rounded-lg overflow-hidden">
+          <button
+            onClick={() => setFilterMarche('Tous')}
+            className={`px-3 py-2.5 text-xs font-medium ${filterMarche === 'Tous' ? 'bg-ink-deep text-white' : 'text-stone-600 hover:bg-stone-50'}`}
+          >
+            Tous
+          </button>
+          <button
+            onClick={() => setFilterMarche('b2b')}
+            className={`px-3 py-2.5 text-xs font-medium border-l border-stone-200 ${filterMarche === 'b2b' ? 'bg-sage-100 text-sage-darker' : 'text-stone-600 hover:bg-stone-50'}`}
+            title="Investissement (B2B)"
+          >
+            B2B
+          </button>
+          <button
+            onClick={() => setFilterMarche('b2c')}
+            className={`px-3 py-2.5 text-xs font-medium border-l border-stone-200 ${filterMarche === 'b2c' ? 'bg-blue-100 text-blue-900' : 'text-stone-600 hover:bg-stone-50'}`}
+            title="Habitation (B2C)"
+          >
+            B2C
+          </button>
+        </div>
         <select value={filterType} onChange={e => setFilterType(e.target.value)} className="px-4 py-2.5 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
           <option value="Tous">Type : Tous</option>
           <optgroup label="Investissement (B2B)">
@@ -832,10 +868,27 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
                     </div>
                   </td>
                   <td className="px-3 py-3 text-sm text-stone-700">
-                    {m.type || <span className="text-stone-400">—</span>}
-                    {m.sousType && (
-                      <span className="text-stone-400"> &middot; <span className="text-stone-600">{m.sousType}</span></span>
-                    )}
+                    {m.type ? (() => {
+                      let mMarche = m.marche;
+                      if (!mMarche) {
+                        if (TYPES_HABITATION_B2C.includes(m.type)) mMarche = 'b2c';
+                        else mMarche = 'b2b';
+                      }
+                      const typeLabel = m.sousType ? `${m.type} \u00b7 ${m.sousType}` : m.type;
+                      const filterValue = m.sousType || m.type;
+                      const badgeClass = mMarche === 'b2c'
+                        ? 'bg-blue-50 text-blue-800 hover:bg-blue-100'
+                        : 'bg-sage-50 text-sage-darker hover:bg-sage-100';
+                      return (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setFilterType(filterValue); }}
+                          className={`text-xs px-2 py-0.5 rounded-full transition-colors ${badgeClass}`}
+                          title={`Filtrer par ${typeLabel}`}
+                        >
+                          {typeLabel}
+                        </button>
+                      );
+                    })() : <span className="text-stone-400">—</span>}
                   </td>
                   <td className="px-3 py-3">
                     <div className="font-medium text-stone-900 text-sm">{formatPrix(getPriceTTC(m))}</div>
