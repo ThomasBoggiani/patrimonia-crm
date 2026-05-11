@@ -157,9 +157,17 @@ export function DealsTab({ deals, reload, mandats, clients }) {
 // ═══════════════════════════════════════════════════════════════════
 // MatchingTab - Rapprochement automatique mandats <-> clients
 // ═══════════════════════════════════════════════════════════════════
-export function MatchingTab({ mandats, clients, deals, reload }) {
-  const [selectedMandatId, setSelectedMandatId] = useState(mandats[0]?.id || null);
+export function MatchingTab({ mandats, clients, deals, reload, initialMandatId, onInitialMandatConsumed }) {
+  const [selectedMandatId, setSelectedMandatId] = useState(initialMandatId || mandats[0]?.id || null);
   const mandat = mandats.find(m => m.id === selectedMandatId);
+
+  // Si la prop initialMandatId change (re-navigation), on resélectionne ce mandat
+  useEffect(() => {
+    if (initialMandatId && initialMandatId !== selectedMandatId) {
+      setSelectedMandatId(initialMandatId);
+      onInitialMandatConsumed?.();
+    }
+  }, [initialMandatId]);
 
   const computeScore = (client, m) => {
     if (!m) return 0;

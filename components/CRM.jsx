@@ -117,6 +117,14 @@ export default function CRM() {
     setTabKey(k => k + 1);
   }
 
+  // Helper : naviguer vers l'onglet Matching auto avec un mandat pré-sélectionné
+  const [pendingMatchingMandatId, setPendingMatchingMandatId] = useState(null);
+  function navigateToMatching(mandatId) {
+    setPendingMatchingMandatId(mandatId);
+    setActiveTab('matching');
+    setTabKey(k => k + 1);
+  }
+
   // Écoute les events depuis NotificationBell (clic sur une notif)
   useEffect(() => {
     const handleOpenMandat = (e) => navigateToMandat(e.detail?.mandatId);
@@ -128,6 +136,7 @@ export default function CRM() {
       window.removeEventListener('crm:openClient', handleOpenClient);
     };
   }, []);
+
   const [loading, setLoading] = useState(true);
   const [importToast, setImportToast] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -327,11 +336,11 @@ export default function CRM() {
         <main className="flex-1 overflow-y-auto scrollbar-thin">
           <div className="fade-in" key={`${activeTab}-${tabKey}`}>
             {activeTab === 'dashboard' && <Dashboard mandats={mandats} clients={clients} deals={deals} todos={todos} reload={loadAll} allProfiles={allProfiles} />}
-            {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} clients={clients} deals={deals} interactions={interactions} todos={todos} annonces={annonces} allProfiles={allProfiles} pendingMandatId={pendingMandatToOpen} onPendingMandatConsumed={() => setPendingMandatToOpen(null)} />}
+            {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} clients={clients} deals={deals} interactions={interactions} todos={todos} annonces={annonces} allProfiles={allProfiles} pendingMandatId={pendingMandatToOpen} onPendingMandatConsumed={() => setPendingMandatToOpen(null)} onOpenMatching={navigateToMatching} />}
             {activeTab === 'clients' && <ClientsTab clients={clients} reload={loadAll} mandats={mandats} deals={deals} interactions={interactions} pendingClientId={pendingClientToOpen} onPendingClientConsumed={() => setPendingClientToOpen(null)} onOpenMandat={navigateToMandat} />}
             {activeTab === 'inbox' && <InboxTab onUnreadCountChange={setInboxUnreadCount} reload={loadAll} onOpenClient={navigateToClient} />}
             {activeTab === 'deals' && <DealsTab deals={deals} reload={loadAll} mandats={mandats} clients={clients} />}
-            {activeTab === 'matching' && <MatchingTab mandats={mandats} clients={clients} deals={deals} reload={loadAll} />}
+            {activeTab === 'matching' && <MatchingTab mandats={mandats} clients={clients} deals={deals} reload={loadAll} initialMandatId={pendingMatchingMandatId} onInitialMandatConsumed={() => setPendingMatchingMandatId(null)} />}
             {activeTab === 'todos' && <TodosTab todos={todos} reload={loadAll} mandats={mandats} clients={clients} deals={deals} allProfiles={allProfiles} />}
             {activeTab === 'direction' && <DashboardDirection mandats={mandats} deals={deals} clients={clients} todos={todos} allProfiles={allProfiles} />}
             {activeTab === 'myprofile' && <MyProfile mandats={mandats} todos={todos} clients={clients} allProfiles={allProfiles} RemunerationComponent={RemunerationTab} onNavigate={(t) => { setActiveTab(t); setTabKey(k => k + 1); }} />}
@@ -674,7 +683,7 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [] })
 }
 
 // === MANDATS ===
-function MandatsTab({ mandats, reload, clients, deals, interactions, todos, annonces, allProfiles = [], pendingMandatId, onPendingMandatConsumed }) {
+function MandatsTab({ mandats, reload, clients, deals, interactions, todos, annonces, allProfiles = [], pendingMandatId, onPendingMandatConsumed, onOpenMatching }) {
   const { user, profile } = useAuth();
   const [secondaryDisplay, setSecondaryDisplay] = useState('m2'); // 'm2' | 'nv_comm'
   const [search, setSearch] = useState('');
@@ -771,7 +780,7 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
 
   if (selectedMandat) {
     const currentMandat = mandats.find(m => m.id === selectedMandat.id) || selectedMandat;
-    return <MandatDetail mandat={currentMandat} onBack={() => setSelectedMandat(null)} onEdit={() => { setEditingMandat(currentMandat); setSelectedMandat(null); }} deals={deals} clients={clients} reload={reload} todos={todos} annonces={annonces} allProfiles={allProfiles} />;
+    return <MandatDetail mandat={currentMandat} onBack={() => setSelectedMandat(null)} onEdit={() => { setEditingMandat(currentMandat); setSelectedMandat(null); }} deals={deals} clients={clients} reload={reload} todos={todos} annonces={annonces} allProfiles={allProfiles} onOpenMatching={onOpenMatching} />;
   }
 
   return (
@@ -1868,7 +1877,7 @@ function NewClientMiniForm({ prefillName, onSave, onCancel }) {
   );
 }
 
-function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, annonces, allProfiles = [] }) {
+function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, annonces, allProfiles = [], onOpenMatching }) {
   const [openModal, setOpenModal] = useState(null); // 'photos' | 'visite' | 'mandant' | null
   const [aiAnalyzeOpen, setAiAnalyzeOpen] = useState(false);
   const mandatDeals = deals.filter(d => d.mandatId === mandat.id);
@@ -2044,10 +2053,18 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
               <Sparkles className="w-5 h-5 text-sage-dark" />Statistiques du dossier
             </h2>
             <div className="grid grid-cols-4 gap-3">
-              <KpiBox label="Rapprochements" value={nbRapprochements} icon={Handshake} />
-              <KpiBox label="Clients potentiels" value={nbMatching} icon={Users} sublabel="(matching)" />
-              <KpiBox label="Offres" value={nbOffres} icon={CheckCircle2} />
-              <KpiBox label="Visites" value={nbVisites} icon={Eye} />
+              <button onClick={() => onOpenMatching?.(mandat.id)} className="text-left transition-all hover:scale-[1.02] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-sage-dark rounded-xl">
+                <KpiBox label="Rapprochements" value={nbRapprochements} icon={Handshake} />
+              </button>
+              <button onClick={() => onOpenMatching?.(mandat.id)} className="text-left transition-all hover:scale-[1.02] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-sage-dark rounded-xl">
+                <KpiBox label="Clients potentiels" value={nbMatching} icon={Users} sublabel="(matching)" />
+              </button>
+              <button onClick={() => onOpenMatching?.(mandat.id)} className="text-left transition-all hover:scale-[1.02] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-sage-dark rounded-xl">
+                <KpiBox label="Offres" value={nbOffres} icon={CheckCircle2} />
+              </button>
+              <button onClick={() => onOpenMatching?.(mandat.id)} className="text-left transition-all hover:scale-[1.02] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-sage-dark rounded-xl">
+                <KpiBox label="Visites" value={nbVisites} icon={Eye} />
+              </button>
             </div>
           </div>
 
