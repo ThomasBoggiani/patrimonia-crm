@@ -150,7 +150,7 @@ export default function PlaquetteAcheteur({
   const styles = getStyles(isOffMarket);
   const palette = isOffMarket ? COLORS.offmarket : COLORS.standard;
 
-  const photos = normalizePhotos(mandat?.photos);
+  const photos = normalizePhotos(mandat);
   const photoChunks = chunkPhotos(photos, 9); // 9 photos par page (3×3)
 
   // Images de localisation : priorité aux URLs custom du mandat, sinon fallback auto via Google/IGN
