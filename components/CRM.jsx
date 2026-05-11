@@ -927,11 +927,25 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
                     )}
                   </td>
                   <td className="px-3 py-3">
-                    {parseFloat(m.rendement) > 0 ? (
-                      <span className="font-medium text-emerald-700 text-sm">{m.rendement}%</span>
-                    ) : (
-                      <span className="text-stone-400 text-sm">—</span>
-                    )}
+                    {(() => {
+                      const rP = parseFloat(m.rendement) > 0 ? m.rendement : null;
+                      const rO = parseFloat(m.rendementOptimise) > 0 ? m.rendementOptimise : null;
+                      if (!rP && !rO) return <span className="text-stone-400 text-sm">&mdash;</span>;
+                      return (
+                        <div className="flex flex-col leading-tight">
+                          {rP && (
+                            <span className="font-medium text-emerald-700 text-sm" title="Rendement pr&eacute;sent">
+                              {rP}%
+                            </span>
+                          )}
+                          {rO && (
+                            <span className="text-xs text-amber-700" title="Rendement optimis&eacute;">
+                              {rO}% <span className="text-[9px] text-stone-400">opt.</span>
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-3 py-2">
                     <CommerceBadge comm={m.commercialisation} dateSignature={m.dateSignature} />
