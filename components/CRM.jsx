@@ -1934,7 +1934,27 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
               </div>
               <DetailItem label="Prix au m²" value={mandat.prixM2 ? `${parseFloat(mandat.prixM2).toLocaleString('fr')}€` : '—'} />
               <DetailItem label="Loyers annuels" value={mandat.loyersAnnuels ? `${parseFloat(mandat.loyersAnnuels).toLocaleString('fr')}€` : '—'} />
-              <DetailItem label="Rendement" value={parseFloat(mandat.rendement) > 0 ? `${mandat.rendement}%` : '—'} highlight />
+              <DetailItem label="Rendement" value={(() => {
+                const rPresent = parseFloat(mandat.rendement) > 0 ? mandat.rendement : null;
+                const rOpt = parseFloat(mandat.rendementOptimise) > 0 ? mandat.rendementOptimise : null;
+                if (!rPresent && !rOpt) return <span>&mdash;</span>;
+                return (
+                  <div className="flex flex-col gap-0.5">
+                    {rPresent && (
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-lg font-display font-semibold text-emerald-700">{rPresent}%</span>
+                        <span className="text-[10px] text-stone-500">pr&eacute;sent</span>
+                      </div>
+                    )}
+                    {rOpt && (
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-lg font-display font-semibold text-amber-700">{rOpt}%</span>
+                        <span className="text-[10px] text-stone-500">optimis&eacute;</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()} highlight />
             </div>
             <div className="grid grid-cols-5 gap-4 mt-4 pt-4 border-t border-cream">
               <DetailItem label="Surface" value={mandat.surface ? `${mandat.surface} m²` : '—'} />
