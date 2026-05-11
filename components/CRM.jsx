@@ -1343,7 +1343,7 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
     annee_construction: 'anneeConstruction',
     prix: 'prix', prix_net_vendeur: 'prix', prix_m2: 'prixM2',
     honoraires_charge: 'honorairesCharge', honoraires_taux: 'honorairesTaux', honoraires_montant: 'honorairesMontant',     pourvoyeur_id: 'pourvoyeurId', vendeur_id: 'vendeurId',
-    loyers_annuels: 'loyersAnnuels', rendement: 'rendement',
+    loyers_annuels: 'loyersAnnuels', rendement: 'rendement', rendement_optimise: 'rendementOptimise',
     charges_annuelles: 'chargesAnnuelles', taxe_fonciere: 'taxeFonciere',
     dpe_consommation: 'dpeConsommation', dpe_emissions: 'dpeEmissions', dpe_date: 'dpeDate',
     mandat_numero: 'mandatNumero', mandat_type: 'mandatType',
@@ -1666,7 +1666,8 @@ async function handleFolderImport(event) {
                 <Field label="Loyers/an (€)"><input type="number" value={data.loyersAnnuels} onChange={e => update('loyersAnnuels', +e.target.value)} className={fieldClass('loyersAnnuels')} /></Field>
               </div>
               <div className="grid grid-cols-3 gap-3">
-                <Field label="Rendement (%)"><input type="number" step="0.01" value={data.rendement} onChange={e => update('rendement', +e.target.value)} className={fieldClass('rendement')} /></Field>
+                <Field label="Rendement présent (%)" hint="À ce jour, locataires en place"><input type="number" step="0.01" value={data.rendement} onChange={e => update('rendement', +e.target.value)} className={fieldClass('rendement')} /></Field> 
+                <Field label="Rendement optimisé (%)" hint="Potentiel après travaux ou relocation"><input type="number" step="0.01" value={data.rendementOptimise || 0} onChange={e => update('rendementOptimise', +e.target.value)} className={fieldClass('rendementOptimise')} /></Field>
                 <Field label="Honoraires (%)"><input type="number" step="0.01" value={data.honorairesTaux || 0} onChange={e => update('honorairesTaux', +e.target.value)} className={fieldClass('honorairesTaux')} /></Field>
                 <Field label="Honoraires (€)"><input type="number" value={data.honorairesMontant || 0} onChange={e => update('honorairesMontant', +e.target.value)} className={fieldClass('honorairesMontant')} /></Field>
               </div>
