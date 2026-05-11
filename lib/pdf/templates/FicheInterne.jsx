@@ -121,7 +121,7 @@ export default function FicheInterne({ mandat, conseiller, logoUrl }) {
   const styles = getStyles(isOffMarket);
   const palette = isOffMarket ? COLORS.offmarket : COLORS.standard;
 
-  const photos = normalizePhotos(mandat?.photos);
+  const photos = normalizePhotos(mandat);
   const heroPhoto = photos[0] || null;
 
   // Mandat info
