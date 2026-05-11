@@ -504,7 +504,7 @@ export default function CRM() {
 // Lignes ~365-446 dans l'original
 // ═══════════════════════════════════════════════════════════════════
 
-function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [] }) {
+function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], onNavigate }) {
   const { user, profile } = useAuth();
   const myInitials = getCurrentUserInitials(profile);
   const myFirstName = profile?.prenom || (profile?.nom ? profile.nom.split(' ')[0] : 'utilisateur');
@@ -608,6 +608,7 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [] })
           icon={Building2}
           accent="sage"
           sublabel={`Sur ${mandats.filter(m => !['Perdu', 'Acte', 'Vendu par autres'].includes(m.statut)).length} actifs au total`}
+          onClick={() => onNavigate?.('mandats')}
         />
         <KpiCard
           label="Mes tâches du jour"
@@ -615,6 +616,7 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [] })
           icon={CheckSquare}
           accent={myTodayTasks.length > 0 ? "amber" : "stone"}
           sublabel={tasksRetard.length > 0 ? `+ ${tasksRetard.length} en retard` : 'À jour ✓'}
+          onClick={() => onNavigate?.('todos')}
         />
         <KpiCard
           label="Affaires en cours"
@@ -622,6 +624,7 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [] })
           icon={Handshake}
           accent="emerald"
           sublabel="Offre → Acte"
+          onClick={() => onNavigate?.('deals')}
         />
         <KpiCard
           label="Honoraires prévisionnels"
@@ -630,6 +633,7 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [] })
           accent="sage"
           sublabel="Promesse signée"
           isAmount
+          onClick={() => onNavigate?.('deals')}
         />
       </div>
 
