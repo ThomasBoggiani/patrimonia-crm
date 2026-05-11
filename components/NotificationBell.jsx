@@ -62,6 +62,12 @@ export default function NotificationBell() {
     await markAsRead(n.id);
     setOpen(false);
 
+    // Cas sp\u00e9cial : notif matching_batch \u2192 ouvre directement la modal email drafts
+    if (n.type === 'matching_batch' && n.lien_type === 'mandat' && n.lien_id) {
+      window.dispatchEvent(new CustomEvent('crm:openEmailDrafts', { detail: { mandatId: n.lien_id } }));
+      return;
+    }
+
     if (n.lien_type === 'mandat' && n.lien_id) {
       window.dispatchEvent(new CustomEvent('crm:openMandat', { detail: { mandatId: n.lien_id } }));
     } else if (n.lien_type === 'client' && n.lien_id) {
