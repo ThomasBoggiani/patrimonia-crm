@@ -23,6 +23,7 @@ import DocumentsModal from './DocumentsModal';
 import AgendaTab from './AgendaTab';
 import TeamTab from './TeamTab';
 import MyProfile from './MyProfile';
+import AIAnalyzeModal from './AIAnalyzeModal';
 import EmailDraftsModal from './EmailDraftsModal';
 import NotificationBell from './NotificationBell';
 import PhotoUploader from './PhotoUploader';
