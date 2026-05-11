@@ -2071,6 +2071,7 @@ function ClientsTab({ clients, reload, mandats, deals, interactions, pendingClie
   const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [filterTypo, setFilterTypo] = useState('Tous');
+  const [filterMarche, setFilterMarche] = useState('Tous'); // Tous | b2b | b2c
   const [editingClient, setEditingClient] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
@@ -2102,7 +2103,23 @@ function ClientsTab({ clients, reload, mandats, deals, interactions, pendingClie
 
   const filtered = clients.filter(c => {
     if (search && !`${c.prenom || ''} ${c.nom} ${c.societe || ''}`.toLowerCase().includes(search.toLowerCase())) return false;
-    if (filterTypo !== 'Tous' && c.typologie !== filterTypo) return false;
+
+    // Filtre marché (b2b/b2c) — utilise client.marche, sinon déduit de la typologie
+    if (filterMarche !== 'Tous') {
+      const cMarche = c.marche || getMarcheFromTypologieClient(c.typologie);
+      if (cMarche !== filterMarche) return false;
+    }
+
+    // Filtre typologie / sous-typologie (format "Typologie" ou "Typologie · Sous-typologie")
+    if (filterTypo !== 'Tous') {
+      if (filterTypo.includes(' · ')) {
+        const [t, st] = filterTypo.split(' · ');
+        if (c.typologie !== t) return false;
+        if (c.sous_typologie !== st) return false;
+      } else {
+        if (c.typologie !== filterTypo) return false;
+      }
+    }
     return true;
   });
 
@@ -2168,9 +2185,45 @@ function ClientsTab({ clients, reload, mandats, deals, interactions, pendingClie
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher..." 
             className="w-full pl-10 pr-4 py-2.5 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" />
         </div>
+        {/* Toggle marché B2B / B2C */}
+        <div className="flex bg-white border border-stone-200 rounded-lg overflow-hidden">
+          <button
+            onClick={() => setFilterMarche('Tous')}
+            className={`px-3 py-2.5 text-xs font-medium ${filterMarche === 'Tous' ? 'bg-ink-deep text-white' : 'text-stone-600 hover:bg-stone-50'}`}
+          >
+            Tous
+          </button>
+          <button
+            onClick={() => setFilterMarche('b2b')}
+            className={`px-3 py-2.5 text-xs font-medium border-l border-stone-200 ${filterMarche === 'b2b' ? 'bg-sage-100 text-sage-darker' : 'text-stone-600 hover:bg-stone-50'}`}
+            title="Investissement (B2B)"
+          >
+            B2B
+          </button>
+          <button
+            onClick={() => setFilterMarche('b2c')}
+            className={`px-3 py-2.5 text-xs font-medium border-l border-stone-200 ${filterMarche === 'b2c' ? 'bg-blue-100 text-blue-900' : 'text-stone-600 hover:bg-stone-50'}`}
+            title="Habitation (B2C)"
+          >
+            B2C
+          </button>
+        </div>
+
+        {/* Select typologie avec optgroups */}
         <select value={filterTypo} onChange={e => setFilterTypo(e.target.value)} className="px-4 py-2.5 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
-          <option>Tous</option>
-          {TYPOLOGIES_CLIENT.map(t => <option key={t}>{t}</option>)}
+          <option value="Tous">Toutes typologies</option>
+          <optgroup label="Investissement (B2B)">
+            <option value="Foncières">Foncières (toutes)</option>
+            <option value="Foncières · Privées">Foncières · Privées</option>
+            <option value="Foncières · Publiques">Foncières · Publiques</option>
+            <option value="Marchands de biens">Marchands de biens</option>
+            <option value="Fonds">Fonds</option>
+            <option value="Promoteurs">Promoteurs</option>
+            <option value="Family Office">Family Office</option>
+          </optgroup>
+          <optgroup label="Habitation (B2C)">
+            <option value="Particuliers">Particuliers</option>
+          </optgroup>
         </select>
       </div>
 
@@ -2189,7 +2242,24 @@ function ClientsTab({ clients, reload, mandats, deals, interactions, pendingClie
                 <MaturiteBadge maturite={c.maturite} />
               </div>
               <div className="flex flex-wrap gap-1.5 mb-3">
-                <span className="text-xs px-2 py-0.5 bg-cream-100 text-ink rounded-full">{c.typologie}</span>
+                {(() => {
+                  const cMarche = c.marche || getMarcheFromTypologieClient(c.typologie);
+                  const cSousTypo = c.sous_typologie;
+                  const typoLabel = cSousTypo ? `${c.typologie} \u00b7 ${cSousTypo}` : c.typologie;
+                  const filterValue = cSousTypo ? `${c.typologie} \u00b7 ${cSousTypo}` : c.typologie;
+                  const badgeClass = cMarche === 'b2c'
+                    ? 'bg-blue-50 text-blue-800 hover:bg-blue-100'
+                    : 'bg-sage-50 text-sage-darker hover:bg-sage-100';
+                  return (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setFilterTypo(filterValue); }}
+                      className={`text-xs px-2 py-0.5 rounded-full transition-colors ${badgeClass}`}
+                      title={`Filtrer par ${typoLabel}`}
+                    >
+                      {typoLabel}
+                    </button>
+                  );
+                })()}
                 {(c.zones || []).slice(0, 2).map(z => <span key={z} className="text-xs px-2 py-0.5 bg-sage-50 text-sage-dark rounded-full">{z}</span>)}
               </div>
               <div className="grid grid-cols-3 gap-3 pt-3 border-t border-cream">
