@@ -7,7 +7,16 @@ export default function PhotoLightbox({ photos = [], initialIndex = 0, mandatNom
   const [currentIdx, setCurrentIdx] = useState(initialIndex);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  const total = photos.length;
+  // Normalise : accepte tableau de strings OU d'objets {url}
+  const photoUrls = (Array.isArray(photos) ? photos : [])
+    .map(p => {
+      if (typeof p === 'string') return p;
+      if (p && typeof p === 'object') return p.url || p.src || null;
+      return null;
+    })
+    .filter(Boolean);
+
+  const total = photoUrls.length;
 
   // Navigation par clavier (← → Esc)
   useEffect(() => {
@@ -33,7 +42,7 @@ export default function PhotoLightbox({ photos = [], initialIndex = 0, mandatNom
 
   if (total === 0) return null;
 
-  const currentUrl = photos[currentIdx];
+  const currentUrl = photoUrls[currentIdx];
 
   return (
     <div className="fixed inset-0 z-[60] bg-black/95 flex flex-col" onClick={onClose}>
@@ -104,13 +113,13 @@ export default function PhotoLightbox({ photos = [], initialIndex = 0, mandatNom
       {!isFullscreen && total > 1 && (
         <div className="px-6 py-3 bg-black/60 overflow-x-auto" onClick={(e) => e.stopPropagation()}>
           <div className="flex gap-2 justify-center">
-            {photos.map((p, idx) => (
+            {photoUrls.map((url, idx) => (
               <button
-                key={p + idx}
+                key={url + idx}
                 onClick={() => setCurrentIdx(idx)}
                 className={`flex-shrink-0 w-16 h-16 rounded overflow-hidden border-2 transition-all ${idx === currentIdx ? 'border-white opacity-100 scale-110' : 'border-transparent opacity-60 hover:opacity-100'}`}
               >
-                <img src={p} alt="" className="w-full h-full object-cover" />
+                <img src={url} alt="" className="w-full h-full object-cover" />
               </button>
             ))}
           </div>
