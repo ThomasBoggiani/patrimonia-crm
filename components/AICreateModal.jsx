@@ -238,10 +238,11 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
           'surface', 'nb_pieces', 'nb_chambres', 'etage', 'annee_construction',
           'prix', 'prix_net_vendeur', 'prix_m2',
           'honoraires_charge', 'honoraires_taux', 'honoraires_montant',
-          'loyers_annuels', 'rendement', 'charges_annuelles', 'taxe_fonciere',
+          'loyers_annuels', 'rendement', 'rendement_optimise', 'charges_annuelles', 'taxe_fonciere',
           'dpe_consommation', 'dpe_emissions', 'dpe_date',
           'mandat_numero', 'mandat_type', 'mandat_date_echeance',
           'nb_lots', 'description', 'commercialisation', 'statut'
+        ];
         ];
         const filteredMandat = {};
         for (const k of ALLOWED_MANDAT_COLUMNS) {
