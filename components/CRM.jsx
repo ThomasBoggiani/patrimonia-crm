@@ -73,6 +73,27 @@ import {
 // ═══ Helpers et constantes : voir lib/crm-constants.js ═══
 
 // === COMPOSANT PRINCIPAL ===
+// Helper : déclenche le matching auto batch en fire-and-forget après save d'un mandat ou client
+async function triggerMatchingBatch({ mandatId, clientId }) {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return;
+    // Fire-and-forget : on n'attend pas la réponse
+    fetch('/api/matching-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, mandatId, clientId }),
+    }).then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (data?.notifsCreated > 0) {
+        console.log(`[matching-batch] ${data.notifsCreated} notif(s) créée(s) pour ${data.ownersNotified?.join(', ')}`);
+      }
+    }).catch(e => console.warn('[matching-batch] échec:', e.message));
+  } catch (e) {
+    console.warn('[matching-batch] init failed:', e.message);
+  }
+}
 export default function CRM() {
   const { profile, signOut } = useAuth();
   const [showAICreate, setShowAICreate] = useState(false);
@@ -714,6 +735,8 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
     setEditingMandat(null);
     setShowNew(false);
     reload();
+    // Trigger matching auto batch (fire-and-forget)
+    if (mandatId) triggerMatchingBatch({ mandatId });
   };
 
   const handleDelete = async (id) => {
@@ -2251,17 +2274,21 @@ function ClientsTab({ clients, reload, mandats, deals, interactions, pendingClie
     const snakeData = toSnake(client);
     delete snakeData.created_at;
     delete snakeData.updated_at;
+    let savedClientId = client.id;
     if (client.id) {
       snakeData.updated_by = user?.id;
       await supabase.from('clients').update(snakeData).eq('id', client.id);
     } else {
       delete snakeData.id;
       snakeData.created_by = user?.id;
-      await supabase.from('clients').insert(snakeData);
+      const { data: created } = await supabase.from('clients').insert(snakeData).select().single();
+      if (created) savedClientId = created.id;
     }
     setEditingClient(null);
     setShowNew(false);
     reload();
+    // Trigger matching auto batch (fire-and-forget)
+    if (savedClientId) triggerMatchingBatch({ clientId: savedClientId });
   };
 
   if (selectedClient) {
