@@ -351,7 +351,7 @@ export default function CRM() {
               const Icon = tab.icon;
               const active = activeTab === tab.id;
               return (
-                <button key={tab.id} onClick={() => { setActiveTab(tab.id); setTabKey(k => k + 1); setSidebarOpen(false); }}
+                <button key={tab.id} onClick={() => { setActiveTabWithHistory(tab.id); setTabKey(k => k + 1); }}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all mb-1 ${
                     active 
                       ? 'bg-sage-50 text-sage-darker font-medium border border-sage-light' 
@@ -373,7 +373,7 @@ export default function CRM() {
             <div className="p-4">
               <div className="flex items-center gap-3 mb-2">
                 <button
-                  onClick={() => { setActiveTab('myprofile'); setTabKey(k => k + 1); setSidebarOpen(false); }}
+                  onClick={() => { setActiveTabWithHistory('myprofile'); setTabKey(k => k + 1); setSidebarOpen(false); }}
                   className="flex items-center gap-3 flex-1 min-w-0 text-left rounded-lg p-1 -m-1 hover:bg-cream-100 transition-colors group"
                   title="Voir ma fiche"
                 >
@@ -408,8 +408,7 @@ export default function CRM() {
             {activeTab === 'matching' && <MatchingTab mandats={mandats} clients={clients} deals={deals} reload={loadAll} initialMandatId={pendingMatchingMandatId} onInitialMandatConsumed={() => setPendingMatchingMandatId(null)} />}
             {activeTab === 'todos' && <TodosTab todos={todos} reload={loadAll} mandats={mandats} clients={clients} deals={deals} allProfiles={allProfiles} />}
             {activeTab === 'direction' && <DashboardDirection mandats={mandats} deals={deals} clients={clients} todos={todos} allProfiles={allProfiles} />}
-            {activeTab === 'myprofile' && <MyProfile mandats={mandats} todos={todos} clients={clients} allProfiles={allProfiles} RemunerationComponent={RemunerationTab} onNavigate={(t) => { setActiveTab(t); setTabKey(k => k + 1); }} />}
-            {activeTab === 'agenda' && <AgendaTab />}
+            {activeTab === 'myprofile' && <MyProfile mandats={mandats} todos={todos} clients={clients} allProfiles={allProfiles} RemunerationComponent={RemunerationTab={RemunerationTab} onNavigate={(t) => { setActiveTabWithHistory(t); setTabKey(k => k + 1); }}
             {activeTab === 'integrations' && <IntegrationsTab />}
             {activeTab === 'team' && <TeamTab />}
             {activeTab === 'annonces' && <AnnoncesTab annonces={annonces} reload={loadAll} mandats={mandats} />}
