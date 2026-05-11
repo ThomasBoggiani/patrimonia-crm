@@ -34,7 +34,7 @@ import QuestionnaireResponseModal from './QuestionnaireResponseModal';
 import ClientMatches from './ClientMatches';
 import ContactsImportModal from './ContactsImportModal';
 import PdfExportButtons from '@/components/PdfExportButtons';
-import { PhotosModal, VisiteModal, MandantModal } from './MandatModals';
+import { VisiteModal, MandantModal } from './MandatModals';
 import CascadeSelect from './CascadeSelect';
 import MediasModal from './MediasModal';
 import {   formatPrix,   formatPrixCompact,   toCamel,   toSnake,   isManager,   getDPEClass,   getDPEColor,   STATUTS_MANDAT,   STATUTS_DEAL,   TYPES_ACTIF,   TYPES_ACTIF_B2B_TREE,   TYPES_HABITATION_B2C,   TYPOLOGIES_CLIENT,   ZONES,   NB_PIECES,   PORTAILS,   STATUTS_PORTAIL,   getSousTypesForFamille,   familleHasSousTypes,   getMarcheFromTypologieClient,   getSousTypologiesForClient,   clientHasSousTypologie,   groupTypologiesRecherchees,   getCoverPhoto,   getPhotos, } from '@/lib/crm-constants';
@@ -2057,9 +2057,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
       </div>
 
       {/* ═══ MODALS ═══ */}
-      {openModal === 'photos' && (
-        <PhotosModal mandat={mandat} onClose={() => setOpenModal(null)} onUpdate={reload} />
-      )}
       {openModal === 'visite' && (
         <VisiteModal mandat={mandat} onClose={() => setOpenModal(null)} onUpdate={reload} />
       )}
