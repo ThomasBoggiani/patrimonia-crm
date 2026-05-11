@@ -97,6 +97,7 @@ FORMAT DE RÉPONSE (JSON STRICT, pas de markdown)
     "honoraires_montant": 19000,
     "loyers_annuels": 12000,
     "rendement": 4.5,
+    "rendement_optimise": 6.2,
     "charges_annuelles": 7000,
     "taxe_fonciere": 1500,
     "dpe_consommation": 208,
@@ -189,6 +190,7 @@ RÈGLES :
 - Si type='mandat', n'inclus PAS la clé "client" (et vice-versa).
 - Si type='both', inclus les 2.
 - Si type='unknown', n'inclus ni "mandat" ni "client".
+- RENDEMENTS MANDAT : si la source mentionne UN seul rendement, utilise "rendement" (= rendement présent à ce jour avec locataires en place). Si la source mentionne aussi un rendement "potentiel", "projeté", "après travaux", "après re-location", "optimisé" ou un rendement plus élevé attendu plus tard, mets-le dans "rendement_optimise". Ne dupliquer les 2 que si la source distingue clairement les 2 valeurs.
 - TÉLÉPHONE CLIENT : si la source mentionne plusieurs numéros (fixe + mobile, ou pro + perso), TOUJOURS prendre le mobile/portable en priorité dans le champ "tel". Ignore le fixe. Un numéro mobile français commence par 06, 07, +336, +337.
 - Pas de préambule, juste le JSON.`;
 
