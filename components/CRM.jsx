@@ -2010,15 +2010,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
         <button onClick={() => onOpenEmailDrafts?.(mandat.id)} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-sage-50 border border-sage-light text-sage-darker rounded-lg hover:bg-sage-100">
           <Mail className="w-3.5 h-3.5" /> Pr&eacute;parer mails clients
         </button>
-        {(() => {
-          // Compte uniquement videos + visites virtuelles + plans (pas les photos, qui ont leur propre bouton)
-          const nonPhotoMedias = (mandat.medias || []).filter(m => m && m.type !== 'photo');
-          return (
-            <button onClick={() => setOpenModal('medias')} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
-              <Video className="w-3.5 h-3.5" /> M&eacute;dias {nonPhotoMedias.length > 0 && <span className="text-[10px] bg-sage-100 text-sage-dark px-1.5 py-0.5 rounded-full">{nonPhotoMedias.length}</span>}
-            </button>
-          );
-        })()}
 
         <div className="flex-1" />
 
