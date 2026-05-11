@@ -25,6 +25,7 @@ import TeamTab from './TeamTab';
 import MyProfile from './MyProfile';
 import AIAnalyzeModal from './AIAnalyzeModal';
 import EmailDraftsModal from './EmailDraftsModal';
+import PhotoLightbox from './PhotoLightbox';
 import NotificationBell from './NotificationBell';
 import PhotoUploader from './PhotoUploader';
 import IntegrationsTab from './IntegrationsTab';
@@ -1904,6 +1905,7 @@ function NewClientMiniForm({ prefillName, onSave, onCancel }) {
 function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, annonces, allProfiles = [], onOpenMatching, onOpenEmailDrafts }) {
   const [openModal, setOpenModal] = useState(null); // 'photos' | 'visite' | 'mandant' | null
   const [aiAnalyzeOpen, setAiAnalyzeOpen] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false); 
   const mandatDeals = deals.filter(d => d.mandatId === mandat.id);
   const alerts = mandat.alerts || [];
   const highlights = mandat.highlights || [];
@@ -1956,11 +1958,14 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           const mandatPhotos = getPhotos(mandat);
           const cover = getCoverPhoto(mandat);
           return mandatPhotos.length > 0 ? (
-            <button onClick={() => setOpenModal('medias')} className="flex-shrink-0 w-48 h-32 rounded-lg overflow-hidden bg-cream-100 border border-cream-dark hover:opacity-90 relative">
+            <button onClick={() => setLightboxOpen(true)} className="flex-shrink-0 w-48 h-32 rounded-lg overflow-hidden bg-cream-100 border border-cream-dark hover:opacity-90 relative group">
               <img src={cover} alt={mandat.nom} className="w-full h-full object-cover" />
               {mandatPhotos.length > 1 && (
                 <div className="absolute bottom-1.5 right-1.5 bg-stone-900/70 text-white text-[10px] px-1.5 py-0.5 rounded-full">+{mandatPhotos.length - 1}</div>
               )}
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="text-white text-xs font-medium bg-black/50 px-2 py-1 rounded">Voir la galerie</span>
+              </div>
             </button>
           ) : (
             <button onClick={() => setOpenModal('medias')} className="flex-shrink-0 w-48 h-32 rounded-lg bg-cream-100 border border-dashed border-cream-dark hover:bg-cream-200 flex flex-col items-center justify-center text-stone-400 text-xs gap-1">
@@ -2172,7 +2177,14 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
         onClose={() => setAiAnalyzeOpen(false)}
         onCompleted={() => reload?.()}
       />
-
+      {lightboxOpen && (
+        <PhotoLightbox
+          photos={getPhotos(mandat)}
+          initialIndex={0}
+          mandatNom={mandat.nom || mandat.adresse}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
     </div>
   );
 }
