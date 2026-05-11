@@ -868,17 +868,35 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
                     </div>
                   </td>
                   <td className="px-3 py-3 text-sm text-stone-700">
-                    {m.type ? (() => {
+                    {(() => {
+                      // Vocabulaire canonique : familles + sous-types B2B et types B2C
+                      const FAMILLES_B2B = Object.keys(TYPES_ACTIF_B2B_TREE);
+                      const SOUS_TYPES_B2B = Object.values(TYPES_ACTIF_B2B_TREE).flat();
+                      const TYPES_B2C = TYPES_HABITATION_B2C;
+                      const isCanonicalType = (v) => v && (FAMILLES_B2B.includes(v) || SOUS_TYPES_B2B.includes(v) || TYPES_B2C.includes(v));
+                      const isCanonicalSousType = (v) => v && SOUS_TYPES_B2B.includes(v);
+
+                      // On ne garde QUE les valeurs canoniques, on ignore le texte libre legacy
+                      const cleanType = isCanonicalType(m.type) ? m.type : null;
+                      const cleanSousType = isCanonicalSousType(m.sousType) ? m.sousType : null;
+
+                      if (!cleanType && !cleanSousType) {
+                        return <span className="text-stone-400">&mdash;</span>;
+                      }
+
+                      // Détermine le marché
                       let mMarche = m.marche;
                       if (!mMarche) {
-                        if (TYPES_HABITATION_B2C.includes(m.type)) mMarche = 'b2c';
+                        if (TYPES_B2C.includes(cleanType)) mMarche = 'b2c';
                         else mMarche = 'b2b';
                       }
-                      const typeLabel = m.sousType ? `${m.type} \u00b7 ${m.sousType}` : m.type;
-                      const filterValue = m.sousType || m.type;
+
+                      const typeLabel = cleanSousType ? `${cleanType} \u00b7 ${cleanSousType}` : cleanType;
+                      const filterValue = cleanSousType || cleanType;
                       const badgeClass = mMarche === 'b2c'
                         ? 'bg-blue-50 text-blue-800 hover:bg-blue-100'
                         : 'bg-sage-50 text-sage-darker hover:bg-sage-100';
+
                       return (
                         <button
                           onClick={(e) => { e.stopPropagation(); setFilterType(filterValue); }}
@@ -888,7 +906,7 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
                           {typeLabel}
                         </button>
                       );
-                    })() : <span className="text-stone-400">—</span>}
+                    })()}
                   </td>
                   <td className="px-3 py-3">
                     <div className="font-medium text-stone-900 text-sm">{formatPrix(getPriceTTC(m))}</div>
