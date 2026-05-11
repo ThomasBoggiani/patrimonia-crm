@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   List, LayoutGrid, Search, Trash2, Sparkles, CheckCircle2, Plus
 } from 'lucide-react';
