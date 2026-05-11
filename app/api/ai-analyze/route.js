@@ -327,12 +327,28 @@ export async function POST(request) {
       }
     }
 
-    // Photos directement attachées au mandat (mandat.photos JSON)
-    if (Array.isArray(mandat.photos) && mandat.photos.length > 0) {
-      // On en charge max 5 pour ne pas exploser le contexte
-      const photoUrls = mandat.photos.slice(0, 5).map(p => (typeof p === 'string' ? p : p?.url)).filter(Boolean);
-      userContent.push({ type: 'text', text: `\nLe mandat a aussi ${mandat.photos.length} photo(s) en attachement direct.\n` });
+    // Photos directement attachées au mandat (nouveau format `medias`, fallback legacy `photos`)
+    const mandatPhotos = Array.isArray(mandat.medias)
+      ? mandat.medias.filter(m => m && m.type === 'photo')
+      : (Array.isArray(mandat.photos) ? mandat.photos.map(p => typeof p === 'string' ? { url: p } : p).filter(p => p && p.url) : []);
+
+    if (mandatPhotos.length > 0) {
+      userContent.push({ type: 'text', text: `\nLe mandat a aussi ${mandatPhotos.length} photo(s) en attachement direct.\n` });
       // On ne charge pas les photos URL (signed) ici pour ne pas multiplier les tokens — l'IA aura déjà les docs
+    }
+
+    // Plans, vidéos et visites virtuelles (pour info à l'IA, pas téléchargés)
+    if (Array.isArray(mandat.medias)) {
+      const plans = mandat.medias.filter(m => m && m.type === 'plan');
+      const videos = mandat.medias.filter(m => m && m.type === 'video');
+      const tours = mandat.medias.filter(m => m && (m.type === 'virtual_tour' || m.type === 'visite_virtuelle'));
+      const extras = [];
+      if (plans.length > 0) extras.push(`${plans.length} plan(s)`);
+      if (videos.length > 0) extras.push(`${videos.length} vid\u00e9o(s)`);
+      if (tours.length > 0) extras.push(`${tours.length} visite(s) virtuelle(s)`);
+      if (extras.length > 0) {
+        userContent.push({ type: 'text', text: `Le mandat a aussi : ${extras.join(', ')}.\n` });
+      }
     }
 
     // ─── 6. Appel IA ───
