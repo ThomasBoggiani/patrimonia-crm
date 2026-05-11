@@ -1666,7 +1666,14 @@ async function handleFolderImport(event) {
                 <Field label="Loyers/an (€)"><input type="number" value={data.loyersAnnuels} onChange={e => update('loyersAnnuels', +e.target.value)} className={fieldClass('loyersAnnuels')} /></Field>
               </div>
               <div className="grid grid-cols-3 gap-3">
-                <Field label="Rendement présent (%)" hint="À ce jour, locataires en place"><input type="number" step="0.01" value={data.rendement} onChange={e => update('rendement', +e.target.value)} className={fieldClass('rendement')} /></Field> 
+                <Field label="Rendement présent (%)">
+  <input type="number" step="0.01" value={data.rendement} onChange={e => update('rendement', +e.target.value)} className={fieldClass('rendement')} />
+  <span className="block text-[10px] text-stone-400 mt-1">&Agrave; ce jour, locataires en place</span>
+</Field>
+<Field label="Rendement optimis&eacute; (%)">
+  <input type="number" step="0.01" value={data.rendementOptimise || 0} onChange={e => update('rendementOptimise', +e.target.value)} className={fieldClass('rendementOptimise')} />
+  <span className="block text-[10px] text-stone-400 mt-1">Potentiel apr&egrave;s travaux ou relocation</span>
+</Field>
                 <Field label="Rendement optimisé (%)" hint="Potentiel après travaux ou relocation"><input type="number" step="0.01" value={data.rendementOptimise || 0} onChange={e => update('rendementOptimise', +e.target.value)} className={fieldClass('rendementOptimise')} /></Field>
                 <Field label="Honoraires (%)"><input type="number" step="0.01" value={data.honorairesTaux || 0} onChange={e => update('honorairesTaux', +e.target.value)} className={fieldClass('honorairesTaux')} /></Field>
                 <Field label="Honoraires (€)"><input type="number" value={data.honorairesMontant || 0} onChange={e => update('honorairesMontant', +e.target.value)} className={fieldClass('honorairesMontant')} /></Field>
