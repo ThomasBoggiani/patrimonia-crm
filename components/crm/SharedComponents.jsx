@@ -33,7 +33,7 @@ export function DetailItem({ label, value, highlight }) {
 // ─────────────────────────────────────────────────────────
 // KpiCard : carte KPI personnalisée pour Dashboard
 // ─────────────────────────────────────────────────────────
-export function KpiCard({ label, value, icon: Icon, accent, sublabel, isAmount }) {
+export function KpiCard({ label, value, icon: Icon, accent, sublabel, isAmount, onClick }) {
   const accentColors = {
     sage: 'bg-sage-50 text-sage-dark border-sage-light',
     stone: 'bg-stone-50 text-stone-700 border-stone-200',
@@ -41,8 +41,17 @@ export function KpiCard({ label, value, icon: Icon, accent, sublabel, isAmount }
     amber: 'bg-amber-50 text-amber-700 border-amber-200',
     red: 'bg-red-50 text-red-700 border-red-100',
   };
+  const isClickable = typeof onClick === 'function';
+  const interactiveClass = isClickable
+    ? 'cursor-pointer hover:shadow-luxe-hover hover:-translate-y-0.5 transition-all focus:outline-none focus:ring-2 focus:ring-sage-dark'
+    : '';
+  const Tag = isClickable ? 'button' : 'div';
   return (
-    <div className="bg-white rounded-xl p-5 shadow-luxe border border-cream-dark">
+    <Tag
+      type={isClickable ? 'button' : undefined}
+      onClick={onClick}
+      className={`bg-white rounded-xl p-5 shadow-luxe border border-cream-dark text-left w-full block ${interactiveClass}`}
+    >
       <div className="flex items-start justify-between mb-3">
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center border ${accentColors[accent] || accentColors.stone}`}>
           <Icon className="w-5 h-5" />
@@ -51,7 +60,7 @@ export function KpiCard({ label, value, icon: Icon, accent, sublabel, isAmount }
       <div className="text-xs uppercase tracking-wide text-stone-500 mb-1">{label}</div>
       <div className={`font-display font-semibold text-stone-900 ${isAmount ? 'text-2xl' : 'text-3xl'}`}>{value}</div>
       {sublabel && <div className="text-xs text-stone-500 mt-1">{sublabel}</div>}
-    </div>
+    </Tag>
   );
 }
 
