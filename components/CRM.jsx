@@ -137,11 +137,6 @@ export default function CRM() {
     return () => window.removeEventListener('crm:openEmailDrafts', handleOpenEmailDrafts);
   }, []);
 
-  // Modal EmailDrafts : ouverture depuis fiche mandat ou notif
-  const [emailDraftsState, setEmailDraftsState] = useState(null); // { mandatId, clientIds: [] } | null
-  function openEmailDrafts(mandatId, clientIds = []) {
-    setEmailDraftsState({ mandatId, clientIds });
-  }
 
   // Écoute les events depuis NotificationBell (clic sur une notif)
   useEffect(() => {
