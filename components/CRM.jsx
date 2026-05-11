@@ -116,6 +116,18 @@ export default function CRM() {
     setActiveTab('mandats');
     setTabKey(k => k + 1);
   }
+
+  // Écoute les events depuis NotificationBell (clic sur une notif)
+  useEffect(() => {
+    const handleOpenMandat = (e) => navigateToMandat(e.detail?.mandatId);
+    const handleOpenClient = (e) => navigateToClient(e.detail?.clientId);
+    window.addEventListener('crm:openMandat', handleOpenMandat);
+    window.addEventListener('crm:openClient', handleOpenClient);
+    return () => {
+      window.removeEventListener('crm:openMandat', handleOpenMandat);
+      window.removeEventListener('crm:openClient', handleOpenClient);
+    };
+  }, []);
   const [loading, setLoading] = useState(true);
   const [importToast, setImportToast] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
