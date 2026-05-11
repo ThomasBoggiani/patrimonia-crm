@@ -688,6 +688,17 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
   const [selectedMandat, setSelectedMandat] = useState(null);
   const [sellingMandat, setSellingMandat] = useState(null);
 
+  // Deep-link : ouvre automatiquement la fiche du mandat si pendingMandatId est passé en prop
+  useEffect(() => {
+    if (pendingMandatId && Array.isArray(mandats) && mandats.length > 0) {
+      const mandat = mandats.find(m => m.id === pendingMandatId);
+      if (mandat) {
+        setSelectedMandat(mandat);
+        onPendingMandatConsumed?.();
+      }
+    }
+  }, [pendingMandatId, mandats]);
+
   const filtered = mandats.filter(m => {
     if (search && !m.nom.toLowerCase().includes(search.toLowerCase()) && !(m.adresse || '').toLowerCase().includes(search.toLowerCase())) return false;
     if (filterComm !== 'Tous' && m.commercialisation !== filterComm) return false;
