@@ -110,6 +110,7 @@ export default function CRM() {
     setPendingClientToOpen(clientId);
     setActiveTab('clients');
     setTabKey(k => k + 1);
+    pushHistory({ tab: 'clients', open: clientId });
   }
 
   // Helper : naviguer vers la fiche d'un mandat depuis n'importe où
@@ -117,7 +118,54 @@ export default function CRM() {
     setPendingMandatToOpen(mandatId);
     setActiveTab('mandats');
     setTabKey(k => k + 1);
+    pushHistory({ tab: 'mandats', open: mandatId });
   }
+
+  // ─── Historique navigateur : swipe \u00e0 2 doigts ou bouton retour ─────────
+  // Push une entr\u00e9e dans l'historique \u00e0 chaque changement d'onglet/fiche
+  function pushHistory(state) {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (state.tab) url.searchParams.set('tab', state.tab); else url.searchParams.delete('tab');
+    if (state.open) url.searchParams.set('open', state.open); else url.searchParams.delete('open');
+    window.history.pushState(state, '', url.toString());
+  }
+
+  // Wrap setActiveTab pour qu'il pousse aussi dans l'historique (sauf si appel\u00e9 depuis popstate)
+  const setActiveTabWithHistory = (newTab) => {
+    setActiveTab(newTab);
+    pushHistory({ tab: newTab });
+  };
+
+  // \u00c9coute le bouton retour navigateur / swipe 2 doigts
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handlePopState = (e) => {
+      const state = e.state || {};
+      const url = new URL(window.location.href);
+      const tab = state.tab || url.searchParams.get('tab') || 'dashboard';
+      const open = state.open || url.searchParams.get('open') || null;
+
+      setActiveTab(tab);
+      if (open && tab === 'mandats') setPendingMandatToOpen(open);
+      else if (open && tab === 'clients') setPendingClientToOpen(open);
+      else { setPendingMandatToOpen(null); setPendingClientToOpen(null); }
+      setTabKey(k => k + 1);
+    };
+    window.addEventListener('popstate', handlePopState);
+
+    // Au chargement initial : lit les query params pour deep-link
+    const url = new URL(window.location.href);
+    const initialTab = url.searchParams.get('tab');
+    const initialOpen = url.searchParams.get('open');
+    if (initialTab) {
+      setActiveTab(initialTab);
+      if (initialOpen && initialTab === 'mandats') setPendingMandatToOpen(initialOpen);
+      else if (initialOpen && initialTab === 'clients') setPendingClientToOpen(initialOpen);
+    }
+
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Helper : naviguer vers l'onglet Matching auto avec un mandat pré-sélectionné
   const [pendingMatchingMandatId, setPendingMatchingMandatId] = useState(null);
