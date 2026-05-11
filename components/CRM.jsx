@@ -1649,34 +1649,35 @@ async function handleFolderImport(event) {
             <h3 className={sectionTitleClass}>💰 Mandat & Finances</h3>
             <div className="space-y-3">
               <div className="grid grid-cols-3 gap-3">
-                <Field label="N° mandat"><input type="text" value={data.mandatNumero || ''} onChange={e => update('mandatNumero', e.target.value)} className={fieldClass('mandatNumero')} /></Field>
+                <Field label="N&deg; mandat"><input type="text" value={data.mandatNumero || ''} onChange={e => update('mandatNumero', e.target.value)} className={fieldClass('mandatNumero')} /></Field>
                 <Field label="Type de mandat">
                   <select value={data.mandatType || ''} onChange={e => update('mandatType', e.target.value)} className={fieldClass('mandatType')}>
-                    <option value="">—</option>
+                    <option value="">&mdash;</option>
                     <option>EXCLUSIF</option>
                     <option>SEMI EXCLUSIF</option>
                     <option>SIMPLE</option>
                   </select>
                 </Field>
-                <Field label="Échéance"><input type="date" value={data.mandatDateEcheance || ''} onChange={e => update('mandatDateEcheance', e.target.value)} className={fieldClass('mandatDateEcheance')} /></Field>
+                <Field label="&Eacute;ch&eacute;ance"><input type="date" value={data.mandatDateEcheance || ''} onChange={e => update('mandatDateEcheance', e.target.value)} className={fieldClass('mandatDateEcheance')} /></Field>
               </div>
               <div className="grid grid-cols-3 gap-3">
-                <Field label="Prix annoncé TTC (€)"><input type="number" value={data.prix} onChange={e => update('prix', +e.target.value)} className={fieldClass('prix')} placeholder="Honoraires inclus" /></Field>
-                <Field label="Prix/m² (€)"><input type="number" value={data.prixM2} onChange={e => update('prixM2', +e.target.value)} className={fieldClass('prixM2')} /></Field>
-                <Field label="Loyers/an (€)"><input type="number" value={data.loyersAnnuels} onChange={e => update('loyersAnnuels', +e.target.value)} className={fieldClass('loyersAnnuels')} /></Field>
+                <Field label="Prix annonc&eacute; TTC (&euro;)"><input type="number" value={data.prix} onChange={e => update('prix', +e.target.value)} className={fieldClass('prix')} placeholder="Honoraires inclus" /></Field>
+                <Field label="Prix/m&sup2; (&euro;)"><input type="number" value={data.prixM2} onChange={e => update('prixM2', +e.target.value)} className={fieldClass('prixM2')} /></Field>
+                <Field label="Loyers/an (&euro;)"><input type="number" value={data.loyersAnnuels} onChange={e => update('loyersAnnuels', +e.target.value)} className={fieldClass('loyersAnnuels')} /></Field>
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <Field label="Rendement présent (%)">
-  <input type="number" step="0.01" value={data.rendement} onChange={e => update('rendement', +e.target.value)} className={fieldClass('rendement')} />
-  <span className="block text-[10px] text-stone-400 mt-1">&Agrave; ce jour, locataires en place</span>
-</Field>
-<Field label="Rendement optimis&eacute; (%)">
-  <input type="number" step="0.01" value={data.rendementOptimise || 0} onChange={e => update('rendementOptimise', +e.target.value)} className={fieldClass('rendementOptimise')} />
-  <span className="block text-[10px] text-stone-400 mt-1">Potentiel apr&egrave;s travaux ou relocation</span>
-</Field>
-                <Field label="Rendement optimisé (%)" hint="Potentiel après travaux ou relocation"><input type="number" step="0.01" value={data.rendementOptimise || 0} onChange={e => update('rendementOptimise', +e.target.value)} className={fieldClass('rendementOptimise')} /></Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Rendement pr&eacute;sent (%)">
+                  <input type="number" step="0.01" value={data.rendement} onChange={e => update('rendement', +e.target.value)} className={fieldClass('rendement')} />
+                  <span className="block text-[10px] text-stone-400 mt-1">&Agrave; ce jour, locataires en place</span>
+                </Field>
+                <Field label="Rendement optimis&eacute; (%)">
+                  <input type="number" step="0.01" value={data.rendementOptimise || 0} onChange={e => update('rendementOptimise', +e.target.value)} className={fieldClass('rendementOptimise')} />
+                  <span className="block text-[10px] text-stone-400 mt-1">Potentiel apr&egrave;s travaux ou relocation</span>
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <Field label="Honoraires (%)"><input type="number" step="0.01" value={data.honorairesTaux || 0} onChange={e => update('honorairesTaux', +e.target.value)} className={fieldClass('honorairesTaux')} /></Field>
-                <Field label="Honoraires (€)"><input type="number" value={data.honorairesMontant || 0} onChange={e => update('honorairesMontant', +e.target.value)} className={fieldClass('honorairesMontant')} /></Field>
+                <Field label="Honoraires (&euro;)"><input type="number" value={data.honorairesMontant || 0} onChange={e => update('honorairesMontant', +e.target.value)} className={fieldClass('honorairesMontant')} /></Field>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Type de commercialisation">
@@ -1695,13 +1696,13 @@ async function handleFolderImport(event) {
               <div className="grid grid-cols-2 gap-3">
                 <Field label="🤝 Pourvoyeur (apporteur du mandat)">
                   <select value={data.pourvoyeurId || ''} onChange={e => update('pourvoyeurId', e.target.value || null)} className={fieldClass('pourvoyeurId')}>
-                    <option value="">—</option>
+                    <option value="">&mdash;</option>
                     {allProfiles.map(p => <option key={p.id} value={p.id}>{p.prenom} {p.nom}</option>)}
                   </select>
                 </Field>
                 <Field label="🎯 Vendeur (closer de la vente)">
                   <select value={data.vendeurId || ''} onChange={e => update('vendeurId', e.target.value || null)} className={fieldClass('vendeurId')}>
-                    <option value="">—</option>
+                    <option value="">&mdash;</option>
                     {allProfiles.map(p => <option key={p.id} value={p.id}>{p.prenom} {p.nom}</option>)}
                   </select>
                 </Field>
