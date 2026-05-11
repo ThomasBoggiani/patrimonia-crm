@@ -156,7 +156,7 @@ export default function RapportVendeur({
   const styles = getStyles(isOffMarket);
   const palette = isOffMarket ? COLORS.offmarket : COLORS.standard;
 
-  const photos = normalizePhotos(mandat?.photos);
+  const photos = normalizePhotos(mandat);
   const heroPhoto = photos[0] || null;
 
   const periodStart = formatDateFR(period?.start);
