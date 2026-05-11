@@ -1,4 +1,4 @@
-'use client';
+'use client'; import { useSearchParams } from 'next/navigation';
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Building2, Users, Handshake, CheckSquare, Megaphone, FileQuestion, 
