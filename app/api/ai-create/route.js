@@ -115,6 +115,7 @@ FORMAT DE RÉPONSE (JSON STRICT, pas de markdown)
     "societe": "...",
     "tel": "...",
     "email": "...",
+    "marche": "b2b|b2c",
     "typologie": "Foncières|Marchands de biens|Particuliers|Fonds|Promoteurs|Family Office",
     "sous_typologie": "Privées|Publiques",
     "nature": "Personne physique|SCI|SARL|SAS|...",
@@ -122,19 +123,69 @@ FORMAT DE RÉPONSE (JSON STRICT, pas de markdown)
     "budget_max": 0,
     "rendement_min": 0,
     "zones": ["Paris 7e", "Paris 8e"],
-    "typologies_recherchees": ["Immeubles", "Hôtels"],
+    "typologies_recherchees": ["Immeubles", "Immeuble d'habitation", "Mixte"],
     "origine": "Apporteur|Réseau|Site web|Email|...",
     "maturite": "Chaud|Moyen|Froid"
   }
 }
+
+═══════════════════════════════════════════════════════════════════
+COMMENT EXTRAIRE UN CLIENT (CRITIQUE)
+═══════════════════════════════════════════════════════════════════
+
+═══ MARCHÉ CLIENT (b2b vs b2c) ═══
+
+Tu dois TOUJOURS identifier client.marche :
+- "b2c" si typologie="Particuliers" (personne qui cherche pour habiter)
+- "b2b" si typologie ∈ {Foncières, Marchands de biens, Fonds, Promoteurs, Family Office}
+
+Comment choisir :
+- Une personne physique qui cherche un appartement, une maison, un hôtel particulier pour y habiter → b2c, typologie="Particuliers"
+- Une société, fonds, foncière, family office, investisseur professionnel → b2b
+- Une SCI familiale qui cherche un placement locatif → b2b (Marchands de biens ou Particuliers selon contexte ; par défaut Particuliers si très petite SCI personnelle)
+- Dans le doute, B2B est le défaut.
+
+═══ CLIENT B2B : typologies_recherchees ═══
+
+Le tableau "typologies_recherchees" doit contenir les FAMILLES recherchées ET leurs SOUS-TYPES, à PLAT.
+
+Exemples :
+- Client cherche des immeubles mixtes et résidentiels :
+  → ["Immeubles", "Immeuble d'habitation", "Mixte"]
+- Client cherche tous types d'immeubles (pas de précision) :
+  → ["Immeubles"]
+- Client cherche bureaux + boutiques :
+  → ["Locaux commerciaux", "Bureaux", "Boutiques"]
+- Client cherche hôtels et terrains :
+  → ["Hôtels", "Hôtels classiques", "Terrains"]
+
+RÈGLE : si un sous-type est mentionné, AJOUTE AUSSI sa famille parente.
+
+═══ CLIENT B2C : typologies_recherchees ═══
+
+Le tableau "typologies_recherchees" doit contenir les TYPES recherchés + les NOMBRES DE PIÈCES, à PLAT.
+
+Types possibles : "Appartement", "Maison", "Hôtel particulier"
+Nombres de pièces possibles : "Studio / T1", "T2", "T3", "T4", "T5", "T6+"
+
+Exemples :
+- Client cherche un T3 ou T4 à Paris :
+  → ["Appartement", "T3", "T4"]
+- Client cherche une maison ou un appartement T5 :
+  → ["Maison", "Appartement", "T5"]
+- Client cherche juste "un bien à habiter" sans précision :
+  → ["Appartement"]
+
+═══════════════════════════════════════════════════════════════════
 
 RÈGLES :
 - Ne mets PAS les clés que tu ne peux pas extraire (pas de null, pas de '').
 - "type" est OBLIGATOIRE.
 - Pour mandat : "marche" et "type" sont OBLIGATOIRES si on identifie un bien.
 - "sous_type" UNIQUEMENT si pertinent (selon l'arborescence ci-dessus).
-- Pour client.typologies_recherchees : utiliser les FAMILLES B2B (Immeubles, Hôtels, Terrains, Parking, Locaux commerciaux) ou B2C (Appartement, Maison, Hôtel particulier).
-- Pour client.sous_typologie : uniquement si typologie="Foncières" → "Privées" ou "Publiques".
+- Pour client : "marche" et "typologie" sont OBLIGATOIRES si on identifie un acheteur.
+- Pour client.sous_typologie : UNIQUEMENT si typologie="Foncières" → "Privées" ou "Publiques". JAMAIS pour les autres typologies.
+- Pour client.typologies_recherchees : respecter STRICTEMENT le vocabulaire ci-dessus (familles + sous-types B2B, ou types + pièces B2C). Pas de mélange B2B/B2C dans le même client.
 - Si type='mandat', n'inclus PAS la clé "client" (et vice-versa).
 - Si type='both', inclus les 2.
 - Si type='unknown', n'inclus ni "mandat" ni "client".
@@ -254,6 +305,19 @@ export async function POST(request) {
     // Defaults : si l'IA a oublié le marché, on déduit b2b par défaut
     if (parsed.mandat && !parsed.mandat.marche) {
       parsed.mandat.marche = 'b2b';
+    }
+    // Idem côté client : déduit du `typologie` si manquant
+    if (parsed.client && !parsed.client.marche) {
+      const B2C_TYPOLOGIES = ['Particuliers'];
+      if (B2C_TYPOLOGIES.includes(parsed.client.typologie)) {
+        parsed.client.marche = 'b2c';
+      } else if (parsed.client.typologie) {
+        parsed.client.marche = 'b2b';
+      }
+    }
+    // Anti-erreur IA : sous_typologie uniquement valide pour Foncières
+    if (parsed.client && parsed.client.sous_typologie && parsed.client.typologie !== 'Foncières') {
+      delete parsed.client.sous_typologie;
     }
 
     const duplicates = await findDuplicates(parsed);
