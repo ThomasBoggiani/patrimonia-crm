@@ -23,7 +23,7 @@ import DocumentsModal from './DocumentsModal';
 import AgendaTab from './AgendaTab';
 import TeamTab from './TeamTab';
 import MyProfile from './MyProfile';
-import AIAnalyzeModal from './AIAnalyzeModal';
+import EmailDraftsModal from './EmailDraftsModal';
 import NotificationBell from './NotificationBell';
 import PhotoUploader from './PhotoUploader';
 import IntegrationsTab from './IntegrationsTab';
@@ -125,15 +125,24 @@ export default function CRM() {
     setTabKey(k => k + 1);
   }
 
+  // Modal EmailDrafts : ouverture depuis fiche mandat ou notif
+  const [emailDraftsState, setEmailDraftsState] = useState(null); // { mandatId, clientIds: [] } | null
+  function openEmailDrafts(mandatId, clientIds = []) {
+    setEmailDraftsState({ mandatId, clientIds });
+  }
+
   // Écoute les events depuis NotificationBell (clic sur une notif)
   useEffect(() => {
     const handleOpenMandat = (e) => navigateToMandat(e.detail?.mandatId);
     const handleOpenClient = (e) => navigateToClient(e.detail?.clientId);
+    const handleOpenEmailDrafts = (e) => openEmailDrafts(e.detail?.mandatId, e.detail?.clientIds || []);
     window.addEventListener('crm:openMandat', handleOpenMandat);
     window.addEventListener('crm:openClient', handleOpenClient);
+    window.addEventListener('crm:openEmailDrafts', handleOpenEmailDrafts);
     return () => {
       window.removeEventListener('crm:openMandat', handleOpenMandat);
       window.removeEventListener('crm:openClient', handleOpenClient);
+      window.removeEventListener('crm:openEmailDrafts', handleOpenEmailDrafts);
     };
   }, []);
 
@@ -336,7 +345,7 @@ export default function CRM() {
         <main className="flex-1 overflow-y-auto scrollbar-thin">
           <div className="fade-in" key={`${activeTab}-${tabKey}`}>
             {activeTab === 'dashboard' && <Dashboard mandats={mandats} clients={clients} deals={deals} todos={todos} reload={loadAll} allProfiles={allProfiles} />}
-            {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} clients={clients} deals={deals} interactions={interactions} todos={todos} annonces={annonces} allProfiles={allProfiles} pendingMandatId={pendingMandatToOpen} onPendingMandatConsumed={() => setPendingMandatToOpen(null)} onOpenMatching={navigateToMatching} />}
+            {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} clients={clients} deals={deals} interactions={interactions} todos={todos} annonces={annonces} allProfiles={allProfiles} pendingMandatId={pendingMandatToOpen} onPendingMandatConsumed={() => setPendingMandatToOpen(null)} onOpenMatching={navigateToMatching} onOpenEmailDrafts={openEmailDrafts} />}
             {activeTab === 'clients' && <ClientsTab clients={clients} reload={loadAll} mandats={mandats} deals={deals} interactions={interactions} pendingClientId={pendingClientToOpen} onPendingClientConsumed={() => setPendingClientToOpen(null)} onOpenMandat={navigateToMandat} />}
             {activeTab === 'inbox' && <InboxTab onUnreadCountChange={setInboxUnreadCount} reload={loadAll} onOpenClient={navigateToClient} />}
             {activeTab === 'deals' && <DealsTab deals={deals} reload={loadAll} mandats={mandats} clients={clients} />}
@@ -683,7 +692,7 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [] })
 }
 
 // === MANDATS ===
-function MandatsTab({ mandats, reload, clients, deals, interactions, todos, annonces, allProfiles = [], pendingMandatId, onPendingMandatConsumed, onOpenMatching }) {
+function MandatsTab({ mandats, reload, clients, deals, interactions, todos, annonces, allProfiles = [], pendingMandatId, onPendingMandatConsumed, onOpenMatching, onOpenEmailDrafts }) {
   const { user, profile } = useAuth();
   const [secondaryDisplay, setSecondaryDisplay] = useState('m2'); // 'm2' | 'nv_comm'
   const [search, setSearch] = useState('');
@@ -780,7 +789,7 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
 
   if (selectedMandat) {
     const currentMandat = mandats.find(m => m.id === selectedMandat.id) || selectedMandat;
-    return <MandatDetail mandat={currentMandat} onBack={() => setSelectedMandat(null)} onEdit={() => { setEditingMandat(currentMandat); setSelectedMandat(null); }} deals={deals} clients={clients} reload={reload} todos={todos} annonces={annonces} allProfiles={allProfiles} onOpenMatching={onOpenMatching} />;
+    return <MandatDetail mandat={currentMandat} onBack={() => setSelectedMandat(null)} onEdit={() => { setEditingMandat(currentMandat); setSelectedMandat(null); }} deals={deals} clients={clients} reload={reload} todos={todos} annonces={annonces} allProfiles={allProfiles} onOpenMatching={onOpenMatching} onOpenEmailDrafts={onOpenEmailDrafts} />;
   }
 
   return (
@@ -1877,7 +1886,7 @@ function NewClientMiniForm({ prefillName, onSave, onCancel }) {
   );
 }
 
-function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, annonces, allProfiles = [], onOpenMatching }) {
+function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, annonces, allProfiles = [], onOpenMatching, onOpenEmailDrafts }) {
   const [openModal, setOpenModal] = useState(null); // 'photos' | 'visite' | 'mandant' | null
   const [aiAnalyzeOpen, setAiAnalyzeOpen] = useState(false);
   const mandatDeals = deals.filter(d => d.mandatId === mandat.id);
@@ -1977,6 +1986,9 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
         </button>
         <button onClick={() => setOpenModal('documents')} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
           <FolderOpen className="w-3.5 h-3.5" /> Documents
+        </button>
+        <button onClick={() => onOpenEmailDrafts?.(mandat.id)} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-sage-50 border border-sage-light text-sage-darker rounded-lg hover:bg-sage-100">
+          <Mail className="w-3.5 h-3.5" /> Pr&eacute;parer mails clients
         </button>
         {(() => {
           // Compte uniquement videos + visites virtuelles + plans (pas les photos, qui ont leur propre bouton)
