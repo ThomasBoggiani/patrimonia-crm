@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
+import { matchMandatsForClient } from '@/lib/matching';
 import { getPriceTTC, getPriceNV, isNVEstimated, getCommission, isCommissionEstimated } from '@/lib/priceDisplay';
 import AICreateModal from './AICreateModal';
 import MarkAsSoldModal from './MarkAsSoldModal';
