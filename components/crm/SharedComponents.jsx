@@ -63,7 +63,6 @@ export function KpiCard({ label, value, icon: Icon, accent, sublabel, isAmount, 
     </Tag>
   );
 }
-
 // ─────────────────────────────────────────────────────────
 // KpiBox : carte KPI compacte (utilisée dans MandatDetail)
 // ─────────────────────────────────────────────────────────
