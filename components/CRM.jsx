@@ -2344,6 +2344,271 @@ function OwnerSelector({ mandat, client, entity = 'mandat', reload }) {
   );
 }
 
+// === FICHE DETAIL CLIENT ===
+function ClientDetail({ client, reload, interactions = [], onBack, onEdit, deals = [], mandats = [], onOpenMandat }) {
+  const { user, profile } = useAuth();
+  const allProfilesCache = [];
+
+  if (!client) return null;
+
+  // Helpers
+  const fullName = [client.prenom, client.nom].filter(Boolean).join(' ') || 'Client sans nom';
+  const initials = [(client.prenom || '').charAt(0), (client.nom || '').charAt(0)].join('').toUpperCase() || '??';
+
+  // Calcul des mandats matchant ce client
+  const matches = matchMandatsForClient(client, mandats) || [];
+
+  // Interactions filtrees pour ce client uniquement
+  const clientInteractions = (interactions || [])
+    .filter(i => i.client_id === client.id)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 8);
+
+  // Format budget
+  const formatBudget = () => {
+    const min = client.budget_min;
+    const max = client.budget_max;
+    if (!min && !max) return 'Non defini';
+    const fmt = (n) => {
+      if (!n) return '?';
+      if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M€';
+      if (n >= 1e3) return Math.round(n / 1e3) + 'k€';
+      return n + '€';
+    };
+    if (min && max) return `${fmt(min)} - ${fmt(max)}`;
+    if (min) return `> ${fmt(min)}`;
+    return `< ${fmt(max)}`;
+  };
+
+  // Badge marché
+  const marcheBadge = client.marche === 'b2b'
+    ? { label: 'B2B - Investisseur', bg: 'bg-sage-50', text: 'text-sage-dark' }
+    : client.marche === 'b2c'
+    ? { label: 'B2C - Habitation', bg: 'bg-emerald-50', text: 'text-emerald-700' }
+    : null;
+
+  // Badge maturité
+  const maturiteBadge = client.maturite ? {
+    label: client.maturite,
+    bg: client.maturite === 'Chaud' ? 'bg-amber-50' : client.maturite === 'Tiede' ? 'bg-cream-200' : 'bg-stone-50',
+    text: client.maturite === 'Chaud' ? 'text-amber-700' : 'text-stone-700',
+  } : null;
+
+  return (
+    <div className="p-6 max-w-6xl">
+      {/* Bouton retour */}
+      <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-800 mb-4">
+        <ArrowLeft className="w-4 h-4" /> Retour aux clients
+      </button>
+
+      {/* HEADER */}
+      <div className="bg-white rounded-xl border border-cream-dark p-6 mb-4 shadow-luxe">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-4 flex-1 min-w-0">
+            {/* Avatar */}
+            <div className="w-16 h-16 rounded-full bg-sage-50 flex items-center justify-center text-sage-dark text-xl font-semibold flex-shrink-0">
+              {initials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <h1 className="font-display text-2xl font-semibold text-stone-900">{fullName}</h1>
+                {marcheBadge && (
+                  <span className={`${marcheBadge.bg} ${marcheBadge.text} text-xs px-2 py-0.5 rounded-md font-medium`}>{marcheBadge.label}</span>
+                )}
+                {maturiteBadge && (
+                  <span className={`${maturiteBadge.bg} ${maturiteBadge.text} text-xs px-2 py-0.5 rounded-md font-medium`}>{maturiteBadge.label}</span>
+                )}
+              </div>
+              <div className="text-sm text-stone-500 flex gap-4 flex-wrap">
+                {client.societe && (
+                  <span className="flex items-center gap-1.5"><Briefcase className="w-3.5 h-3.5" />{client.societe}</span>
+                )}
+                {client.owner && (
+                  <span className="flex items-center gap-1.5"><UserIcon className="w-3.5 h-3.5" />{client.owner}</span>
+                )}
+                {client.source && (
+                  <span className="flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5" />{client.source}</span>
+                )}
+              </div>
+            </div>
+          </div>
+          {/* Actions */}
+          <div className="flex gap-2 flex-shrink-0">
+            {client.email && (
+              <a href={`mailto:${client.email}`} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-white border border-stone-200 rounded-lg hover:bg-cream-50 text-stone-700">
+                <Mail className="w-3.5 h-3.5" /> Email
+              </a>
+            )}
+            {client.tel && (
+              <a href={`tel:${client.tel}`} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-white border border-stone-200 rounded-lg hover:bg-cream-50 text-stone-700">
+                <Phone className="w-3.5 h-3.5" /> Appel
+              </a>
+            )}
+            <button onClick={onEdit} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-ink-deep text-white rounded-lg hover:bg-stone-800">
+              <Edit className="w-3.5 h-3.5" /> Modifier
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="bg-cream-50 p-3 rounded-lg">
+          <div className="text-[10px] uppercase tracking-wide text-stone-500 mb-1">Budget</div>
+          <div className="text-lg font-semibold text-stone-900">{formatBudget()}</div>
+        </div>
+        <div className="bg-cream-50 p-3 rounded-lg">
+          <div className="text-[10px] uppercase tracking-wide text-stone-500 mb-1">Rendement min</div>
+          <div className="text-lg font-semibold text-stone-900">{client.rendement_min ? `${client.rendement_min}%` : 'Non defini'}</div>
+        </div>
+        <div className="bg-cream-50 p-3 rounded-lg">
+          <div className="text-[10px] uppercase tracking-wide text-stone-500 mb-1">Mandats matches</div>
+          <div className="text-lg font-semibold text-stone-900">{matches.length}</div>
+        </div>
+      </div>
+
+      {/* Coordonnees */}
+      <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
+        <div className="text-sm font-medium text-stone-700 mb-3 flex items-center gap-1.5">
+          <Inbox className="w-4 h-4 text-sage-dark" /> Coordonnees
+        </div>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          {client.email && (
+            <div>
+              <div className="text-xs text-stone-500 mb-0.5">Email</div>
+              <div className="text-stone-900">{client.email}</div>
+            </div>
+          )}
+          {client.tel && (
+            <div>
+              <div className="text-xs text-stone-500 mb-0.5">Telephone</div>
+              <div className="text-stone-900">{client.tel}</div>
+            </div>
+          )}
+          {client.societe && (
+            <div>
+              <div className="text-xs text-stone-500 mb-0.5">Societe</div>
+              <div className="text-stone-900">{client.societe}</div>
+            </div>
+          )}
+          {client.source && (
+            <div>
+              <div className="text-xs text-stone-500 mb-0.5">Source</div>
+              <div className="text-stone-900">{client.source}</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Recherche / Criteres */}
+      <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
+        <div className="text-sm font-medium text-stone-700 mb-3 flex items-center gap-1.5">
+          <MapPin className="w-4 h-4 text-sage-dark" /> Recherche
+        </div>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <div className="text-xs text-stone-500 mb-1">Typologies recherchees</div>
+            <div className="flex gap-1.5 flex-wrap">
+              {Array.isArray(client.typologies_recherchees) && client.typologies_recherchees.length > 0 ? (
+                client.typologies_recherchees.map((t, i) => (
+                  <span key={i} className="bg-sage-50 text-sage-dark text-[11px] px-2 py-0.5 rounded-md">{t}</span>
+                ))
+              ) : (
+                <span className="text-stone-400 text-xs">Aucune</span>
+              )}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-stone-500 mb-1">Zones</div>
+            <div className="flex gap-1.5 flex-wrap">
+              {Array.isArray(client.zones) && client.zones.length > 0 ? (
+                client.zones.map((z, i) => (
+                  <span key={i} className="bg-emerald-50 text-emerald-700 text-[11px] px-2 py-0.5 rounded-md">{z}</span>
+                ))
+              ) : (
+                <span className="text-stone-400 text-xs">Aucune</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Mandats compatibles */}
+      <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-sm font-medium text-stone-700 flex items-center gap-1.5">
+            <Sparkles className="w-4 h-4 text-sage-dark" /> Mandats compatibles
+          </div>
+          <span className="bg-sage-50 text-sage-dark text-xs px-2 py-0.5 rounded-md">{matches.length} match{matches.length > 1 ? 'es' : ''}</span>
+        </div>
+        {matches.length === 0 ? (
+          <div className="text-center text-stone-400 text-sm py-6">Aucun mandat compatible pour le moment</div>
+        ) : (
+          <div className="space-y-2">
+            {matches.slice(0, 5).map(({ mandat: m, score, raisons }) => (
+              <div
+                key={m.id}
+                onClick={() => onOpenMandat?.(m.id)}
+                className="border border-cream-dark rounded-lg p-3 cursor-pointer hover:bg-cream-50 transition-colors"
+              >
+                <div className="flex justify-between items-start mb-1.5">
+                  <div className="font-medium text-sm text-stone-900">{m.nom || m.adresse || 'Mandat sans nom'}</div>
+                  <span className={`text-xs px-2 py-0.5 rounded-md font-medium ${
+                    score >= 80 ? 'bg-emerald-50 text-emerald-700' :
+                    score >= 60 ? 'bg-amber-50 text-amber-700' :
+                    'bg-stone-50 text-stone-600'
+                  }`}>{score}%</span>
+                </div>
+                <div className="text-xs text-stone-500 mb-1.5">
+                  {[
+                    m.prix ? `${(m.prix / 1e6).toFixed(1)}M€` : null,
+                    m.surface ? `${m.surface} m²` : null,
+                    m.rendement ? `Rdt ${m.rendement}%` : null,
+                  ].filter(Boolean).join(' · ')}
+                </div>
+                {Array.isArray(raisons) && raisons.length > 0 && (
+                  <div className="flex gap-1 flex-wrap">
+                    {raisons.slice(0, 3).map((r, i) => (
+                      <span key={i} className="bg-cream-100 text-stone-600 text-[10px] px-1.5 py-0.5 rounded">{r}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Interactions */}
+      <div className="bg-white rounded-xl border border-cream-dark p-4">
+        <div className="text-sm font-medium text-stone-700 mb-3 flex items-center gap-1.5">
+          <MessageSquare className="w-4 h-4 text-sage-dark" /> Interactions ({clientInteractions.length})
+        </div>
+        {clientInteractions.length === 0 ? (
+          <div className="text-center text-stone-400 text-sm py-6">Aucune interaction pour le moment</div>
+        ) : (
+          <div className="space-y-2.5">
+            {clientInteractions.map(i => {
+              const date = i.created_at ? new Date(i.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+              const TypeIcon = i.type === 'email_sortant' || i.type === 'email_entrant' ? Mail : i.type === 'appel' ? Phone : MessageSquare;
+              return (
+                <div key={i.id} className="flex gap-2.5 items-start">
+                  <div className="w-7 h-7 rounded-full bg-sage-50 flex items-center justify-center flex-shrink-0">
+                    <TypeIcon className="w-3.5 h-3.5 text-sage-dark" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-stone-800">{i.resume || i.type || 'Interaction'}</div>
+                    <div className="text-[11px] text-stone-500">{date}{i.created_by ? ` · ${i.created_by}` : ''}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 // === CLIENTS ===
 function ClientsTab({ clients, reload, mandats, deals, interactions, pendingClientId, onPendingClientConsumed, onOpenMandat }) {
   const { user } = useAuth();
