@@ -11,6 +11,7 @@ import {
   User as UserIcon, LogOut, Shield, Menu,
   Image as ImageIcon, Camera, Plug, FolderOpen, Trophy, TrendingUp, Inbox, Video
 } from 'lucide-react';
+import { ArrowLeft, Edit, Mail, Phone, Sparkles, MapPin, MessageSquare, Briefcase } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
 import { matchMandatsForClient } from '@/lib/matching';
