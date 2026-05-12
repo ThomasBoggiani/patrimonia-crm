@@ -169,6 +169,8 @@ export default function CRM() {
 
   // Helper : naviguer vers l'onglet Matching auto avec un mandat pré-sélectionné
   const [pendingMatchingMandatId, setPendingMatchingMandatId] = useState(null);
+  // Flag : si on arrive sur MandatsTab via "Mes mandats", on pré-active le filtre
+  const [pendingMandatFilterMine, setPendingMandatFilterMine] = useState(false);
   function navigateToMatching(mandatId) {
     setPendingMatchingMandatId(mandatId);
     setActiveTab('matching');
@@ -400,8 +402,8 @@ export default function CRM() {
 
         <main className="flex-1 overflow-y-auto scrollbar-thin">
           <div className="fade-in" key={`${activeTab}-${tabKey}`}>
-            {activeTab === 'dashboard' && <Dashboard mandats={mandats} clients={clients} deals={deals} todos={todos} reload={loadAll} allProfiles={allProfiles} onNavigate={(t) => { setActiveTabWithHistory(t); setTabKey(k => k + 1); }} />}
-            {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} clients={clients} deals={deals} interactions={interactions} todos={todos} annonces={annonces} allProfiles={allProfiles} pendingMandatId={pendingMandatToOpen} onPendingMandatConsumed={() => setPendingMandatToOpen(null)} onOpenMatching={navigateToMatching} onOpenEmailDrafts={openEmailDrafts} />}
+            {activeTab === 'dashboard' && <Dashboard mandats={mandats} clients={clients} deals={deals} todos={todos} reload={loadAll} allProfiles={allProfiles} onNavigate={(t, opts) => { if (opts?.filterMine) setPendingMandatFilterMine(true); setActiveTabWithHistory(t); setTabKey(k => k + 1); }} />}
+            {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} clients={clients} deals={deals} interactions={interactions} todos={todos} annonces={annonces} allProfiles={allProfiles} pendingMandatId={pendingMandatToOpen} onPendingMandatConsumed={() => setPendingMandatToOpen(null)} onOpenMatching={navigateToMatching} onOpenEmailDrafts={openEmailDrafts} initialFilterMine={pendingMandatFilterMine} />}
             {activeTab === 'clients' && <ClientsTab clients={clients} reload={loadAll} mandats={mandats} deals={deals} interactions={interactions} pendingClientId={pendingClientToOpen} onPendingClientConsumed={() => setPendingClientToOpen(null)} onOpenMandat={navigateToMandat} />}
             {activeTab === 'inbox' && <InboxTab onUnreadCountChange={setInboxUnreadCount} reload={loadAll} onOpenClient={navigateToClient} />}
             {activeTab === 'deals' && <DealsTab deals={deals} reload={loadAll} mandats={mandats} clients={clients} />}
@@ -608,7 +610,7 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
           icon={Building2}
           accent="sage"
           sublabel={`Sur ${mandats.filter(m => !['Perdu', 'Acte', 'Vendu par autres'].includes(m.statut)).length} actifs au total`}
-          onClick={() => onNavigate?.('mandats')}
+          onClick={() => onNavigate?.('mandats', { filterMine: true })}
         />
         <KpiCard
           label="Mes tâches du jour"
@@ -759,7 +761,7 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
 }
 
 // === MANDATS ===
-function MandatsTab({ mandats, reload, clients, deals, interactions, todos, annonces, allProfiles = [], pendingMandatId, onPendingMandatConsumed, onOpenMatching, onOpenEmailDrafts }) {
+function MandatsTab({ mandats, reload, clients, deals, interactions, todos, annonces, allProfiles = [], pendingMandatId, onPendingMandatConsumed, onOpenMatching, onOpenEmailDrafts, initialFilterMine }) {
   const { user, profile } = useAuth();
   const [secondaryDisplay, setSecondaryDisplay] = useState('m2'); // 'm2' | 'nv_comm'
   const [search, setSearch] = useState('');
@@ -767,6 +769,13 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
   const [filterType, setFilterType] = useState('Tous');
   const [filterStatut, setFilterStatut] = useState('Actifs'); // 'Actifs' = exclut Perdu/Vendu par autres
   const [filterMarche, setFilterMarche] = useState('Tous'); // 'Tous' | 'b2b' | 'b2c'
+  const [filterMine, setFilterMine] = useState(!!initialFilterMine);
+  const myInitials = getCurrentUserInitials(profile);
+
+  // Si initialFilterMine change (re-navigation depuis Dashboard), on r\u00e9-applique
+  useEffect(() => {
+    if (initialFilterMine) setFilterMine(true);
+  }, [initialFilterMine]);
   const [view, setView] = useState('list'); // 'list' | 'kanban'
   const [editingMandat, setEditingMandat] = useState(null);
   const [showNew, setShowNew] = useState(false);
@@ -785,6 +794,7 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
   }, [pendingMandatId, mandats]);
 
   const filtered = mandats.filter(m => {
+    if (filterMine && m.owner !== myInitials) return false;
     if (search && !m.nom.toLowerCase().includes(search.toLowerCase()) && !(m.adresse || '').toLowerCase().includes(search.toLowerCase())) return false;
     if (filterComm !== 'Tous' && m.commercialisation !== filterComm) return false;
     if (filterType !== 'Tous' && m.type !== filterType && m.sousType !== filterType) return false;
