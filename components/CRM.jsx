@@ -2627,7 +2627,7 @@ function ClientDetail({ client, reload, interactions = [], onBack, onEdit, deals
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-stone-800">{i.resume || i.type || 'Interaction'}</div>
-                    <div className="text-[11px] text-stone-500">{date}{i.created_by ? ` · ${i.created_by}` : ''}</div>
+                    <div className="text-[11px] text-stone-500">{date}{i.created_by ? ` \u00b7 ${i.created_by}` : ''}</div>
                   </div>
                 </div>
               );
@@ -2635,6 +2635,9 @@ function ClientDetail({ client, reload, interactions = [], onBack, onEdit, deals
           </div>
         )}
       </div>
+
+      {/* Assistant IA — sidebar fixe en bas \u00e0 droite */}
+      <ClientAIAssistant client={client} mandats={mandats} />
     </div>
   );
 }
