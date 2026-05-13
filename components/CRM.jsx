@@ -868,7 +868,7 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
 
   if (selectedMandat) {
     const currentMandat = mandats.find(m => m.id === selectedMandat.id) || selectedMandat;
-    return <MandatDetail mandat={currentMandat} onBack={() => setSelectedMandat(null)} onEdit={() => { setEditingMandat(currentMandat); setSelectedMandat(null); }} deals={deals} clients={clients} reload={reload} todos={todos} annonces={annonces} allProfiles={allProfiles} onOpenMatching={onOpenMatching} onOpenEmailDrafts={onOpenEmailDrafts} />;
+    return <MandatDetail mandat={currentMandat} onBack={() => setSelectedMandat(null)} onEdit={() => { setEditingMandat(currentMandat); }} deals={deals} clients={clients} reload={reload} todos={todos} annonces={annonces} allProfiles={allProfiles} onOpenMatching={onOpenMatching} onOpenEmailDrafts={onOpenEmailDrafts} />;
   }
 
   return (
