@@ -2608,6 +2608,14 @@ function ClientDetail({ client, reload, interactions = [], onBack, onEdit, deals
         )}
       </div>
 
+      {/* Emails \u00e9chang\u00e9s avec ce client */}
+      <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
+        <div className="text-sm font-medium text-stone-700 mb-3 flex items-center gap-1.5">
+          <Mail className="w-4 h-4 text-sage-dark" /> Emails \u00e9chang\u00e9s
+        </div>
+        <ClientEmails client={client} />
+      </div>
+
       {/* Interactions */}
       <div className="bg-white rounded-xl border border-cream-dark p-4">
         <div className="text-sm font-medium text-stone-700 mb-3 flex items-center gap-1.5">
