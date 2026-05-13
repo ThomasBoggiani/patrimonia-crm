@@ -1054,11 +1054,11 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
                       );
                     })()}
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-3 text-right tabular-nums">
                     <div className="font-medium text-stone-900 text-sm">{formatPrix(getPriceTTC(m))}</div>
                     {secondaryDisplay === 'm2' ? (
                       m.prixM2 && parseFloat(m.prixM2) > 0 ? (
-                        <div className="text-xs text-stone-500">{parseFloat(m.prixM2).toLocaleString('fr')} €/m²</div>
+                        <div className="text-xs text-stone-500">{parseFloat(m.prixM2).toLocaleString('fr-FR')} €/m²</div>
                       ) : null
                     ) : (
                       <div className="text-xs text-stone-500 leading-tight">
