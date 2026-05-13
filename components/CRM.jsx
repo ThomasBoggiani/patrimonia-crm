@@ -970,7 +970,7 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
       {view === 'kanban' ? (         <MandatsKanban mandats={filtered} onSelectMandat={setSelectedMandat} reload={reload} secondaryDisplay={secondaryDisplay} />       ) : (       <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden">
         <table className="w-full">
               <colgroup>
-                <col style={{ width: '80px' }} />
+                <col style={{ width: '100px' }} />
                 <col />
                 <col style={{ width: '180px' }} />
                 <col style={{ width: '160px' }} />
