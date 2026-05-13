@@ -882,7 +882,7 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
 
   if (selectedMandat) {
     const currentMandat = mandats.find(m => m.id === selectedMandat.id) || selectedMandat;
-    function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, interactions, todos, annonces, allProfiles = [], pendingMandatId, onPendingMandatConsumed, onOpenMatching, onOpenEmailDrafts, initialFilterMine }) {
+    return <MandatDetail mandat={currentMandat} onBack={() => setSelectedMandat(null)} onEdit={() => { setEditingMandat(currentMandat); }} deals={deals} clients={clients} reload={() => updateMandatLocal?.(currentMandat.id) || reload()} todos={todos} annonces={annonces} allProfiles={allProfiles} onOpenMatching={onOpenMatching} onOpenEmailDrafts={onOpenEmailDrafts} />;
   }
 
   return (
