@@ -1124,7 +1124,18 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
       )}
 
       {(editingMandat || showNew) && (
-        <MandatForm mandat={editingMandat} onSave={handleSave} onClose={() => { setEditingMandat(null); setShowNew(false); }} clients={clients} mandats={mandats} />
+        <MandatForm
+          mandat={editingMandat}
+          onSave={handleSave}
+          onClose={() => {
+            // Apr\u00e8s save/fermeture : on revient sur la fiche du mandat qu'on \u00e9ditait (et pas \u00e0 la liste)
+            if (editingMandat) setSelectedMandat(editingMandat);
+            setEditingMandat(null);
+            setShowNew(false);
+          }}
+          clients={clients}
+          mandats={mandats}
+        />
       )}
     </div>
   );
