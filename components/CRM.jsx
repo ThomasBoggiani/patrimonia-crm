@@ -1037,17 +1037,18 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
                         else mMarche = 'b2b';
                       }
 
-                      const typeLabel = cleanSousType ? `${cleanType} \u00b7 ${cleanSousType}` : cleanType;
+                      // Affichage : si sous-type existe, on n'affiche QUE le sous-type (sans la famille parent)
+                      const typeLabel = cleanSousType || cleanType;
+                      const tooltipFullPath = cleanSousType ? `${cleanType} \u2192 ${cleanSousType}` : cleanType;
                       const filterValue = cleanSousType || cleanType;
                       const badgeClass = mMarche === 'b2c'
                         ? 'bg-blue-50 text-blue-800 hover:bg-blue-100'
                         : 'bg-sage-50 text-sage-darker hover:bg-sage-100';
 
-                      return (
-                        <button
+                      <button
                           onClick={(e) => { e.stopPropagation(); setFilterType(filterValue); }}
                           className={`text-xs px-2 py-0.5 rounded-full transition-colors ${badgeClass}`}
-                          title={`Filtrer par ${typeLabel}`}
+                          title={`Filtrer par ${tooltipFullPath}`}
                         >
                           {typeLabel}
                         </button>
