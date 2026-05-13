@@ -234,6 +234,20 @@ export default function CRM() {
     loadAll();
   }, []);
 
+  // Recharge UN SEUL mandat depuis Supabase et met \u00e0 jour le state local
+  // \u00c9vite un reload global qui peut casser la navigation (perte de selectedMandat)
+  async function updateMandatLocal(mandatId) {
+    if (!mandatId) return;
+    try {
+      const { data, error } = await supabase.from('mandats').select('*').eq('id', mandatId).maybeSingle();
+      if (error || !data) return;
+      const updated = toCamel(data);
+      setMandats(prev => prev.map(m => m.id === mandatId ? updated : m));
+    } catch (e) {
+      console.warn('[updateMandatLocal] error:', e.message);
+    }
+  }
+
   async function loadAll() {
     setLoading(true);
     try {
@@ -405,7 +419,7 @@ export default function CRM() {
         <main className="flex-1 overflow-y-auto scrollbar-thin">
           <div className="fade-in" key={`${activeTab}-${tabKey}`}>
             {activeTab === 'dashboard' && <Dashboard mandats={mandats} clients={clients} deals={deals} todos={todos} reload={loadAll} allProfiles={allProfiles} onNavigate={(t, opts) => { setPendingMandatFilterMine(!!opts?.filterMine); setActiveTabWithHistory(t); setTabKey(k => k + 1); }} />}
-            {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} clients={clients} deals={deals} interactions={interactions} todos={todos} annonces={annonces} allProfiles={allProfiles} pendingMandatId={pendingMandatToOpen} onPendingMandatConsumed={() => setPendingMandatToOpen(null)} onOpenMatching={navigateToMatching} onOpenEmailDrafts={openEmailDrafts} initialFilterMine={pendingMandatFilterMine} />}
+            {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} updateMandatLocal={updateMandatLocal} clients={clients} deals={deals} interactions={interactions} todos={todos} annonces={annonces} allProfiles={allProfiles} pendingMandatId={pendingMandatToOpen} onPendingMandatConsumed={() => setPendingMandatToOpen(null)} onOpenMatching={navigateToMatching} onOpenEmailDrafts={openEmailDrafts} initialFilterMine={pendingMandatFilterMine} />}
             {activeTab === 'clients' && <ClientsTab clients={clients} reload={loadAll} mandats={mandats} deals={deals} interactions={interactions} pendingClientId={pendingClientToOpen} onPendingClientConsumed={() => setPendingClientToOpen(null)} onOpenMandat={navigateToMandat} />}
             {activeTab === 'inbox' && <InboxTab onUnreadCountChange={setInboxUnreadCount} reload={loadAll} onOpenClient={navigateToClient} />}
             {activeTab === 'deals' && <DealsTab deals={deals} reload={loadAll} mandats={mandats} clients={clients} />}
@@ -763,7 +777,7 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
 }
 
 // === MANDATS ===
-function MandatsTab({ mandats, reload, clients, deals, interactions, todos, annonces, allProfiles = [], pendingMandatId, onPendingMandatConsumed, onOpenMatching, onOpenEmailDrafts, initialFilterMine }) {
+function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, interactions, todos, annonces, allProfiles = [], pendingMandatId, onPendingMandatConsumed, onOpenMatching, onOpenEmailDrafts, initialFilterMine }) {
   const { user, profile } = useAuth();
   const [secondaryDisplay, setSecondaryDisplay] = useState('m2'); // 'm2' | 'nv_comm'
   const [search, setSearch] = useState('');
@@ -868,7 +882,7 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
 
   if (selectedMandat) {
     const currentMandat = mandats.find(m => m.id === selectedMandat.id) || selectedMandat;
-    return <MandatDetail mandat={currentMandat} onBack={() => setSelectedMandat(null)} onEdit={() => { setEditingMandat(currentMandat); }} deals={deals} clients={clients} reload={reload} todos={todos} annonces={annonces} allProfiles={allProfiles} onOpenMatching={onOpenMatching} onOpenEmailDrafts={onOpenEmailDrafts} />;
+    function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, interactions, todos, annonces, allProfiles = [], pendingMandatId, onPendingMandatConsumed, onOpenMatching, onOpenEmailDrafts, initialFilterMine }) {
   }
 
   return (
