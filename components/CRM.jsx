@@ -1087,7 +1087,6 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
                           <span className={`text-xs ${hasO ? 'text-amber-700' : 'text-stone-300'}`} title="Rendement optimis&eacute;">
                             {hasO ? `${rO}%` : '\u2014'} <span className="text-[9px] text-stone-400">opt.</span>
                           </span>
-                          )}
                         </div>
                       );
                     })()}
