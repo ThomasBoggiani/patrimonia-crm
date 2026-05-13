@@ -2651,21 +2651,20 @@ function ClientsTab({ clients, reload, mandats, deals, interactions, pendingClie
 
     // Filtre marché (b2b/b2c) — utilise client.marche, sinon déduit de la typologie
     if (filterMarche !== 'Tous') {
-      const cMarche = c.marche || getMarcheFromTypologieClient(c.typologie);
-      if (cMarche !== filterMarche) return false;
-    }
-
-    // Filtre typologie / sous-typologie (format "Typologie" ou "Typologie · Sous-typologie")
-    if (filterTypo !== 'Tous') {
-      if (filterTypo.includes(' · ')) {
-        const [t, st] = filterTypo.split(' · ');
-        if (c.typologie !== t) return false;
-        if (c.sous_typologie !== st) return false;
-      } else {
-        if (c.typologie !== filterTypo) return false;
+      let mMarche = m.marche;
+      if (!mMarche) {
+        if (TYPES_HABITATION_B2C.includes(m.type)) mMarche = 'b2c';
+        else if (Object.keys(TYPES_ACTIF_B2B_TREE).includes(m.type)) mMarche = 'b2b';
+        else if (Object.values(TYPES_ACTIF_B2B_TREE).flat().includes(m.type)) mMarche = 'b2b';
       }
+      if (mMarche !== filterMarche) return false;
     }
     return true;
+  }).sort((a, b) => {
+    // Tri par défaut : prix croissant (mandats sans prix en dernier)
+    const pa = parseFloat(a.prix) || Number.MAX_SAFE_INTEGER;
+    const pb = parseFloat(b.prix) || Number.MAX_SAFE_INTEGER;
+    return pa - pb;
   });
 
   const handleSave = async (client) => {
