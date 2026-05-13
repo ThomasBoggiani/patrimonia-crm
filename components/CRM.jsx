@@ -1072,22 +1072,21 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-3">
+                 <td className="px-3 py-3">
                     {(() => {
-                      const rP = parseFloat(m.rendement) > 0 ? m.rendement : null;
-                      const rO = parseFloat(m.rendementOptimise) > 0 ? m.rendementOptimise : null;
-                      if (!rP && !rO) return <span className="text-stone-400 text-sm">&mdash;</span>;
+                      // Affichage TOUJOURS sur 2 lignes : Pr\u00e9sent + Optimis\u00e9 (m\u00eame si 0 ou null)
+                      const hasP = m.rendement !== null && m.rendement !== undefined && m.rendement !== '';
+                      const hasO = m.rendementOptimise !== null && m.rendementOptimise !== undefined && m.rendementOptimise !== '';
+                      const rP = hasP ? parseFloat(m.rendement) : null;
+                      const rO = hasO ? parseFloat(m.rendementOptimise) : null;
                       return (
                         <div className="flex flex-col leading-tight">
-                          {rP && (
-                            <span className="font-medium text-emerald-700 text-sm" title="Rendement pr&eacute;sent">
-                              {rP}%
-                            </span>
-                          )}
-                          {rO && (
-                            <span className="text-xs text-amber-700" title="Rendement optimis&eacute;">
-                              {rO}% <span className="text-[9px] text-stone-400">opt.</span>
-                            </span>
+                          <span className={`font-medium text-sm ${hasP ? 'text-emerald-700' : 'text-stone-300'}`} title="Rendement pr&eacute;sent">
+                            {hasP ? `${rP}%` : '\u2014'} <span className="text-[9px] text-stone-400">pr\u00e9s.</span>
+                          </span>
+                          <span className={`text-xs ${hasO ? 'text-amber-700' : 'text-stone-300'}`} title="Rendement optimis&eacute;">
+                            {hasO ? `${rO}%` : '\u2014'} <span className="text-[9px] text-stone-400">opt.</span>
+                          </span>
                           )}
                         </div>
                       );
