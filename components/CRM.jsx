@@ -992,7 +992,7 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
             </tr>
           </thead>
           <tbody>
-            {filtered.map(m => {
+            {[...filtered].sort((a, b) => (parseFloat(a.prix) || Number.MAX_SAFE_INTEGER) - (parseFloat(b.prix) || Number.MAX_SAFE_INTEGER)).map(m => {
               const photoUrl = getCoverPhoto(m);
               return (
                 <tr key={m.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer group" onClick={() => setSelectedMandat(m)}>
