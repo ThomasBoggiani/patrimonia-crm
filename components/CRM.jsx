@@ -1128,10 +1128,14 @@ function MandatsTab({ mandats, reload, clients, deals, interactions, todos, anno
           mandat={editingMandat}
           onSave={handleSave}
           onClose={() => {
-            // Apr\u00e8s save/fermeture : on revient sur la fiche du mandat qu'on \u00e9ditait (et pas \u00e0 la liste)
-            if (editingMandat) setSelectedMandat(editingMandat);
+            // Apr\u00e8s save/fermeture : on revient sur la fiche du mandat qu'on \u00e9ditait
+            const editedMandat = editingMandat;
             setEditingMandat(null);
             setShowNew(false);
+            // setSelectedMandat APR\u00c8S pour que le rendu se fasse sur la fiche
+            if (editedMandat) {
+              setTimeout(() => setSelectedMandat(editedMandat), 0);
+            }
           }}
           clients={clients}
           mandats={mandats}
