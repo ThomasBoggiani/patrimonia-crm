@@ -1,4 +1,5 @@
 'use client'; import { useSearchParams } from 'next/navigation';
+// redeploy pour activer Google Maps API key
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Building2, Users, Handshake, CheckSquare, Megaphone, FileQuestion, 
