@@ -16,6 +16,7 @@ import { ArrowLeft, Edit, Briefcase } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
 import { matchMandatsForClient } from '@/lib/matching';
+import { computeRendementsAuto, totalLoyerMensuel, totalLoyerMensuelOptimise, totalSurface, comptageStatuts } from '@/lib/rendements';
 import { getPriceTTC, getPriceNV, isNVEstimated, getCommission, isCommissionEstimated } from '@/lib/priceDisplay';
 import AICreateModal from './AICreateModal';
 import MarkAsSoldModal from './MarkAsSoldModal';
@@ -1853,16 +1854,39 @@ async function handleFolderImport(event) {
                 <Field label="Prix/m&sup2; (&euro;)"><input type="number" value={data.prixM2} onChange={e => update('prixM2', +e.target.value)} className={fieldClass('prixM2')} /></Field>
                 <Field label="Loyers/an (&euro;)"><input type="number" value={data.loyersAnnuels} onChange={e => update('loyersAnnuels', +e.target.value)} className={fieldClass('loyersAnnuels')} /></Field>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Rendement pr&eacute;sent (%)">
-                  <input type="number" step="0.01" value={data.rendement} onChange={e => update('rendement', +e.target.value)} className={fieldClass('rendement')} />
-                  <span className="block text-[10px] text-stone-400 mt-1">&Agrave; ce jour, locataires en place</span>
-                </Field>
-                <Field label="Rendement optimis&eacute; (%)">
-                  <input type="number" step="0.01" value={data.rendementOptimise || 0} onChange={e => update('rendementOptimise', +e.target.value)} className={fieldClass('rendementOptimise')} />
-                  <span className="block text-[10px] text-stone-400 mt-1">Potentiel apr&egrave;s travaux ou relocation</span>
-                </Field>
-              </div>
+              {(() => {
+                const auto = computeRendementsAuto(data);
+                const placeholderActuel = auto.actuel != null ? `${auto.actuel} (calculé)` : 'À ce jour';
+                const placeholderOpt = auto.optimise != null ? `${auto.optimise} (calculé)` : 'Potentiel';
+                return (
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Rendement présent (%)">
+                      <input
+                        type="number" step="0.01"
+                        value={data.rendement || ''}
+                        onChange={e => update('rendement', e.target.value === '' ? null : +e.target.value)}
+                        placeholder={placeholderActuel}
+                        className={fieldClass('rendement')}
+                      />
+                      <span className="block text-[10px] text-stone-400 mt-1">
+                        {auto.actuel != null ? `Auto : ${auto.actuel}% — saisir une valeur pour forcer` : 'À ce jour, locataires en place'}
+                      </span>
+                    </Field>
+                    <Field label="Rendement optimisé (%)">
+                      <input
+                        type="number" step="0.01"
+                        value={data.rendementOptimise || ''}
+                        onChange={e => update('rendementOptimise', e.target.value === '' ? null : +e.target.value)}
+                        placeholder={placeholderOpt}
+                        className={fieldClass('rendementOptimise')}
+                      />
+                      <span className="block text-[10px] text-stone-400 mt-1">
+                        {auto.optimise != null ? `Auto : ${auto.optimise}% — saisir une valeur pour forcer` : 'Potentiel après travaux ou relocation'}
+                      </span>
+                    </Field>
+                  </div>
+                );
+              })()}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Honoraires (%)"><input type="number" step="0.01" value={data.honorairesTaux || 0} onChange={e => update('honorairesTaux', +e.target.value)} className={fieldClass('honorairesTaux')} /></Field>
                 <Field label="Honoraires (&euro;)"><input type="number" value={data.honorairesMontant || 0} onChange={e => update('honorairesMontant', +e.target.value)} className={fieldClass('honorairesMontant')} /></Field>
@@ -1898,7 +1922,20 @@ async function handleFolderImport(event) {
             </div>
           </div>
 
-          {/* SECTION 3 : CARACTÉRISTIQUES TECHNIQUES */}
+          {/* SECTION 3 : ÉTAT LOCATIF */}
+          <div className={sectionClass}>
+            <h3 className={sectionTitleClass}>🏢 État locatif</h3>
+            <p className="text-xs text-stone-500 mb-3">
+              Détaille chaque lot du bien. Les rendements seront recalculés automatiquement à partir des loyers (override possible dans la section Finances).
+            </p>
+            <EtatLocatifEditor
+              lots={data.etatLocatif || []}
+              onChange={(newLots) => update('etatLocatif', newLots)}
+              prixNet={parseFloat(data.prixNetVendeur || data.prix || 0)}
+            />
+          </div>
+
+          {/* SECTION 4 : CARACTÉRISTIQUES TECHNIQUES */}
           <div className={sectionClass}>
             <h3 className={sectionTitleClass}>🔧 Caractéristiques techniques</h3>
             <div className="space-y-3">
@@ -1960,6 +1997,182 @@ async function handleFolderImport(event) {
           <button onClick={() => onSave(data, [])} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Enregistrer</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// EtatLocatifEditor — Tableau de saisie des lots
+// ═══════════════════════════════════════════════════════════════════
+function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
+  const safeLots = Array.isArray(lots) ? lots : [];
+
+  function addLot() {
+    const newLot = {
+      numero: safeLots.length + 1,
+      type: '',
+      surface: 0,
+      loyer: 0,
+      loyer_optimise: 0,
+      statut: 'loué'
+    };
+    onChange([...safeLots, newLot]);
+  }
+
+  function removeLot(index) {
+    onChange(safeLots.filter((_, i) => i !== index));
+  }
+
+  function updateLot(index, field, value) {
+    const updated = [...safeLots];
+    updated[index] = { ...updated[index], [field]: value };
+    onChange(updated);
+  }
+
+  // Calcul des totaux
+  const sumSurface = totalSurface(safeLots);
+  const sumLoyer = totalLoyerMensuel(safeLots);
+  const sumLoyerOpt = totalLoyerMensuelOptimise(safeLots);
+  const statuts = comptageStatuts(safeLots);
+
+  // Rendements calculés
+  const rdtActuel = prixNet > 0 && sumLoyer > 0
+    ? Math.round((sumLoyer * 12 / prixNet) * 1000) / 10
+    : null;
+  const rdtOptimise = prixNet > 0 && sumLoyerOpt > 0
+    ? Math.round((sumLoyerOpt * 12 / prixNet) * 1000) / 10
+    : null;
+
+  return (
+    <div className="space-y-3">
+      {safeLots.length === 0 ? (
+        <div className="text-center py-6 bg-white border border-dashed border-stone-300 rounded-lg">
+          <div className="text-sm text-stone-500 mb-2">Aucun lot pour ce mandat</div>
+          <button type="button" onClick={addLot} className="text-xs text-sage-dark hover:underline flex items-center gap-1 mx-auto">
+            <Plus className="w-3 h-3" /> Ajouter un premier lot
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="overflow-x-auto bg-white border border-stone-200 rounded-lg">
+            <table className="w-full text-sm">
+              <thead className="bg-stone-50 border-b border-stone-200">
+                <tr>
+                  <th className="px-2 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase">Lot</th>
+                  <th className="px-2 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase">Type / Description</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase">Surf. m²</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase">Loyer €/mois</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase">Loyer opt. €/mois</th>
+                  <th className="px-2 py-2 text-center text-[10px] font-semibold text-stone-600 uppercase">Statut</th>
+                  <th className="w-8"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {safeLots.map((lot, i) => (
+                  <tr key={i} className="border-b border-stone-100 last:border-0">
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="text"
+                        value={lot.numero || (i + 1)}
+                        onChange={e => updateLot(i, 'numero', e.target.value)}
+                        className="w-12 px-1.5 py-1 border border-stone-200 rounded text-xs"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="text"
+                        value={lot.type || ''}
+                        onChange={e => updateLot(i, 'type', e.target.value)}
+                        placeholder="ex: RDC commerce"
+                        className="w-full px-1.5 py-1 border border-stone-200 rounded text-xs"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="number"
+                        value={lot.surface || ''}
+                        onChange={e => updateLot(i, 'surface', parseFloat(e.target.value) || 0)}
+                        className="w-16 px-1.5 py-1 border border-stone-200 rounded text-xs text-right"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="number"
+                        value={lot.loyer || ''}
+                        onChange={e => updateLot(i, 'loyer', parseFloat(e.target.value) || 0)}
+                        className="w-20 px-1.5 py-1 border border-stone-200 rounded text-xs text-right"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="number"
+                        value={lot.loyer_optimise || ''}
+                        onChange={e => updateLot(i, 'loyer_optimise', parseFloat(e.target.value) || 0)}
+                        placeholder={lot.loyer || '0'}
+                        className="w-20 px-1.5 py-1 border border-stone-200 rounded text-xs text-right"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      <select
+                        value={lot.statut || 'loué'}
+                        onChange={e => updateLot(i, 'statut', e.target.value)}
+                        className="px-1.5 py-1 border border-stone-200 rounded text-xs"
+                      >
+                        <option value="loué">Loué</option>
+                        <option value="libre">Libre</option>
+                        <option value="vacant">Vacant</option>
+                      </select>
+                    </td>
+                    <td className="px-1 py-1.5">
+                      <button
+                        type="button"
+                        onClick={() => removeLot(i)}
+                        className="p-1 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded"
+                        title="Supprimer ce lot"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-stone-50 border-t border-stone-200">
+                <tr>
+                  <td colSpan={2} className="px-2 py-2 text-xs font-semibold text-stone-700">
+                    TOTAL · {statuts.total} lot{statuts.total > 1 ? 's' : ''}
+                    {statuts.loues > 0 && <span className="ml-1 text-emerald-600">({statuts.loues} loué{statuts.loues > 1 ? 's' : ''})</span>}
+                    {statuts.libres > 0 && <span className="ml-1 text-amber-600">({statuts.libres} libre{statuts.libres > 1 ? 's' : ''})</span>}
+                  </td>
+                  <td className="px-2 py-2 text-xs font-semibold text-right">{sumSurface > 0 ? `${sumSurface} m²` : '—'}</td>
+                  <td className="px-2 py-2 text-xs font-semibold text-right">{sumLoyer > 0 ? `${sumLoyer.toLocaleString('fr-FR')} €` : '—'}</td>
+                  <td className="px-2 py-2 text-xs font-semibold text-right">{sumLoyerOpt > 0 ? `${sumLoyerOpt.toLocaleString('fr-FR')} €` : '—'}</td>
+                  <td colSpan={2}></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={addLot}
+              className="text-xs text-sage-dark hover:underline flex items-center gap-1"
+            >
+              <Plus className="w-3 h-3" /> Ajouter un lot
+            </button>
+            {(rdtActuel != null || rdtOptimise != null) && (
+              <div className="text-xs text-stone-600 flex gap-3">
+                {rdtActuel != null && (
+                  <span>Rdt présent calculé : <span className="font-semibold text-emerald-700">{rdtActuel}%</span></span>
+                )}
+                {rdtOptimise != null && (
+                  <span>Rdt optimisé calculé : <span className="font-semibold text-amber-700">{rdtOptimise}%</span></span>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
