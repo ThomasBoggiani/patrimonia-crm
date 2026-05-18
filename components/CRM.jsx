@@ -2016,6 +2016,7 @@ async function handleFolderImport(event) {
 
 // ═══════════════════════════════════════════════════════════════════
 // EtatLocatifEditor — Tableau de saisie des lots
+// Saisie bidirectionnelle mensuel/annuel avec state local pour permettre la saisie progressive
 // ═══════════════════════════════════════════════════════════════════
 function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
   const safeLots = Array.isArray(lots) ? lots : [];
@@ -2040,20 +2041,6 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
     const updated = [...safeLots];
     updated[index] = { ...updated[index], [field]: value };
     onChange(updated);
-  }
-
-  // Saisie de l'annuel → met à jour le mensuel (loyer = annuel / 12)
-  function updateLotByAnnuel(index, annuelValue) {
-    const annuel = parseFloat(annuelValue) || 0;
-    const mensuel = annuel > 0 ? Math.round(annuel / 12) : 0;
-    updateLot(index, 'loyer', mensuel);
-  }
-
-  // Idem pour loyer optimisé
-  function updateLotOptByAnnuel(index, annuelValue) {
-    const annuel = parseFloat(annuelValue) || 0;
-    const mensuel = annuel > 0 ? Math.round(annuel / 12) : 0;
-    updateLot(index, 'loyer_optimise', mensuel);
   }
 
   const sumSurface = totalSurface(safeLots);
@@ -2098,73 +2085,15 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
                 </tr>
               </thead>
               <tbody>
-                {safeLots.map((lot, i) => {
-                  const loyerMensuel = parseFloat(lot.loyer) || 0;
-                  const loyerAnnuel = loyerMensuel * 12;
-                  const loyerOptMensuel = parseFloat(lot.loyer_optimise) || 0;
-                  const loyerOptAnnuel = loyerOptMensuel * 12;
-                  return (
-                    <tr key={i} className="border-b border-stone-100 last:border-0">
-                      <td className="px-2 py-1.5">
-                        <input type="text" value={lot.numero || (i + 1)} onChange={e => updateLot(i, 'numero', e.target.value)} className="w-12 px-1.5 py-1 border border-stone-200 rounded text-xs" />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <input type="text" value={lot.type || ''} onChange={e => updateLot(i, 'type', e.target.value)} placeholder="ex: RDC commerce" className="w-full px-1.5 py-1 border border-stone-200 rounded text-xs" />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <input type="number" value={lot.surface || ''} onChange={e => updateLot(i, 'surface', parseFloat(e.target.value) || 0)} className="w-16 px-1.5 py-1 border border-stone-200 rounded text-xs text-right" />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <input
-                          type="number"
-                          value={loyerMensuel || ''}
-                          onChange={e => updateLot(i, 'loyer', parseFloat(e.target.value) || 0)}
-                          className="w-20 px-1.5 py-1 border border-stone-200 rounded text-xs text-right"
-                        />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <input
-                          type="number"
-                          value={loyerAnnuel || ''}
-                          onChange={e => updateLotByAnnuel(i, e.target.value)}
-                          className="w-24 px-1.5 py-1 border border-stone-200 rounded text-xs text-right bg-stone-50"
-                          title="Saisir l'annuel calcule le mensuel"
-                        />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <input
-                          type="number"
-                          value={loyerOptMensuel || ''}
-                          onChange={e => updateLot(i, 'loyer_optimise', parseFloat(e.target.value) || 0)}
-                          placeholder={loyerMensuel || '0'}
-                          className="w-20 px-1.5 py-1 border border-stone-200 rounded text-xs text-right"
-                        />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <input
-                          type="number"
-                          value={loyerOptAnnuel || ''}
-                          onChange={e => updateLotOptByAnnuel(i, e.target.value)}
-                          placeholder={loyerAnnuel || '0'}
-                          className="w-24 px-1.5 py-1 border border-stone-200 rounded text-xs text-right bg-stone-50"
-                          title="Saisir l'annuel calcule le mensuel"
-                        />
-                      </td>
-                      <td className="px-2 py-1.5 text-center">
-                        <select value={lot.statut || 'loué'} onChange={e => updateLot(i, 'statut', e.target.value)} className="px-1.5 py-1 border border-stone-200 rounded text-xs">
-                          <option value="loué">Loué</option>
-                          <option value="libre">Libre</option>
-                          <option value="vacant">Vacant</option>
-                        </select>
-                      </td>
-                      <td className="px-1 py-1.5">
-                        <button type="button" onClick={() => removeLot(i)} className="p-1 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded" title="Supprimer ce lot">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {safeLots.map((lot, i) => (
+                  <LotRow
+                    key={i}
+                    lot={lot}
+                    index={i}
+                    onUpdate={updateLot}
+                    onRemove={removeLot}
+                  />
+                ))}
               </tbody>
               <tfoot className="bg-stone-50 border-t border-stone-200">
                 <tr>
@@ -2202,6 +2131,119 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
         </>
       )}
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// LotRow — ligne avec state local pour les saisies mensuel/annuel
+// ═══════════════════════════════════════════════════════════════════
+function LotRow({ lot, index, onUpdate, onRemove }) {
+  // State local pour les 4 champs loyer (texte brut pour permettre la saisie progressive)
+  const [loyerMois, setLoyerMois] = useState(lot.loyer ? String(lot.loyer) : '');
+  const [loyerAn, setLoyerAn] = useState(lot.loyer ? String(lot.loyer * 12) : '');
+  const [loyerOptMois, setLoyerOptMois] = useState(lot.loyer_optimise ? String(lot.loyer_optimise) : '');
+  const [loyerOptAn, setLoyerOptAn] = useState(lot.loyer_optimise ? String(lot.loyer_optimise * 12) : '');
+
+  // Sync quand le lot externe change (ex: nouvelle ligne ajoutée, reset, ou IA)
+  useEffect(() => {
+    setLoyerMois(lot.loyer ? String(lot.loyer) : '');
+    setLoyerAn(lot.loyer ? String(lot.loyer * 12) : '');
+    setLoyerOptMois(lot.loyer_optimise ? String(lot.loyer_optimise) : '');
+    setLoyerOptAn(lot.loyer_optimise ? String(lot.loyer_optimise * 12) : '');
+  }, [lot.loyer, lot.loyer_optimise]);
+
+  // Quand on tape dans Loyer/mois → on update l'annuel local + le parent
+  function handleLoyerMois(value) {
+    setLoyerMois(value);
+    const mensuel = parseFloat(value) || 0;
+    setLoyerAn(mensuel > 0 ? String(mensuel * 12) : '');
+    onUpdate(index, 'loyer', mensuel);
+  }
+
+  // Quand on tape dans Loyer/an → on update le mensuel local + le parent
+  function handleLoyerAn(value) {
+    setLoyerAn(value);
+    const annuel = parseFloat(value) || 0;
+    const mensuel = annuel > 0 ? Math.round(annuel / 12) : 0;
+    setLoyerMois(mensuel > 0 ? String(mensuel) : '');
+    onUpdate(index, 'loyer', mensuel);
+  }
+
+  function handleLoyerOptMois(value) {
+    setLoyerOptMois(value);
+    const mensuel = parseFloat(value) || 0;
+    setLoyerOptAn(mensuel > 0 ? String(mensuel * 12) : '');
+    onUpdate(index, 'loyer_optimise', mensuel);
+  }
+
+  function handleLoyerOptAn(value) {
+    setLoyerOptAn(value);
+    const annuel = parseFloat(value) || 0;
+    const mensuel = annuel > 0 ? Math.round(annuel / 12) : 0;
+    setLoyerOptMois(mensuel > 0 ? String(mensuel) : '');
+    onUpdate(index, 'loyer_optimise', mensuel);
+  }
+
+  return (
+    <tr className="border-b border-stone-100 last:border-0">
+      <td className="px-2 py-1.5">
+        <input type="text" value={lot.numero || (index + 1)} onChange={e => onUpdate(index, 'numero', e.target.value)} className="w-12 px-1.5 py-1 border border-stone-200 rounded text-xs" />
+      </td>
+      <td className="px-2 py-1.5">
+        <input type="text" value={lot.type || ''} onChange={e => onUpdate(index, 'type', e.target.value)} placeholder="ex: RDC commerce" className="w-full px-1.5 py-1 border border-stone-200 rounded text-xs" />
+      </td>
+      <td className="px-2 py-1.5">
+        <input type="number" value={lot.surface || ''} onChange={e => onUpdate(index, 'surface', parseFloat(e.target.value) || 0)} className="w-16 px-1.5 py-1 border border-stone-200 rounded text-xs text-right" />
+      </td>
+      <td className="px-2 py-1.5">
+        <input
+          type="number"
+          value={loyerMois}
+          onChange={e => handleLoyerMois(e.target.value)}
+          className="w-20 px-1.5 py-1 border border-stone-200 rounded text-xs text-right"
+        />
+      </td>
+      <td className="px-2 py-1.5">
+        <input
+          type="number"
+          value={loyerAn}
+          onChange={e => handleLoyerAn(e.target.value)}
+          className="w-24 px-1.5 py-1 border border-stone-200 rounded text-xs text-right bg-stone-50"
+          title="Saisir l'annuel calcule le mensuel"
+        />
+      </td>
+      <td className="px-2 py-1.5">
+        <input
+          type="number"
+          value={loyerOptMois}
+          onChange={e => handleLoyerOptMois(e.target.value)}
+          placeholder={loyerMois || '0'}
+          className="w-20 px-1.5 py-1 border border-stone-200 rounded text-xs text-right"
+        />
+      </td>
+      <td className="px-2 py-1.5">
+        <input
+          type="number"
+          value={loyerOptAn}
+          onChange={e => handleLoyerOptAn(e.target.value)}
+          placeholder={loyerAn || '0'}
+          className="w-24 px-1.5 py-1 border border-stone-200 rounded text-xs text-right bg-stone-50"
+          title="Saisir l'annuel calcule le mensuel"
+        />
+      </td>
+      <td className="px-2 py-1.5 text-center">
+        <select value={lot.statut || 'loué'} onChange={e => onUpdate(index, 'statut', e.target.value)} className="px-1.5 py-1 border border-stone-200 rounded text-xs">
+          <option value="loué">Loué</option>
+          <option value="libre">Libre</option>
+          <option value="vacant">Vacant</option>
+        </select>
+      </td>
+      <td className="px-1 py-1.5">
+        <button type="button" onClick={() => onRemove(index)} className="p-1 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded" title="Supprimer ce lot">
+          <Trash2 className="w-3 h-3" />
+        </button>
+      </td>
+    </tr>
   );
 }
 
