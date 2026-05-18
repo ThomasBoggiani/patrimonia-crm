@@ -327,7 +327,7 @@ export default function PlaquetteAcheteur({
         <Page size="A4" style={styles.page}>
           <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
           <SectionTitle
-            title={"VUE AÉRIENNE\n& SATELLITE"}
+            title={"PLAN\n& LOCALISATION"}
             multiLine={true}
             isOffMarket={isOffMarket}
           />
