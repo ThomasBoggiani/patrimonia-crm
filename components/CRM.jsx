@@ -2015,7 +2015,10 @@ async function handleFolderImport(event) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// EtatLocatifEditor — Tableau de saisie des lots
+// EtatLocatifEditor — Tableau de saisie des lots (version enrichie)
+// Tableau large avec scroll horizontal
+// Champs : Lot, Type, Surface, Locataire, Loyer mois/an, Charges récup mois, Charges non récup an,
+//          Début bail, Durée, Échéance (auto), Loyer potentiel mois, Statut
 // ═══════════════════════════════════════════════════════════════════
 function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
   const safeLots = Array.isArray(lots) ? lots : [];
@@ -2025,7 +2028,14 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
       numero: safeLots.length + 1,
       type: '',
       surface: 0,
+      locataire: '',
       loyer: 0,
+      charges_recup: 0,
+      charges_non_recup: 0,
+      bail_debut: '',
+      bail_duree: 9,
+      bail_echeance: '',
+      loyer_potentiel: 0,
       statut: 'loué'
     }]);
   }
@@ -2040,13 +2050,23 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
     onChange(updated);
   }
 
+  // Totaux
   const sumSurface = safeLots.reduce((s, l) => s + (parseFloat(l.surface) || 0), 0);
   const sumLoyer = safeLots.reduce((s, l) => s + (parseFloat(l.loyer) || 0), 0);
+  const sumChargesRecup = safeLots.reduce((s, l) => s + (parseFloat(l.charges_recup) || 0), 0);
+  const sumChargesNonRecup = safeLots.reduce((s, l) => s + (parseFloat(l.charges_non_recup) || 0), 0);
+  const sumLoyerPotentiel = safeLots.reduce((s, l) => {
+    const pot = parseFloat(l.loyer_potentiel) || 0;
+    return s + (pot > 0 ? pot : (parseFloat(l.loyer) || 0));
+  }, 0);
   const nbLoues = safeLots.filter(l => l.statut === 'loué' || l.statut === 'loue').length;
   const nbLibres = safeLots.length - nbLoues;
 
   const rdtCalcule = prixNet > 0 && sumLoyer > 0
     ? Math.round((sumLoyer * 12 / prixNet) * 1000) / 10
+    : null;
+  const rdtPotentiel = prixNet > 0 && sumLoyerPotentiel > 0
+    ? Math.round((sumLoyerPotentiel * 12 / prixNet) * 1000) / 10
     : null;
 
   return (
@@ -2060,16 +2080,23 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto bg-white border border-stone-200 rounded-lg">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto bg-white border border-stone-200 rounded-lg" style={{ maxWidth: '100%' }}>
+            <table className="text-sm" style={{ minWidth: '1600px' }}>
               <thead className="bg-stone-50 border-b border-stone-200">
                 <tr>
-                  <th className="px-2 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase">Lot</th>
-                  <th className="px-2 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase">Type / Description</th>
-                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase">Surf. m²</th>
-                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase">Loyer €/mois</th>
-                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase">Loyer €/an</th>
-                  <th className="px-2 py-2 text-center text-[10px] font-semibold text-stone-600 uppercase">Statut</th>
+                  <th className="px-2 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Lot</th>
+                  <th className="px-2 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Type / Description</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Surf. m²</th>
+                  <th className="px-2 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Locataire</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Loyer €/mois</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Loyer €/an</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap" title="Charges récupérables (refacturées au locataire)">Ch. récup. €/mois</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap" title="Charges non récupérables (à la charge du propriétaire)">Ch. non récup. €/an</th>
+                  <th className="px-2 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Début bail</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Durée (ans)</th>
+                  <th className="px-2 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap" title="Calculée automatiquement depuis début + durée. Modifiable.">Échéance</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap" title="Loyer potentiel après revalorisation ou relocation">Loyer potentiel €/mois</th>
+                  <th className="px-2 py-2 text-center text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Statut</th>
                   <th className="w-8"></th>
                 </tr>
               </thead>
@@ -2080,30 +2107,46 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
               </tbody>
               <tfoot className="bg-stone-50 border-t border-stone-200">
                 <tr>
-                  <td colSpan={2} className="px-2 py-2 text-xs font-semibold text-stone-700">
+                  <td colSpan={2} className="px-2 py-2 text-xs font-semibold text-stone-700 whitespace-nowrap">
                     TOTAL · {safeLots.length} lot{safeLots.length > 1 ? 's' : ''}
                     {nbLoues > 0 && <span className="ml-1 text-emerald-600">({nbLoues} loué{nbLoues > 1 ? 's' : ''})</span>}
                     {nbLibres > 0 && <span className="ml-1 text-amber-600">({nbLibres} libre{nbLibres > 1 ? 's' : ''})</span>}
                   </td>
-                  <td className="px-2 py-2 text-xs font-semibold text-right">{sumSurface > 0 ? `${sumSurface} m²` : '—'}</td>
-                  <td className="px-2 py-2 text-xs font-semibold text-right">{sumLoyer > 0 ? `${sumLoyer.toLocaleString('fr-FR')} €` : '—'}</td>
-                  <td className="px-2 py-2 text-xs font-semibold text-right">{sumLoyer > 0 ? `${(sumLoyer * 12).toLocaleString('fr-FR')} €` : '—'}</td>
+                  <td className="px-2 py-2 text-xs font-semibold text-right whitespace-nowrap">{sumSurface > 0 ? `${sumSurface} m²` : '—'}</td>
+                  <td></td>
+                  <td className="px-2 py-2 text-xs font-semibold text-right whitespace-nowrap">{sumLoyer > 0 ? `${sumLoyer.toLocaleString('fr-FR')} €` : '—'}</td>
+                  <td className="px-2 py-2 text-xs font-semibold text-right whitespace-nowrap">{sumLoyer > 0 ? `${(sumLoyer * 12).toLocaleString('fr-FR')} €` : '—'}</td>
+                  <td className="px-2 py-2 text-xs font-semibold text-right whitespace-nowrap">{sumChargesRecup > 0 ? `${sumChargesRecup.toLocaleString('fr-FR')} €` : '—'}</td>
+                  <td className="px-2 py-2 text-xs font-semibold text-right whitespace-nowrap">{sumChargesNonRecup > 0 ? `${sumChargesNonRecup.toLocaleString('fr-FR')} €` : '—'}</td>
+                  <td colSpan={3}></td>
+                  <td className="px-2 py-2 text-xs font-semibold text-right text-amber-700 whitespace-nowrap">{sumLoyerPotentiel > 0 ? `${sumLoyerPotentiel.toLocaleString('fr-FR')} €` : '—'}</td>
                   <td colSpan={2}></td>
                 </tr>
               </tfoot>
             </table>
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <button type="button" onClick={addLot} className="text-xs text-sage-dark hover:underline flex items-center gap-1">
               <Plus className="w-3 h-3" /> Ajouter un lot
             </button>
-            {rdtCalcule != null && (
-              <div className="text-xs text-stone-600">
-                Rendement calculé : <span className="font-semibold text-emerald-700">{rdtCalcule}%</span>
-              </div>
-            )}
+            <div className="flex gap-4 text-xs">
+              {rdtCalcule != null && (
+                <span className="text-stone-600">
+                  Rdt actuel : <span className="font-semibold text-emerald-700">{rdtCalcule}%</span>
+                </span>
+              )}
+              {rdtPotentiel != null && rdtPotentiel !== rdtCalcule && (
+                <span className="text-stone-600">
+                  Rdt potentiel : <span className="font-semibold text-amber-700">{rdtPotentiel}%</span>
+                </span>
+              )}
+            </div>
           </div>
+
+          <p className="text-[11px] text-stone-400 italic">
+            💡 Astuce : tu peux saisir le loyer au mois OU à l'année — l'autre se calcule automatiquement. L'échéance se calcule depuis le début de bail + durée.
+          </p>
         </>
       )}
     </div>
@@ -2111,16 +2154,23 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// LotRow — saisie bidirectionnelle mensuel/annuel SANS arrondi
+// LotRow — saisie d'un lot (avec bidirectionnel mois/an, et échéance auto)
 // ═══════════════════════════════════════════════════════════════════
 function LotRow({ lot, index, onUpdate, onRemove }) {
+  // States locaux pour saisie libre des montants
   const [loyerMois, setLoyerMois] = useState(lot.loyer ? String(lot.loyer) : '');
   const [loyerAn, setLoyerAn] = useState(lot.loyer ? String(lot.loyer * 12) : '');
+  const [potMois, setPotMois] = useState(lot.loyer_potentiel ? String(lot.loyer_potentiel) : '');
 
+  // Sync depuis l'extérieur (ex: IA, ou nouvelle ligne)
   useEffect(() => {
     setLoyerMois(lot.loyer ? String(lot.loyer) : '');
     setLoyerAn(lot.loyer ? String(lot.loyer * 12) : '');
   }, [lot.loyer]);
+
+  useEffect(() => {
+    setPotMois(lot.loyer_potentiel ? String(lot.loyer_potentiel) : '');
+  }, [lot.loyer_potentiel]);
 
   function commitLoyerMois() {
     const mensuel = parseFloat(loyerMois) || 0;
@@ -2133,17 +2183,47 @@ function LotRow({ lot, index, onUpdate, onRemove }) {
     setLoyerMois(mensuel > 0 ? String(mensuel) : '');
     onUpdate(index, 'loyer', mensuel);
   }
+  function commitPotMois() {
+    const mensuel = parseFloat(potMois) || 0;
+    onUpdate(index, 'loyer_potentiel', mensuel);
+  }
+
+  // Calcul auto de l'échéance depuis début + durée
+  function handleBailDebutChange(value) {
+    onUpdate(index, 'bail_debut', value);
+    if (value && lot.bail_duree) {
+      const start = new Date(value);
+      const end = new Date(start);
+      end.setFullYear(end.getFullYear() + parseInt(lot.bail_duree));
+      const iso = end.toISOString().split('T')[0];
+      onUpdate(index, 'bail_echeance', iso);
+    }
+  }
+  function handleBailDureeChange(value) {
+    const duree = parseInt(value) || 0;
+    onUpdate(index, 'bail_duree', duree);
+    if (lot.bail_debut && duree > 0) {
+      const start = new Date(lot.bail_debut);
+      const end = new Date(start);
+      end.setFullYear(end.getFullYear() + duree);
+      const iso = end.toISOString().split('T')[0];
+      onUpdate(index, 'bail_echeance', iso);
+    }
+  }
 
   return (
-    <tr className="border-b border-stone-100 last:border-0">
+    <tr className="border-b border-stone-100 last:border-0 hover:bg-stone-50/50">
       <td className="px-2 py-1.5">
         <input type="text" value={lot.numero || (index + 1)} onChange={e => onUpdate(index, 'numero', e.target.value)} className="w-12 px-1.5 py-1 border border-stone-200 rounded text-xs" />
       </td>
       <td className="px-2 py-1.5">
-        <input type="text" value={lot.type || ''} onChange={e => onUpdate(index, 'type', e.target.value)} placeholder="ex: RDC commerce" className="w-full px-1.5 py-1 border border-stone-200 rounded text-xs" />
+        <input type="text" value={lot.type || ''} onChange={e => onUpdate(index, 'type', e.target.value)} placeholder="ex: RDC commerce" className="w-32 px-1.5 py-1 border border-stone-200 rounded text-xs" />
       </td>
       <td className="px-2 py-1.5">
-        <input type="number" value={lot.surface || ''} onChange={e => onUpdate(index, 'surface', parseFloat(e.target.value) || 0)} className="w-16 px-1.5 py-1 border border-stone-200 rounded text-xs text-right" />
+        <input type="number" step="any" value={lot.surface || ''} onChange={e => onUpdate(index, 'surface', parseFloat(e.target.value) || 0)} className="w-16 px-1.5 py-1 border border-stone-200 rounded text-xs text-right" />
+      </td>
+      <td className="px-2 py-1.5">
+        <input type="text" value={lot.locataire || ''} onChange={e => onUpdate(index, 'locataire', e.target.value)} placeholder="Nom du locataire" className="w-32 px-1.5 py-1 border border-stone-200 rounded text-xs" />
       </td>
       <td className="px-2 py-1.5">
         <input
@@ -2165,6 +2245,32 @@ function LotRow({ lot, index, onUpdate, onRemove }) {
           className="w-28 px-1.5 py-1 border border-stone-200 rounded text-xs text-right bg-stone-50"
         />
       </td>
+      <td className="px-2 py-1.5">
+        <input type="number" step="any" value={lot.charges_recup || ''} onChange={e => onUpdate(index, 'charges_recup', parseFloat(e.target.value) || 0)} className="w-24 px-1.5 py-1 border border-stone-200 rounded text-xs text-right" />
+      </td>
+      <td className="px-2 py-1.5">
+        <input type="number" step="any" value={lot.charges_non_recup || ''} onChange={e => onUpdate(index, 'charges_non_recup', parseFloat(e.target.value) || 0)} className="w-24 px-1.5 py-1 border border-stone-200 rounded text-xs text-right" />
+      </td>
+      <td className="px-2 py-1.5">
+        <input type="date" value={lot.bail_debut || ''} onChange={e => handleBailDebutChange(e.target.value)} className="px-1.5 py-1 border border-stone-200 rounded text-xs" />
+      </td>
+      <td className="px-2 py-1.5">
+        <input type="number" min="0" value={lot.bail_duree || ''} onChange={e => handleBailDureeChange(e.target.value)} placeholder="9" className="w-14 px-1.5 py-1 border border-stone-200 rounded text-xs text-right" />
+      </td>
+      <td className="px-2 py-1.5">
+        <input type="date" value={lot.bail_echeance || ''} onChange={e => onUpdate(index, 'bail_echeance', e.target.value)} className="px-1.5 py-1 border border-stone-200 rounded text-xs bg-stone-50" title="Calculée automatiquement, modifiable" />
+      </td>
+      <td className="px-2 py-1.5">
+        <input
+          type="number"
+          step="any"
+          value={potMois}
+          onChange={e => setPotMois(e.target.value)}
+          onBlur={commitPotMois}
+          placeholder={loyerMois || '0'}
+          className="w-24 px-1.5 py-1 border border-stone-200 rounded text-xs text-right"
+        />
+      </td>
       <td className="px-2 py-1.5 text-center">
         <select value={lot.statut || 'loué'} onChange={e => onUpdate(index, 'statut', e.target.value)} className="px-1.5 py-1 border border-stone-200 rounded text-xs">
           <option value="loué">Loué</option>
@@ -2180,7 +2286,6 @@ function LotRow({ lot, index, onUpdate, onRemove }) {
     </tr>
   );
 }
-
 // Mini-formulaire pour créer un nouveau client à la volée
 function NewClientMiniForm({ prefillName, onSave, onCancel }) {
   const guess = (prefillName || '').trim().split(' ');
