@@ -2042,13 +2042,11 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
     onChange(updated);
   }
 
-  // Calcul des totaux
   const sumSurface = totalSurface(safeLots);
   const sumLoyer = totalLoyerMensuel(safeLots);
   const sumLoyerOpt = totalLoyerMensuelOptimise(safeLots);
   const statuts = comptageStatuts(safeLots);
 
-  // Rendements calculés
   const rdtActuel = prixNet > 0 && sumLoyer > 0
     ? Math.round((sumLoyer * 12 / prixNet) * 1000) / 10
     : null;
@@ -2075,79 +2073,53 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
                   <th className="px-2 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase">Type / Description</th>
                   <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase">Surf. m²</th>
                   <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase">Loyer €/mois</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-500 uppercase">Loyer €/an</th>
                   <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase">Loyer opt. €/mois</th>
                   <th className="px-2 py-2 text-center text-[10px] font-semibold text-stone-600 uppercase">Statut</th>
                   <th className="w-8"></th>
                 </tr>
               </thead>
               <tbody>
-                {safeLots.map((lot, i) => (
-                  <tr key={i} className="border-b border-stone-100 last:border-0">
-                    <td className="px-2 py-1.5">
-                      <input
-                        type="text"
-                        value={lot.numero || (i + 1)}
-                        onChange={e => updateLot(i, 'numero', e.target.value)}
-                        className="w-12 px-1.5 py-1 border border-stone-200 rounded text-xs"
-                      />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input
-                        type="text"
-                        value={lot.type || ''}
-                        onChange={e => updateLot(i, 'type', e.target.value)}
-                        placeholder="ex: RDC commerce"
-                        className="w-full px-1.5 py-1 border border-stone-200 rounded text-xs"
-                      />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input
-                        type="number"
-                        value={lot.surface || ''}
-                        onChange={e => updateLot(i, 'surface', parseFloat(e.target.value) || 0)}
-                        className="w-16 px-1.5 py-1 border border-stone-200 rounded text-xs text-right"
-                      />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input
-                        type="number"
-                        value={lot.loyer || ''}
-                        onChange={e => updateLot(i, 'loyer', parseFloat(e.target.value) || 0)}
-                        className="w-20 px-1.5 py-1 border border-stone-200 rounded text-xs text-right"
-                      />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input
-                        type="number"
-                        value={lot.loyer_optimise || ''}
-                        onChange={e => updateLot(i, 'loyer_optimise', parseFloat(e.target.value) || 0)}
-                        placeholder={lot.loyer || '0'}
-                        className="w-20 px-1.5 py-1 border border-stone-200 rounded text-xs text-right"
-                      />
-                    </td>
-                    <td className="px-2 py-1.5 text-center">
-                      <select
-                        value={lot.statut || 'loué'}
-                        onChange={e => updateLot(i, 'statut', e.target.value)}
-                        className="px-1.5 py-1 border border-stone-200 rounded text-xs"
-                      >
-                        <option value="loué">Loué</option>
-                        <option value="libre">Libre</option>
-                        <option value="vacant">Vacant</option>
-                      </select>
-                    </td>
-                    <td className="px-1 py-1.5">
-                      <button
-                        type="button"
-                        onClick={() => removeLot(i)}
-                        className="p-1 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded"
-                        title="Supprimer ce lot"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {safeLots.map((lot, i) => {
+                  const loyerMensuel = parseFloat(lot.loyer) || 0;
+                  const loyerAnnuel = loyerMensuel * 12;
+                  return (
+                    <tr key={i} className="border-b border-stone-100 last:border-0">
+                      <td className="px-2 py-1.5">
+                        <input type="text" value={lot.numero || (i + 1)} onChange={e => updateLot(i, 'numero', e.target.value)} className="w-12 px-1.5 py-1 border border-stone-200 rounded text-xs" />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input type="text" value={lot.type || ''} onChange={e => updateLot(i, 'type', e.target.value)} placeholder="ex: RDC commerce" className="w-full px-1.5 py-1 border border-stone-200 rounded text-xs" />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input type="number" value={lot.surface || ''} onChange={e => updateLot(i, 'surface', parseFloat(e.target.value) || 0)} className="w-16 px-1.5 py-1 border border-stone-200 rounded text-xs text-right" />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input type="number" value={lot.loyer || ''} onChange={e => updateLot(i, 'loyer', parseFloat(e.target.value) || 0)} className="w-20 px-1.5 py-1 border border-stone-200 rounded text-xs text-right" />
+                      </td>
+                      <td className="px-2 py-1.5 text-right">
+                        <span className="text-xs text-stone-500 tabular-nums">
+                          {loyerAnnuel > 0 ? `${loyerAnnuel.toLocaleString('fr-FR')} €` : '—'}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input type="number" value={lot.loyer_optimise || ''} onChange={e => updateLot(i, 'loyer_optimise', parseFloat(e.target.value) || 0)} placeholder={lot.loyer || '0'} className="w-20 px-1.5 py-1 border border-stone-200 rounded text-xs text-right" />
+                      </td>
+                      <td className="px-2 py-1.5 text-center">
+                        <select value={lot.statut || 'loué'} onChange={e => updateLot(i, 'statut', e.target.value)} className="px-1.5 py-1 border border-stone-200 rounded text-xs">
+                          <option value="loué">Loué</option>
+                          <option value="libre">Libre</option>
+                          <option value="vacant">Vacant</option>
+                        </select>
+                      </td>
+                      <td className="px-1 py-1.5">
+                        <button type="button" onClick={() => removeLot(i)} className="p-1 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded" title="Supprimer ce lot">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot className="bg-stone-50 border-t border-stone-200">
                 <tr>
@@ -2158,6 +2130,7 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
                   </td>
                   <td className="px-2 py-2 text-xs font-semibold text-right">{sumSurface > 0 ? `${sumSurface} m²` : '—'}</td>
                   <td className="px-2 py-2 text-xs font-semibold text-right">{sumLoyer > 0 ? `${sumLoyer.toLocaleString('fr-FR')} €` : '—'}</td>
+                  <td className="px-2 py-2 text-xs font-semibold text-right text-stone-500">{sumLoyer > 0 ? `${(sumLoyer * 12).toLocaleString('fr-FR')} €` : '—'}</td>
                   <td className="px-2 py-2 text-xs font-semibold text-right">{sumLoyerOpt > 0 ? `${sumLoyerOpt.toLocaleString('fr-FR')} €` : '—'}</td>
                   <td colSpan={2}></td>
                 </tr>
@@ -2166,11 +2139,7 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
           </div>
 
           <div className="flex items-center justify-between">
-            <button
-              type="button"
-              onClick={addLot}
-              className="text-xs text-sage-dark hover:underline flex items-center gap-1"
-            >
+            <button type="button" onClick={addLot} className="text-xs text-sage-dark hover:underline flex items-center gap-1">
               <Plus className="w-3 h-3" /> Ajouter un lot
             </button>
             {(rdtActuel != null || rdtOptimise != null) && (
