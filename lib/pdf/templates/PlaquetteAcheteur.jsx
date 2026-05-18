@@ -648,3 +648,4 @@ function TransportSection({ title, items, palette }) {
     </View>
   );
 }
+}
