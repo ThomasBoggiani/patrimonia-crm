@@ -2177,6 +2177,139 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// EtatLocatifEditor — Tableau de saisie des lots
+// ═══════════════════════════════════════════════════════════════════
+function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
+  const safeLots = Array.isArray(lots) ? lots : [];
+
+  function addLot() {
+    const newLot = {
+      numero: safeLots.length + 1,
+      type: '',
+      surface: 0,
+      loyer: 0,
+      loyer_optimise: 0,
+      statut: 'loué'
+    };
+    onChange([...safeLots, newLot]);
+  }
+
+  function removeLot(index) {
+    onChange(safeLots.filter((_, i) => i !== index));
+  }
+
+  function updateLot(index, field, value) {
+    const updated = [...safeLots];
+    updated[index] = { ...updated[index], [field]: value };
+    onChange(updated);
+  }
+
+  const sumSurface = totalSurface(safeLots);
+  const sumLoyer = totalLoyerMensuel(safeLots);
+  const sumLoyerOpt = totalLoyerMensuelOptimise(safeLots);
+  const statuts = comptageStatuts(safeLots);
+
+  const rdtActuel = prixNet > 0 && sumLoyer > 0
+    ? Math.round((sumLoyer * 12 / prixNet) * 1000) / 10
+    : null;
+  const rdtOptimise = prixNet > 0 && sumLoyerOpt > 0
+    ? Math.round((sumLoyerOpt * 12 / prixNet) * 1000) / 10
+    : null;
+
+  return (
+    <div className="space-y-3">
+      {safeLots.length === 0 ? (
+        <div className="text-center py-6 bg-white border border-dashed border-stone-300 rounded-lg">
+          <div className="text-sm text-stone-500 mb-2">Aucun lot pour ce mandat</div>
+          <button type="button" onClick={addLot} className="text-xs text-sage-dark hover:underline flex items-center gap-1 mx-auto">
+            <Plus className="w-3 h-3" /> Ajouter un premier lot
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="overflow-x-auto bg-white border border-stone-200 rounded-lg">
+            <table className="w-full text-sm">
+              <thead className="bg-stone-50 border-b border-stone-200">
+                <tr>
+                  <th className="px-2 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase">Lot</th>
+                  <th className="px-2 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase">Type / Description</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase">Surf. m²</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase">Loyer €/mois</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase">Loyer opt. €/mois</th>
+                  <th className="px-2 py-2 text-center text-[10px] font-semibold text-stone-600 uppercase">Statut</th>
+                  <th className="w-8"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {safeLots.map((lot, i) => (
+                  <tr key={i} className="border-b border-stone-100 last:border-0">
+                    <td className="px-2 py-1.5">
+                      <input type="text" value={lot.numero || (i + 1)} onChange={e => updateLot(i, 'numero', e.target.value)} className="w-12 px-1.5 py-1 border border-stone-200 rounded text-xs" />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input type="text" value={lot.type || ''} onChange={e => updateLot(i, 'type', e.target.value)} placeholder="ex: RDC commerce" className="w-full px-1.5 py-1 border border-stone-200 rounded text-xs" />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input type="number" value={lot.surface || ''} onChange={e => updateLot(i, 'surface', parseFloat(e.target.value) || 0)} className="w-16 px-1.5 py-1 border border-stone-200 rounded text-xs text-right" />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input type="number" value={lot.loyer || ''} onChange={e => updateLot(i, 'loyer', parseFloat(e.target.value) || 0)} className="w-20 px-1.5 py-1 border border-stone-200 rounded text-xs text-right" />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input type="number" value={lot.loyer_optimise || ''} onChange={e => updateLot(i, 'loyer_optimise', parseFloat(e.target.value) || 0)} placeholder={lot.loyer || '0'} className="w-20 px-1.5 py-1 border border-stone-200 rounded text-xs text-right" />
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      <select value={lot.statut || 'loué'} onChange={e => updateLot(i, 'statut', e.target.value)} className="px-1.5 py-1 border border-stone-200 rounded text-xs">
+                        <option value="loué">Loué</option>
+                        <option value="libre">Libre</option>
+                        <option value="vacant">Vacant</option>
+                      </select>
+                    </td>
+                    <td className="px-1 py-1.5">
+                      <button type="button" onClick={() => removeLot(i)} className="p-1 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded" title="Supprimer ce lot">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-stone-50 border-t border-stone-200">
+                <tr>
+                  <td colSpan={2} className="px-2 py-2 text-xs font-semibold text-stone-700">
+                    TOTAL · {statuts.total} lot{statuts.total > 1 ? 's' : ''}
+                    {statuts.loues > 0 && <span className="ml-1 text-emerald-600">({statuts.loues} loué{statuts.loues > 1 ? 's' : ''})</span>}
+                    {statuts.libres > 0 && <span className="ml-1 text-amber-600">({statuts.libres} libre{statuts.libres > 1 ? 's' : ''})</span>}
+                  </td>
+                  <td className="px-2 py-2 text-xs font-semibold text-right">{sumSurface > 0 ? `${sumSurface} m²` : '—'}</td>
+                  <td className="px-2 py-2 text-xs font-semibold text-right">{sumLoyer > 0 ? `${sumLoyer.toLocaleString('fr-FR')} €` : '—'}</td>
+                  <td className="px-2 py-2 text-xs font-semibold text-right">{sumLoyerOpt > 0 ? `${sumLoyerOpt.toLocaleString('fr-FR')} €` : '—'}</td>
+                  <td colSpan={2}></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <button type="button" onClick={addLot} className="text-xs text-sage-dark hover:underline flex items-center gap-1">
+              <Plus className="w-3 h-3" /> Ajouter un lot
+            </button>
+            {(rdtActuel != null || rdtOptimise != null) && (
+              <div className="text-xs text-stone-600 flex gap-3">
+                {rdtActuel != null && (
+                  <span>Rdt présent calculé : <span className="font-semibold text-emerald-700">{rdtActuel}%</span></span>
+                )}
+                {rdtOptimise != null && (
+                  <span>Rdt optimisé calculé : <span className="font-semibold text-amber-700">{rdtOptimise}%</span></span>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 // Mini-formulaire pour créer un nouveau client à la volée
 function NewClientMiniForm({ prefillName, onSave, onCancel }) {
   const guess = (prefillName || '').trim().split(' ');
