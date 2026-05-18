@@ -163,12 +163,20 @@ export default function PlaquetteAcheteur({
   const hasEtatLocatif = mandat?.etat_locatif && Array.isArray(mandat.etat_locatif) && mandat.etat_locatif.length > 0;
   const hasPlans = mandat?.plans && Array.isArray(mandat.plans) && mandat.plans.length > 0;
   const hasPhotos = photos.length > 0;
-
+  
+  const transports = locationImages?.transports || null;
+  const hasTransports = transports && (
+    (transports.metro?.length || 0) +
+    (transports.rer?.length || 0) +
+    (transports.tram?.length || 0) +
+    (transports.bus?.length || 0)
+  ) > 0;
   const tocItems = [];
   let p = 3;
   tocItems.push({ label: 'LE BIEN', page: `P. ${p++}` });
   if (hasMapImage) tocItems.push({ label: 'SITUATION & TRANSPORTS', page: `P. ${p++}` });
   if (hasAerialImage) tocItems.push({ label: 'VUE AÉRIENNE ET SATELLITE', page: `P. ${p++}` });
+  if (hasTransports) tocItems.push({ label: 'TRANSPORTS À PROXIMITÉ', page: `P. ${p++}` });
   if (hasCadastreImage) tocItems.push({ label: 'CADASTRE', page: `P. ${p++}` });
   if (hasEtatLocatif) tocItems.push({ label: 'ETAT LOCATIF', page: `P. ${p++}` });
   tocItems.push({ label: 'INFORMATIONS FINANCIÈRES', page: `P. ${p++}` });
@@ -339,6 +347,51 @@ export default function PlaquetteAcheteur({
             {'\n'}{safeText(mandat?.ville, '')}
           </Text>
           <Image src={aerialSrc} style={{ width: '100%', height: 380, objectFit: 'contain' }} />
+          <PageFooter isOffMarket={isOffMarket} />
+        </Page>
+      )}
+
+      {hasTransports && (
+        <Page size="A4" style={styles.page}>
+          <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
+          <SectionTitle
+            title={"TRANSPORTS\n\u00c0 PROXIMIT\u00c9"}
+            multiLine={true}
+            isOffMarket={isOffMarket}
+          />
+          <Text style={[styles.descriptionText, { marginVertical: 12, fontSize: 10 }]}>
+            Stations de transport en commun dans un rayon de 500 m\u00e8tres autour du bien.
+          </Text>
+          <View style={{ marginTop: 16, marginHorizontal: 30 }}>
+            {transports?.metro?.length > 0 && (
+              <TransportSection
+                title="M\u00e9tro"
+                items={transports.metro}
+                palette={palette}
+              />
+            )}
+            {transports?.rer?.length > 0 && (
+              <TransportSection
+                title="RER / Train"
+                items={transports.rer}
+                palette={palette}
+              />
+            )}
+            {transports?.tram?.length > 0 && (
+              <TransportSection
+                title="Tramway"
+                items={transports.tram}
+                palette={palette}
+              />
+            )}
+            {transports?.bus?.length > 0 && (
+              <TransportSection
+                title="Bus"
+                items={transports.bus}
+                palette={palette}
+              />
+            )}
+          </View>
           <PageFooter isOffMarket={isOffMarket} />
         </Page>
       )}
@@ -560,4 +613,38 @@ function ParcelleField({ label, value }) {
     </View>
   );
 }
+
+function TransportSection({ title, items, palette }) {
+  return (
+    <View style={{ marginBottom: 16 }}>
+      <Text style={{
+        fontSize: 11,
+        fontFamily: 'Helvetica-Bold',
+        color: palette.accent || '#9CAF88',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+        marginBottom: 8,
+      }}>
+        {title}
+      </Text>
+      {items.map((item, i) => (
+        <View key={i} style={{
+          flexDirection: 'row',
+          paddingVertical: 5,
+          borderBottomWidth: 0.5,
+          borderBottomColor: palette.muted || '#ddd',
+        }}>
+          <Text style={{ flex: 3, fontSize: 10 }}>{item.name}</Text>
+          {item.lines && (
+            <Text style={{ flex: 2, fontSize: 9, color: palette.muted || '#666' }}>
+              {item.lines}
+            </Text>
+          )}
+          <Text style={{ flex: 1, fontSize: 10, textAlign: 'right', fontFamily: 'Helvetica-Bold' }}>
+            {item.distance} m
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
 }
