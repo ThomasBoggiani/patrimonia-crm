@@ -2016,7 +2016,7 @@ async function handleFolderImport(event) {
 
 // ═══════════════════════════════════════════════════════════════════
 // EtatLocatifEditor — Tableau de saisie des lots
-// Saisie bidirectionnelle mensuel/annuel avec state local pour permettre la saisie progressive
+// Saisie bidirectionnelle : conversion mensuel<->annuel seulement à la sortie du champ (onBlur)
 // ═══════════════════════════════════════════════════════════════════
 function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
   const safeLots = Array.isArray(lots) ? lots : [];
@@ -2067,7 +2067,7 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
       ) : (
         <>
           <p className="text-[11px] text-stone-500 italic">
-            💡 Saisis le loyer mensuel <strong>OU</strong> annuel, l'autre se calcule automatiquement.
+            💡 Saisis le loyer mensuel <strong>OU</strong> annuel. L'autre se met à jour quand tu sors du champ (Tab ou clic ailleurs).
           </p>
           <div className="overflow-x-auto bg-white border border-stone-200 rounded-lg">
             <table className="w-full text-sm">
@@ -2131,6 +2131,115 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
         </>
       )}
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// LotRow — saisie libre des montants, conversion seulement au blur
+// ═══════════════════════════════════════════════════════════════════
+function LotRow({ lot, index, onUpdate, onRemove }) {
+  // State LOCAL en texte pour permettre la saisie libre sans interférence
+  const [loyerMois, setLoyerMois] = useState(lot.loyer ? String(lot.loyer) : '');
+  const [loyerAn, setLoyerAn] = useState(lot.loyer ? String(lot.loyer * 12) : '');
+  const [loyerOptMois, setLoyerOptMois] = useState(lot.loyer_optimise ? String(lot.loyer_optimise) : '');
+  const [loyerOptAn, setLoyerOptAn] = useState(lot.loyer_optimise ? String(lot.loyer_optimise * 12) : '');
+
+  // Si le lot change depuis l'extérieur (ex: IA), on resync
+  useEffect(() => {
+    setLoyerMois(lot.loyer ? String(lot.loyer) : '');
+    setLoyerAn(lot.loyer ? String(lot.loyer * 12) : '');
+    setLoyerOptMois(lot.loyer_optimise ? String(lot.loyer_optimise) : '');
+    setLoyerOptAn(lot.loyer_optimise ? String(lot.loyer_optimise * 12) : '');
+  }, [lot.loyer, lot.loyer_optimise]);
+
+  // === ONBLUR : c'est ICI qu'on convertit et qu'on update le parent ===
+  function commitLoyerMois() {
+    const mensuel = parseFloat(loyerMois) || 0;
+    setLoyerAn(mensuel > 0 ? String(mensuel * 12) : '');
+    onUpdate(index, 'loyer', mensuel);
+  }
+  function commitLoyerAn() {
+    const annuel = parseFloat(loyerAn) || 0;
+    const mensuel = annuel > 0 ? Math.round(annuel / 12) : 0;
+    setLoyerMois(mensuel > 0 ? String(mensuel) : '');
+    onUpdate(index, 'loyer', mensuel);
+  }
+  function commitLoyerOptMois() {
+    const mensuel = parseFloat(loyerOptMois) || 0;
+    setLoyerOptAn(mensuel > 0 ? String(mensuel * 12) : '');
+    onUpdate(index, 'loyer_optimise', mensuel);
+  }
+  function commitLoyerOptAn() {
+    const annuel = parseFloat(loyerOptAn) || 0;
+    const mensuel = annuel > 0 ? Math.round(annuel / 12) : 0;
+    setLoyerOptMois(mensuel > 0 ? String(mensuel) : '');
+    onUpdate(index, 'loyer_optimise', mensuel);
+  }
+
+  return (
+    <tr className="border-b border-stone-100 last:border-0">
+      <td className="px-2 py-1.5">
+        <input type="text" value={lot.numero || (index + 1)} onChange={e => onUpdate(index, 'numero', e.target.value)} className="w-12 px-1.5 py-1 border border-stone-200 rounded text-xs" />
+      </td>
+      <td className="px-2 py-1.5">
+        <input type="text" value={lot.type || ''} onChange={e => onUpdate(index, 'type', e.target.value)} placeholder="ex: RDC commerce" className="w-full px-1.5 py-1 border border-stone-200 rounded text-xs" />
+      </td>
+      <td className="px-2 py-1.5">
+        <input type="number" value={lot.surface || ''} onChange={e => onUpdate(index, 'surface', parseFloat(e.target.value) || 0)} className="w-16 px-1.5 py-1 border border-stone-200 rounded text-xs text-right" />
+      </td>
+      <td className="px-2 py-1.5">
+        <input
+          type="number"
+          value={loyerMois}
+          onChange={e => setLoyerMois(e.target.value)}
+          onBlur={commitLoyerMois}
+          className="w-20 px-1.5 py-1 border border-stone-200 rounded text-xs text-right"
+        />
+      </td>
+      <td className="px-2 py-1.5">
+        <input
+          type="number"
+          value={loyerAn}
+          onChange={e => setLoyerAn(e.target.value)}
+          onBlur={commitLoyerAn}
+          className="w-24 px-1.5 py-1 border border-stone-200 rounded text-xs text-right bg-stone-50"
+          title="Saisir l'annuel calcule le mensuel à la sortie du champ"
+        />
+      </td>
+      <td className="px-2 py-1.5">
+        <input
+          type="number"
+          value={loyerOptMois}
+          onChange={e => setLoyerOptMois(e.target.value)}
+          onBlur={commitLoyerOptMois}
+          placeholder={loyerMois || '0'}
+          className="w-20 px-1.5 py-1 border border-stone-200 rounded text-xs text-right"
+        />
+      </td>
+      <td className="px-2 py-1.5">
+        <input
+          type="number"
+          value={loyerOptAn}
+          onChange={e => setLoyerOptAn(e.target.value)}
+          onBlur={commitLoyerOptAn}
+          placeholder={loyerAn || '0'}
+          className="w-24 px-1.5 py-1 border border-stone-200 rounded text-xs text-right bg-stone-50"
+          title="Saisir l'annuel calcule le mensuel à la sortie du champ"
+        />
+      </td>
+      <td className="px-2 py-1.5 text-center">
+        <select value={lot.statut || 'loué'} onChange={e => onUpdate(index, 'statut', e.target.value)} className="px-1.5 py-1 border border-stone-200 rounded text-xs">
+          <option value="loué">Loué</option>
+          <option value="libre">Libre</option>
+          <option value="vacant">Vacant</option>
+        </select>
+      </td>
+      <td className="px-1 py-1.5">
+        <button type="button" onClick={() => onRemove(index)} className="p-1 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded" title="Supprimer ce lot">
+          <Trash2 className="w-3 h-3" />
+        </button>
+      </td>
+    </tr>
   );
 }
 
