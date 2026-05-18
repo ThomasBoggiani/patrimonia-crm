@@ -494,29 +494,139 @@ export default function PlaquetteAcheteur({
         <Page size="A4" style={styles.page}>
           <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
           <SectionTitle title="ETAT LOCATIF" isOffMarket={isOffMarket} />
-          <Text style={[styles.descriptionText, { marginTop: 16, fontSize: 10 }]}>
-            Synthèse de l'état locatif au {new Date().toLocaleDateString('fr-FR')}
-          </Text>
-          <View style={{ marginTop: 24, marginHorizontal: 30 }}>
-            {(mandat.etat_locatif || []).map((lot, i) => (
-              <View key={i} style={{
-                flexDirection: 'row',
-                paddingVertical: 8,
-                borderBottomWidth: 0.5,
-                borderBottomColor: palette.muted || palette.accentLine
-              }}>
-                <Text style={{ flex: 1, fontSize: 10, fontFamily: 'Helvetica-Bold' }}>
-                  Lot {lot.numero || (i + 1)}
+          {(() => {
+            const lots = mandat.etat_locatif || [];
+            const totalSurf = lots.reduce((s, l) => s + (parseFloat(l.surface) || 0), 0);
+            const totalLoyer = lots.reduce((s, l) => s + (parseFloat(l.loyer) || 0), 0);
+            const totalLoyerOpt = lots.reduce((s, l) => {
+              const opt = parseFloat(l.loyer_optimise || 0);
+              return s + (opt > 0 ? opt : (parseFloat(l.loyer) || 0));
+            }, 0);
+            const nbLoues = lots.filter(l => l.statut === 'loué' || l.statut === 'loue').length;
+            const nbLibres = lots.length - nbLoues;
+            const prixNet = parseFloat(mandat?.prix_net_vendeur || mandat?.prix || 0);
+            const rdtActuel = prixNet > 0 && totalLoyer > 0
+              ? Math.round((totalLoyer * 12 / prixNet) * 1000) / 10
+              : null;
+            const rdtOptimise = prixNet > 0 && totalLoyerOpt > 0
+              ? Math.round((totalLoyerOpt * 12 / prixNet) * 1000) / 10
+              : null;
+            return (
+              <>
+                <Text style={[styles.descriptionText, { marginTop: 16, fontSize: 10 }]}>
+                  Synthèse de l'état locatif au {new Date().toLocaleDateString('fr-FR')} — {lots.length} lot{lots.length > 1 ? 's' : ''}
+                  {nbLoues > 0 && ` · ${nbLoues} loué${nbLoues > 1 ? 's' : ''}`}
+                  {nbLibres > 0 && ` · ${nbLibres} libre${nbLibres > 1 ? 's' : ''}`}
                 </Text>
-                <Text style={{ flex: 2, fontSize: 10 }}>
-                  {lot.nature || ''} {lot.surface ? `· ${lot.surface} m²` : ''}
+
+                {(rdtActuel != null || rdtOptimise != null) && (
+                  <View style={{ flexDirection: 'row', marginTop: 12, marginHorizontal: 30, gap: 16 }}>
+                    {rdtActuel != null && (
+                      <View style={{ flex: 1, padding: 10, backgroundColor: '#F5F5F0', borderRadius: 4 }}>
+                        <Text style={{ fontSize: 8, color: '#666', textTransform: 'uppercase', letterSpacing: 0.5 }}>Rendement présent</Text>
+                        <Text style={{ fontSize: 18, fontFamily: 'Helvetica-Bold', color: palette.accent || '#9CAF88', marginTop: 4 }}>
+                          {rdtActuel.toString().replace('.', ',')}%
+                        </Text>
+                      </View>
+                    )}
+                    {rdtOptimise != null && (
+                      <View style={{ flex: 1, padding: 10, backgroundColor: '#F5F5F0', borderRadius: 4 }}>
+                        <Text style={{ fontSize: 8, color: '#666', textTransform: 'uppercase', letterSpacing: 0.5 }}>Rendement optimisé</Text>
+                        <Text style={{ fontSize: 18, fontFamily: 'Helvetica-Bold', color: '#B8860B', marginTop: 4 }}>
+                          {rdtOptimise.toString().replace('.', ',')}%
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                <View style={{ marginTop: 20, marginHorizontal: 30 }}>
+                  {/* Header */}
+                  <View style={{
+                    flexDirection: 'row',
+                    paddingVertical: 8,
+                    borderBottomWidth: 1,
+                    borderBottomColor: palette.accent || '#9CAF88',
+                    backgroundColor: '#FAFAF7',
+                  }}>
+                    <Text style={{ flex: 0.7, fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#666', textTransform: 'uppercase', paddingHorizontal: 4 }}>Lot</Text>
+                    <Text style={{ flex: 2.3, fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#666', textTransform: 'uppercase', paddingHorizontal: 4 }}>Type / Description</Text>
+                    <Text style={{ flex: 1, fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#666', textTransform: 'uppercase', paddingHorizontal: 4, textAlign: 'right' }}>Surface</Text>
+                    <Text style={{ flex: 1.2, fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#666', textTransform: 'uppercase', paddingHorizontal: 4, textAlign: 'right' }}>Loyer/mois</Text>
+                    <Text style={{ flex: 1, fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#666', textTransform: 'uppercase', paddingHorizontal: 4, textAlign: 'center' }}>Statut</Text>
+                  </View>
+                  {/* Rows */}
+                  {lots.map((lot, i) => {
+                    const isLoue = lot.statut === 'loué' || lot.statut === 'loue';
+                    return (
+                      <View key={i} style={{
+                        flexDirection: 'row',
+                        paddingVertical: 7,
+                        borderBottomWidth: 0.5,
+                        borderBottomColor: '#E5E5DD',
+                      }}>
+                        <Text style={{ flex: 0.7, fontSize: 10, fontFamily: 'Helvetica-Bold', paddingHorizontal: 4 }}>
+                          {lot.numero || (i + 1)}
+                        </Text>
+                        <Text style={{ flex: 2.3, fontSize: 10, paddingHorizontal: 4 }}>
+                          {lot.type || lot.nature || '—'}
+                        </Text>
+                        <Text style={{ flex: 1, fontSize: 10, paddingHorizontal: 4, textAlign: 'right' }}>
+                          {lot.surface ? `${lot.surface} m²` : '—'}
+                        </Text>
+                        <Text style={{ flex: 1.2, fontSize: 10, paddingHorizontal: 4, textAlign: 'right' }}>
+                          {lot.loyer ? formatPrix(lot.loyer) : '—'}
+                        </Text>
+                        <View style={{ flex: 1, paddingHorizontal: 4, alignItems: 'center' }}>
+                          <View style={{
+                            backgroundColor: isLoue ? '#D4EDDA' : '#FFF3CD',
+                            paddingHorizontal: 6,
+                            paddingVertical: 2,
+                            borderRadius: 3,
+                          }}>
+                            <Text style={{
+                              fontSize: 8,
+                              fontFamily: 'Helvetica-Bold',
+                              color: isLoue ? '#155724' : '#856404',
+                              textTransform: 'uppercase',
+                            }}>
+                              {isLoue ? 'Loué' : 'Libre'}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                  {/* TOTAL row */}
+                  <View style={{
+                    flexDirection: 'row',
+                    paddingVertical: 10,
+                    borderTopWidth: 1,
+                    borderTopColor: palette.accent || '#9CAF88',
+                    backgroundColor: '#FAFAF7',
+                    marginTop: 4,
+                  }}>
+                    <Text style={{ flex: 3, fontSize: 10, fontFamily: 'Helvetica-Bold', paddingHorizontal: 4, textTransform: 'uppercase' }}>
+                      TOTAL
+                    </Text>
+                    <Text style={{ flex: 1, fontSize: 10, fontFamily: 'Helvetica-Bold', paddingHorizontal: 4, textAlign: 'right' }}>
+                      {totalSurf > 0 ? `${totalSurf} m²` : '—'}
+                    </Text>
+                    <Text style={{ flex: 1.2, fontSize: 10, fontFamily: 'Helvetica-Bold', paddingHorizontal: 4, textAlign: 'right' }}>
+                      {totalLoyer > 0 ? formatPrix(totalLoyer) : '—'}
+                    </Text>
+                    <Text style={{ flex: 1, fontSize: 8, paddingHorizontal: 4, textAlign: 'center', color: '#666' }}>
+                      {nbLoues}/{lots.length}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={{ fontSize: 8, fontStyle: 'italic', color: '#888', marginTop: 16, marginHorizontal: 30 }}>
+                  Loyers exprimés HT/HC. Rendements calculés sur la base du prix net vendeur.
                 </Text>
-                <Text style={{ flex: 1, fontSize: 10, textAlign: 'right' }}>
-                  {lot.loyer ? formatPrix(lot.loyer) : '—'}
-                </Text>
-              </View>
-            ))}
-          </View>
+              </>
+            );
+          })()}
           <PageFooter isOffMarket={isOffMarket} />
         </Page>
       )}
