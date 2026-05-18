@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════
-// lib/pdf/templates/PlaquetteAcheteur.jsx — v13.4
-// Photos 3x3 (9/page) + Page équipe compacte (single page)
+// lib/pdf/templates/PlaquetteAcheteur.jsx — v13.5
+// + Page Transports à proximité avec badges colorés (lignes RATP/IDFM)
 // ═══════════════════════════════════════════════════════════════════
 
 import React from 'react';
@@ -28,9 +28,9 @@ import {
 } from '../helpers';
 import { LOGO_IP_BASE64 } from '../logo-base64';
 
-// Couleurs officielles des lignes de transport \u00cele-de-France (RATP/IDFM)
+// Couleurs officielles des lignes de transport Île-de-France (RATP/IDFM)
 const LINE_COLORS = {
-  // M\u00e9tro
+  // Métro
   '1': '#FFCE00', '2': '#0064B0', '3': '#9F9825', '3bis': '#98D4E2',
   '4': '#C04191', '5': '#F28E42', '6': '#83C491', '7': '#F3A4BA',
   '7bis': '#83C491', '8': '#CEADD2', '9': '#D5C900', '10': '#E3B32A',
@@ -38,7 +38,7 @@ const LINE_COLORS = {
   // RER
   'A': '#E2231A', 'B': '#7BA3DC', 'C': '#FFCE00', 'D': '#00A88F', 'E': '#BE418D',
   'RER A': '#E2231A', 'RER B': '#7BA3DC', 'RER C': '#FFCE00', 'RER D': '#00A88F', 'RER E': '#BE418D',
-  // Tram (les principaux)
+  // Tram
   'T1': '#0055B7', 'T2': '#B7DA4D', 'T3a': '#FF5A00', 'T3b': '#7B388C',
   'T4': '#E5004C', 'T5': '#662F8F', 'T6': '#E5004B', 'T7': '#FBA60D',
   'T8': '#5A0F47', 'T9': '#BB1D58', 'T10': '#6BCBA0', 'T11': '#FFCD00',
@@ -46,19 +46,15 @@ const LINE_COLORS = {
 };
 
 const LINE_TEXT_COLORS = {
-  '1': '#000', '8': '#000', '14': '#FFF',
-  // Par d\u00e9faut blanc, m\u00e9tro 1 et 8 en noir car couleurs claires
+  '1': '#000', '8': '#000',
 };
 
 function getLineColor(line, mode) {
   if (!line) return null;
   const clean = String(line).trim().toUpperCase();
-  // Direct match
   if (LINE_COLORS[clean]) return LINE_COLORS[clean];
-  // Match minuscule (pour 3bis, 7bis, T3a, T3b)
   const lower = String(line).trim();
   if (LINE_COLORS[lower]) return LINE_COLORS[lower];
-  // Bus / autres : couleur g\u00e9n\u00e9rique
   if (mode === 'bus') return '#5A4A8A';
   return null;
 }
@@ -209,9 +205,8 @@ export default function PlaquetteAcheteur({
   const palette = isOffMarket ? COLORS.offmarket : COLORS.standard;
 
   const photos = normalizePhotos(mandat);
-  const photoChunks = chunkPhotos(photos, 9); // 9 photos par page (3×3)
+  const photoChunks = chunkPhotos(photos, 9);
 
-  // Images de localisation : priorité aux URLs custom du mandat, sinon fallback auto via Google/IGN
   const aerialSrc = mandat?.aerial_image_url || locationImages?.satellite || null;
   const cadastreSrc = mandat?.cadastre_image_url || locationImages?.cadastre || null;
 
@@ -221,7 +216,7 @@ export default function PlaquetteAcheteur({
   const hasEtatLocatif = mandat?.etat_locatif && Array.isArray(mandat.etat_locatif) && mandat.etat_locatif.length > 0;
   const hasPlans = mandat?.plans && Array.isArray(mandat.plans) && mandat.plans.length > 0;
   const hasPhotos = photos.length > 0;
-  
+
   const transports = locationImages?.transports || null;
   const hasTransports = transports && (
     (transports.metro?.length || 0) +
@@ -229,6 +224,7 @@ export default function PlaquetteAcheteur({
     (transports.tram?.length || 0) +
     (transports.bus?.length || 0)
   ) > 0;
+
   const tocItems = [];
   let p = 3;
   tocItems.push({ label: 'LE BIEN', page: `P. ${p++}` });
@@ -298,7 +294,6 @@ export default function PlaquetteAcheteur({
   const finRows = [
     { label: 'Prix net vendeur', value: formatPrix(prixNet) },
   ];
-  // Lignes "Honoraires" supprimées de la plaquette acheteur (demande équipe mai 2026)
   if (mandat?.surface && prixNet > 0) {
     finRows.push({ label: 'Prix au m²', value: formatPrixM2(prixNet, mandat.surface) });
   }
@@ -393,7 +388,7 @@ export default function PlaquetteAcheteur({
         <Page size="A4" style={styles.page}>
           <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
           <SectionTitle
-            title={"VUE A\u00c9RIENNE\n& SATELLITE"}
+            title={"VUE AÉRIENNE\n& SATELLITE"}
             multiLine={true}
             isOffMarket={isOffMarket}
           />
@@ -413,17 +408,17 @@ export default function PlaquetteAcheteur({
         <Page size="A4" style={styles.page}>
           <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
           <SectionTitle
-            title={"TRANSPORTS\n\u00c0 PROXIMIT\u00c9"}
+            title={"TRANSPORTS\nÀ PROXIMITÉ"}
             multiLine={true}
             isOffMarket={isOffMarket}
           />
           <Text style={[styles.descriptionText, { marginVertical: 12, fontSize: 10 }]}>
-            Stations de transport en commun dans un rayon de 500 m\u00e8tres autour du bien.
+            Stations de transport en commun dans un rayon de 500 mètres autour du bien.
           </Text>
           <View style={{ marginTop: 16, marginHorizontal: 30 }}>
             {transports?.metro?.length > 0 && (
               <TransportSection
-                title="M\u00e9tro"
+                title="Métro"
                 items={transports.metro}
                 palette={palette}
                 mode="metro"
@@ -453,6 +448,10 @@ export default function PlaquetteAcheteur({
                 mode="bus"
               />
             )}
+          </View>
+          <PageFooter isOffMarket={isOffMarket} />
+        </Page>
+      )}
 
       {hasCadastreImage && (
         <Page size="A4" style={styles.page}>
@@ -658,6 +657,8 @@ export default function PlaquetteAcheteur({
       </Page>
     </Document>
   );
+}
+
 // Petit composant pour afficher un label/valeur de la parcelle cadastrale
 function ParcelleField({ label, value }) {
   return (
@@ -686,7 +687,6 @@ function TransportSection({ title, items, palette, mode }) {
         {title}
       </Text>
       {items.map((item, i) => {
-        // Parse les lignes: "1;5;9" ou "6, 14" -> ["1", "5", "9"]
         const lines = item.lines
           ? String(item.lines).split(/[;,/]/).map(s => s.trim()).filter(Boolean)
           : [];
