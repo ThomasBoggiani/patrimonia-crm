@@ -2545,6 +2545,133 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
             </div>
           )}
 
+          {/* ═══ ÉTAT LOCATIF ═══ */}
+          {Array.isArray(mandat.etatLocatif || mandat.etat_locatif) && (mandat.etatLocatif || mandat.etat_locatif).length > 0 && (
+            <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
+              <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-sage-dark" />État locatif
+              </h2>
+              {(() => {
+                const lots = mandat.etatLocatif || mandat.etat_locatif || [];
+                const sumSurface = lots.reduce((s, l) => s + (parseFloat(l.surface) || 0), 0);
+                const sumLoyer = lots.reduce((s, l) => s + (parseFloat(l.loyer) || 0), 0);
+                const sumChargesRecup = lots.reduce((s, l) => s + (parseFloat(l.charges_recup) || 0), 0);
+                const sumChargesNonRecup = lots.reduce((s, l) => s + (parseFloat(l.charges_non_recup) || 0), 0);
+                const sumPotentiel = lots.reduce((s, l) => {
+                  const p = parseFloat(l.loyer_potentiel) || 0;
+                  return s + (p > 0 ? p : (parseFloat(l.loyer) || 0));
+                }, 0);
+                const nbLoues = lots.filter(l => l.statut === 'loué' || l.statut === 'loue').length;
+                const nbLibres = lots.length - nbLoues;
+                const prixNet = parseFloat(mandat.prix_net_vendeur || mandat.prixNetVendeur || mandat.prix || 0);
+                const rdtActuel = prixNet > 0 && sumLoyer > 0 ? Math.round((sumLoyer * 12 / prixNet) * 1000) / 10 : null;
+                const rdtPot = prixNet > 0 && sumPotentiel > 0 ? Math.round((sumPotentiel * 12 / prixNet) * 1000) / 10 : null;
+
+                return (
+                  <>
+                    {/* KPIs revenus locatifs */}
+                    <div className="grid grid-cols-4 gap-3 mb-4">
+                      <div className="bg-sage-50 rounded-lg p-3 border border-sage-light">
+                        <div className="text-[10px] uppercase tracking-wide text-sage-darker mb-0.5">Loyer mensuel</div>
+                        <div className="text-lg font-semibold text-sage-darker">{sumLoyer > 0 ? `${sumLoyer.toLocaleString('fr-FR')} €` : '—'}</div>
+                      </div>
+                      <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-200">
+                        <div className="text-[10px] uppercase tracking-wide text-emerald-700 mb-0.5">Revenu annuel</div>
+                        <div className="text-lg font-semibold text-emerald-700">{sumLoyer > 0 ? `${(sumLoyer * 12).toLocaleString('fr-FR')} €` : '—'}</div>
+                      </div>
+                      <div className="bg-cream-100 rounded-lg p-3 border border-cream-dark">
+                        <div className="text-[10px] uppercase tracking-wide text-stone-600 mb-0.5">Rdt actuel</div>
+                        <div className="text-lg font-semibold text-stone-900">{rdtActuel != null ? `${rdtActuel}%` : '—'}</div>
+                      </div>
+                      <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+                        <div className="text-[10px] uppercase tracking-wide text-amber-700 mb-0.5">Rdt potentiel</div>
+                        <div className="text-lg font-semibold text-amber-700">{rdtPot != null ? `${rdtPot}%` : '—'}</div>
+                      </div>
+                    </div>
+
+                    {/* Tableau des lots */}
+                    <div className="overflow-x-auto bg-cream-50/50 rounded-lg border border-cream-dark">
+                      <table className="text-sm" style={{ minWidth: '1100px' }}>
+                        <thead className="bg-cream-100 border-b border-cream-dark">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Lot</th>
+                            <th className="px-3 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Type</th>
+                            <th className="px-3 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Surface</th>
+                            <th className="px-3 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Locataire</th>
+                            <th className="px-3 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Loyer/mois</th>
+                            <th className="px-3 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Loyer/an</th>
+                            <th className="px-3 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Échéance bail</th>
+                            <th className="px-3 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Loyer pot.</th>
+                            <th className="px-3 py-2 text-center text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Statut</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lots.map((lot, i) => {
+                            const loyerMois = parseFloat(lot.loyer) || 0;
+                            const pot = parseFloat(lot.loyer_potentiel) || 0;
+                            const isLoue = lot.statut === 'loué' || lot.statut === 'loue';
+                            const echeance = lot.bail_echeance ? new Date(lot.bail_echeance).toLocaleDateString('fr-FR') : null;
+                            return (
+                              <tr key={i} className="border-b border-cream-dark/30 last:border-0 hover:bg-white">
+                                <td className="px-3 py-2 font-medium whitespace-nowrap">{lot.numero || (i + 1)}</td>
+                                <td className="px-3 py-2 text-stone-700 whitespace-nowrap">{lot.type || lot.nature || '—'}</td>
+                                <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{lot.surface ? `${lot.surface} m²` : '—'}</td>
+                                <td className="px-3 py-2 text-stone-700 whitespace-nowrap">{lot.locataire || (isLoue ? '—' : <span className="text-amber-600 italic">Libre</span>)}</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-medium whitespace-nowrap">{loyerMois > 0 ? `${loyerMois.toLocaleString('fr-FR')} €` : '—'}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-stone-500 whitespace-nowrap">{loyerMois > 0 ? `${(loyerMois * 12).toLocaleString('fr-FR')} €` : '—'}</td>
+                                <td className="px-3 py-2 text-stone-600 whitespace-nowrap text-xs">{echeance || '—'}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-amber-700 whitespace-nowrap">{pot > 0 ? `${pot.toLocaleString('fr-FR')} €` : '—'}</td>
+                                <td className="px-3 py-2 text-center whitespace-nowrap">
+                                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${isLoue ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                                    {isLoue ? 'Loué' : (lot.statut === 'libre' ? 'Libre' : 'Vacant')}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot className="bg-cream-100 border-t-2 border-cream-dark">
+                          <tr>
+                            <td colSpan={2} className="px-3 py-2 text-xs font-semibold text-stone-700 whitespace-nowrap">
+                              TOTAL · {lots.length} lot{lots.length > 1 ? 's' : ''}
+                              {nbLoues > 0 && <span className="ml-2 text-emerald-600">({nbLoues} loué{nbLoues > 1 ? 's' : ''})</span>}
+                              {nbLibres > 0 && <span className="ml-1 text-amber-600">({nbLibres} libre{nbLibres > 1 ? 's' : ''})</span>}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums font-semibold whitespace-nowrap">{sumSurface > 0 ? `${sumSurface} m²` : '—'}</td>
+                            <td></td>
+                            <td className="px-3 py-2 text-right tabular-nums font-semibold whitespace-nowrap">{sumLoyer > 0 ? `${sumLoyer.toLocaleString('fr-FR')} €` : '—'}</td>
+                            <td className="px-3 py-2 text-right tabular-nums font-semibold whitespace-nowrap">{sumLoyer > 0 ? `${(sumLoyer * 12).toLocaleString('fr-FR')} €` : '—'}</td>
+                            <td></td>
+                            <td className="px-3 py-2 text-right tabular-nums font-semibold text-amber-700 whitespace-nowrap">{sumPotentiel > 0 ? `${sumPotentiel.toLocaleString('fr-FR')} €` : '—'}</td>
+                            <td></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+
+                    {/* Charges */}
+                    {(sumChargesRecup > 0 || sumChargesNonRecup > 0) && (
+                      <div className="grid grid-cols-2 gap-3 mt-3">
+                        {sumChargesRecup > 0 && (
+                          <div className="bg-stone-50 rounded-lg p-3 border border-stone-200 text-xs">
+                            <div className="text-stone-500 uppercase text-[10px] mb-0.5">Charges récupérables totales</div>
+                            <div className="font-semibold text-stone-900">{sumChargesRecup.toLocaleString('fr-FR')} €/mois <span className="text-stone-500 font-normal">({(sumChargesRecup * 12).toLocaleString('fr-FR')} €/an)</span></div>
+                          </div>
+                        )}
+                        {sumChargesNonRecup > 0 && (
+                          <div className="bg-stone-50 rounded-lg p-3 border border-stone-200 text-xs">
+                            <div className="text-stone-500 uppercase text-[10px] mb-0.5">Charges non récupérables totales</div>
+                            <div className="font-semibold text-stone-900">{sumChargesNonRecup.toLocaleString('fr-FR')} €/an</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
           {/* ═══ DESCRIPTION ═══ */}
           {mandat.description && (
             <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
