@@ -28,6 +28,64 @@ import {
 } from '../helpers';
 import { LOGO_IP_BASE64 } from '../logo-base64';
 
+// Couleurs officielles des lignes de transport \u00cele-de-France (RATP/IDFM)
+const LINE_COLORS = {
+  // M\u00e9tro
+  '1': '#FFCE00', '2': '#0064B0', '3': '#9F9825', '3bis': '#98D4E2',
+  '4': '#C04191', '5': '#F28E42', '6': '#83C491', '7': '#F3A4BA',
+  '7bis': '#83C491', '8': '#CEADD2', '9': '#D5C900', '10': '#E3B32A',
+  '11': '#8D5E2A', '12': '#00814F', '13': '#98D4E2', '14': '#662483',
+  // RER
+  'A': '#E2231A', 'B': '#7BA3DC', 'C': '#FFCE00', 'D': '#00A88F', 'E': '#BE418D',
+  'RER A': '#E2231A', 'RER B': '#7BA3DC', 'RER C': '#FFCE00', 'RER D': '#00A88F', 'RER E': '#BE418D',
+  // Tram (les principaux)
+  'T1': '#0055B7', 'T2': '#B7DA4D', 'T3a': '#FF5A00', 'T3b': '#7B388C',
+  'T4': '#E5004C', 'T5': '#662F8F', 'T6': '#E5004B', 'T7': '#FBA60D',
+  'T8': '#5A0F47', 'T9': '#BB1D58', 'T10': '#6BCBA0', 'T11': '#FFCD00',
+  'T12': '#185CAB', 'T13': '#FF5A00',
+};
+
+const LINE_TEXT_COLORS = {
+  '1': '#000', '8': '#000', '14': '#FFF',
+  // Par d\u00e9faut blanc, m\u00e9tro 1 et 8 en noir car couleurs claires
+};
+
+function getLineColor(line, mode) {
+  if (!line) return null;
+  const clean = String(line).trim().toUpperCase();
+  // Direct match
+  if (LINE_COLORS[clean]) return LINE_COLORS[clean];
+  // Match minuscule (pour 3bis, 7bis, T3a, T3b)
+  const lower = String(line).trim();
+  if (LINE_COLORS[lower]) return LINE_COLORS[lower];
+  // Bus / autres : couleur g\u00e9n\u00e9rique
+  if (mode === 'bus') return '#5A4A8A';
+  return null;
+}
+
+function LineBadge({ line, mode }) {
+  const bgColor = getLineColor(line, mode) || '#888';
+  const textColor = LINE_TEXT_COLORS[String(line).trim()] || '#FFF';
+  return (
+    <View style={{
+      backgroundColor: bgColor,
+      paddingHorizontal: 5,
+      paddingVertical: 2,
+      borderRadius: 3,
+      marginRight: 3,
+      marginBottom: 2,
+    }}>
+      <Text style={{
+        color: textColor,
+        fontSize: 8,
+        fontFamily: 'Helvetica-Bold',
+      }}>
+        {line}
+      </Text>
+    </View>
+  );
+}
+
 function buildTeamForPlaquette({ mandat, sender, allMembers }) {
   const BOSS_INITIALS = 'TE';
   const ownerInitials = (mandat?.ownerInitials || '').toUpperCase();
@@ -368,6 +426,7 @@ export default function PlaquetteAcheteur({
                 title="M\u00e9tro"
                 items={transports.metro}
                 palette={palette}
+                mode="metro"
               />
             )}
             {transports?.rer?.length > 0 && (
@@ -375,6 +434,7 @@ export default function PlaquetteAcheteur({
                 title="RER / Train"
                 items={transports.rer}
                 palette={palette}
+                mode="rer"
               />
             )}
             {transports?.tram?.length > 0 && (
@@ -382,6 +442,7 @@ export default function PlaquetteAcheteur({
                 title="Tramway"
                 items={transports.tram}
                 palette={palette}
+                mode="tram"
               />
             )}
             {transports?.bus?.length > 0 && (
@@ -389,12 +450,9 @@ export default function PlaquetteAcheteur({
                 title="Bus"
                 items={transports.bus}
                 palette={palette}
+                mode="bus"
               />
             )}
-          </View>
-          <PageFooter isOffMarket={isOffMarket} />
-        </Page>
-      )}
 
       {hasCadastreImage && (
         <Page size="A4" style={styles.page}>
@@ -614,7 +672,7 @@ function ParcelleField({ label, value }) {
   );
 }
 
-function TransportSection({ title, items, palette }) {
+function TransportSection({ title, items, palette, mode }) {
   return (
     <View style={{ marginBottom: 16 }}>
       <Text style={{
@@ -627,25 +685,31 @@ function TransportSection({ title, items, palette }) {
       }}>
         {title}
       </Text>
-      {items.map((item, i) => (
-        <View key={i} style={{
-          flexDirection: 'row',
-          paddingVertical: 5,
-          borderBottomWidth: 0.5,
-          borderBottomColor: palette.muted || '#ddd',
-        }}>
-          <Text style={{ flex: 3, fontSize: 10 }}>{item.name}</Text>
-          {item.lines && (
-            <Text style={{ flex: 2, fontSize: 9, color: palette.muted || '#666' }}>
-              {item.lines}
+      {items.map((item, i) => {
+        // Parse les lignes: "1;5;9" ou "6, 14" -> ["1", "5", "9"]
+        const lines = item.lines
+          ? String(item.lines).split(/[;,/]/).map(s => s.trim()).filter(Boolean)
+          : [];
+        return (
+          <View key={i} style={{
+            flexDirection: 'row',
+            paddingVertical: 6,
+            borderBottomWidth: 0.5,
+            borderBottomColor: palette.muted || '#ddd',
+            alignItems: 'center',
+          }}>
+            <Text style={{ flex: 3, fontSize: 10 }}>{item.name}</Text>
+            <View style={{ flex: 2, flexDirection: 'row', flexWrap: 'wrap' }}>
+              {lines.map((line, j) => (
+                <LineBadge key={j} line={line} mode={mode} />
+              ))}
+            </View>
+            <Text style={{ flex: 1, fontSize: 10, textAlign: 'right', fontFamily: 'Helvetica-Bold' }}>
+              {item.distance} m
             </Text>
-          )}
-          <Text style={{ flex: 1, fontSize: 10, textAlign: 'right', fontFamily: 'Helvetica-Bold' }}>
-            {item.distance} m
-          </Text>
-        </View>
-      ))}
+          </View>
+        );
+      })}
     </View>
   );
-}
 }
