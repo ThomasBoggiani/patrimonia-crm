@@ -2609,18 +2609,10 @@ function ClientDetail({ client, reload, interactions = [], onBack, onEdit, deals
         )}
       </div>
 
-      {/* Emails \u00e9chang\u00e9s avec ce client */}
+      {/* Emails échangés avec ce client */}
       <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
         <div className="text-sm font-medium text-stone-700 mb-3 flex items-center gap-1.5">
-          <Mail className="w-4 h-4 text-sage-dark" /> Emails \u00e9chang\u00e9s
-        </div>
-        <ClientEmails client={client} />
-      </div>
-
-      {/* Emails \u00e9chang\u00e9s avec ce client */}
-      <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
-        <div className="text-sm font-medium text-stone-700 mb-3 flex items-center gap-1.5">
-          <Mail className="w-4 h-4 text-sage-dark" /> Emails \u00e9chang\u00e9s
+          <Mail className="w-4 h-4 text-sage-dark" /> Emails échangés
         </div>
         <ClientEmails client={client} />
       </div>
@@ -2698,20 +2690,15 @@ function ClientsTab({ clients, reload, mandats, deals, interactions, pendingClie
 
     // Filtre marché (b2b/b2c) — utilise client.marche, sinon déduit de la typologie
     if (filterMarche !== 'Tous') {
-      let mMarche = m.marche;
-      if (!mMarche) {
-        if (TYPES_HABITATION_B2C.includes(m.type)) mMarche = 'b2c';
-        else if (Object.keys(TYPES_ACTIF_B2B_TREE).includes(m.type)) mMarche = 'b2b';
-        else if (Object.values(TYPES_ACTIF_B2B_TREE).flat().includes(m.type)) mMarche = 'b2b';
-      }
-      if (mMarche !== filterMarche) return false;
+      const cMarche = c.marche || getMarcheFromTypologieClient(c.typologie);
+      if (cMarche !== filterMarche) return false;
+    }
+    // Filtre typologie
+    if (filterTypo !== 'Tous') {
+      const typoLabel = c.sous_typologie ? `${c.typologie} · ${c.sous_typologie}` : c.typologie;
+      if (typoLabel !== filterTypo && c.typologie !== filterTypo) return false;
     }
     return true;
-  }).sort((a, b) => {
-    // Tri par défaut : prix croissant (mandats sans prix en dernier)
-    const pa = parseFloat(a.prix) || Number.MAX_SAFE_INTEGER;
-    const pb = parseFloat(b.prix) || Number.MAX_SAFE_INTEGER;
-    return pa - pb;
   });
 
   const handleSave = async (client) => {
