@@ -396,7 +396,7 @@ export default function ReferenceForm({ reference, onSave, onClose }) {
           </button>
           <button 
             onClick={() => onSave(data)} 
-            disabled={!data.nom?.trim() || !data.prixVente || (data.typologies || []).length === 0}
+            disabled={!data.nom?.trim() || (data.typologies || []).length === 0}
             className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink disabled:opacity-50"
           >
             Enregistrer
