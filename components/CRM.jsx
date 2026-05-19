@@ -2062,11 +2062,12 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
   const nbLoues = safeLots.filter(l => l.statut === 'loué' || l.statut === 'loue').length;
   const nbLibres = safeLots.length - nbLoues;
 
+  // Rendements en % à 2 décimales (ex: 5.85%)
   const rdtCalcule = prixNet > 0 && sumLoyer > 0
-    ? Math.round((sumLoyer * 12 / prixNet) * 1000) / 10
+    ? Math.round((sumLoyer * 12 / prixNet) * 10000) / 100
     : null;
   const rdtPotentiel = prixNet > 0 && sumLoyerPotentiel > 0
-    ? Math.round((sumLoyerPotentiel * 12 / prixNet) * 1000) / 10
+    ? Math.round((sumLoyerPotentiel * 12 / prixNet) * 10000) / 100
     : null;
 
   return (
@@ -2564,8 +2565,9 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
                 const nbLoues = lots.filter(l => l.statut === 'loué' || l.statut === 'loue').length;
                 const nbLibres = lots.length - nbLoues;
                 const prixNet = parseFloat(mandat.prix_net_vendeur || mandat.prixNetVendeur || mandat.prix || 0);
-                const rdtActuel = prixNet > 0 && sumLoyer > 0 ? Math.round((sumLoyer * 12 / prixNet) * 1000) / 10 : null;
-                const rdtPot = prixNet > 0 && sumPotentiel > 0 ? Math.round((sumPotentiel * 12 / prixNet) * 1000) / 10 : null;
+                // Rendements en % à 2 décimales (ex: 5.85%)
+                const rdtActuel = prixNet > 0 && sumLoyer > 0 ? Math.round((sumLoyer * 12 / prixNet) * 10000) / 100 : null;
+                const rdtPot = prixNet > 0 && sumPotentiel > 0 ? Math.round((sumPotentiel * 12 / prixNet) * 10000) / 100 : null;
 
                 return (
                   <>
@@ -2672,132 +2674,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
             </div>
           )}
 
-          {/* ═══ ÉTAT LOCATIF ═══ */}
-          {Array.isArray(mandat.etatLocatif || mandat.etat_locatif) && (mandat.etatLocatif || mandat.etat_locatif).length > 0 && (
-            <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-              <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-sage-dark" />État locatif
-              </h2>
-              {(() => {
-                const lots = mandat.etatLocatif || mandat.etat_locatif || [];
-                const sumSurface = lots.reduce((s, l) => s + (parseFloat(l.surface) || 0), 0);
-                const sumLoyer = lots.reduce((s, l) => s + (parseFloat(l.loyer) || 0), 0);
-                const sumChargesRecup = lots.reduce((s, l) => s + (parseFloat(l.charges_recup) || 0), 0);
-                const sumChargesNonRecup = lots.reduce((s, l) => s + (parseFloat(l.charges_non_recup) || 0), 0);
-                const sumPotentiel = lots.reduce((s, l) => {
-                  const p = parseFloat(l.loyer_potentiel) || 0;
-                  return s + (p > 0 ? p : (parseFloat(l.loyer) || 0));
-                }, 0);
-                const nbLoues = lots.filter(l => l.statut === 'loué' || l.statut === 'loue').length;
-                const nbLibres = lots.length - nbLoues;
-                const prixNet = parseFloat(mandat.prix_net_vendeur || mandat.prixNetVendeur || mandat.prix || 0);
-                const rdtActuel = prixNet > 0 && sumLoyer > 0 ? Math.round((sumLoyer * 12 / prixNet) * 1000) / 10 : null;
-                const rdtPot = prixNet > 0 && sumPotentiel > 0 ? Math.round((sumPotentiel * 12 / prixNet) * 1000) / 10 : null;
-
-                return (
-                  <>
-                    {/* KPIs revenus locatifs */}
-                    <div className="grid grid-cols-4 gap-3 mb-4">
-                      <div className="bg-sage-50 rounded-lg p-3 border border-sage-light">
-                        <div className="text-[10px] uppercase tracking-wide text-sage-darker mb-0.5">Loyer mensuel</div>
-                        <div className="text-lg font-semibold text-sage-darker">{sumLoyer > 0 ? `${sumLoyer.toLocaleString('fr-FR')} €` : '—'}</div>
-                      </div>
-                      <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-200">
-                        <div className="text-[10px] uppercase tracking-wide text-emerald-700 mb-0.5">Revenu annuel</div>
-                        <div className="text-lg font-semibold text-emerald-700">{sumLoyer > 0 ? `${(sumLoyer * 12).toLocaleString('fr-FR')} €` : '—'}</div>
-                      </div>
-                      <div className="bg-cream-100 rounded-lg p-3 border border-cream-dark">
-                        <div className="text-[10px] uppercase tracking-wide text-stone-600 mb-0.5">Rdt actuel</div>
-                        <div className="text-lg font-semibold text-stone-900">{rdtActuel != null ? `${rdtActuel}%` : '—'}</div>
-                      </div>
-                      <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
-                        <div className="text-[10px] uppercase tracking-wide text-amber-700 mb-0.5">Rdt potentiel</div>
-                        <div className="text-lg font-semibold text-amber-700">{rdtPot != null ? `${rdtPot}%` : '—'}</div>
-                      </div>
-                    </div>
-
-                    {/* Tableau des lots */}
-                    <div className="overflow-x-auto bg-cream-50/50 rounded-lg border border-cream-dark">
-                      <table className="text-sm" style={{ minWidth: '1100px' }}>
-                        <thead className="bg-cream-100 border-b border-cream-dark">
-                          <tr>
-                            <th className="px-3 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Lot</th>
-                            <th className="px-3 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Type</th>
-                            <th className="px-3 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Surface</th>
-                            <th className="px-3 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Locataire</th>
-                            <th className="px-3 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Loyer/mois</th>
-                            <th className="px-3 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Loyer/an</th>
-                            <th className="px-3 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Échéance</th>
-                            <th className="px-3 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Loyer pot.</th>
-                            <th className="px-3 py-2 text-center text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Statut</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {lots.map((lot, i) => {
-                            const loyerMois = parseFloat(lot.loyer) || 0;
-                            const pot = parseFloat(lot.loyer_potentiel) || 0;
-                            const isLoue = lot.statut === 'loué' || lot.statut === 'loue';
-                            const echeance = lot.bail_echeance ? new Date(lot.bail_echeance).toLocaleDateString('fr-FR') : null;
-                            return (
-                              <tr key={i} className="border-b border-cream-dark/30 last:border-0 hover:bg-white">
-                                <td className="px-3 py-2 font-medium whitespace-nowrap">{lot.numero || (i + 1)}</td>
-                                <td className="px-3 py-2 text-stone-700 whitespace-nowrap">{lot.type || lot.nature || '—'}</td>
-                                <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{lot.surface ? `${lot.surface} m²` : '—'}</td>
-                                <td className="px-3 py-2 text-stone-700 whitespace-nowrap">{lot.locataire || (isLoue ? '—' : <span className="text-amber-600 italic">Libre</span>)}</td>
-                                <td className="px-3 py-2 text-right tabular-nums font-medium whitespace-nowrap">{loyerMois > 0 ? `${loyerMois.toLocaleString('fr-FR')} €` : '—'}</td>
-                                <td className="px-3 py-2 text-right tabular-nums text-stone-500 whitespace-nowrap">{loyerMois > 0 ? `${(loyerMois * 12).toLocaleString('fr-FR')} €` : '—'}</td>
-                                <td className="px-3 py-2 text-stone-600 whitespace-nowrap text-xs">{echeance || '—'}</td>
-                                <td className="px-3 py-2 text-right tabular-nums text-amber-700 whitespace-nowrap">{pot > 0 ? `${pot.toLocaleString('fr-FR')} €` : '—'}</td>
-                                <td className="px-3 py-2 text-center whitespace-nowrap">
-                                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${isLoue ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                                    {isLoue ? 'Loué' : (lot.statut === 'libre' ? 'Libre' : 'Vacant')}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                        <tfoot className="bg-cream-100 border-t-2 border-cream-dark">
-                          <tr>
-                            <td colSpan={2} className="px-3 py-2 text-xs font-semibold text-stone-700 whitespace-nowrap">
-                              TOTAL · {lots.length} lot{lots.length > 1 ? 's' : ''}
-                              {nbLoues > 0 && <span className="ml-2 text-emerald-600">({nbLoues} loué{nbLoues > 1 ? 's' : ''})</span>}
-                              {nbLibres > 0 && <span className="ml-1 text-amber-600">({nbLibres} libre{nbLibres > 1 ? 's' : ''})</span>}
-                            </td>
-                            <td className="px-3 py-2 text-right tabular-nums font-semibold whitespace-nowrap">{sumSurface > 0 ? `${sumSurface} m²` : '—'}</td>
-                            <td></td>
-                            <td className="px-3 py-2 text-right tabular-nums font-semibold whitespace-nowrap">{sumLoyer > 0 ? `${sumLoyer.toLocaleString('fr-FR')} €` : '—'}</td>
-                            <td className="px-3 py-2 text-right tabular-nums font-semibold whitespace-nowrap">{sumLoyer > 0 ? `${(sumLoyer * 12).toLocaleString('fr-FR')} €` : '—'}</td>
-                            <td></td>
-                            <td className="px-3 py-2 text-right tabular-nums font-semibold text-amber-700 whitespace-nowrap">{sumPotentiel > 0 ? `${sumPotentiel.toLocaleString('fr-FR')} €` : '—'}</td>
-                            <td></td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-
-                    {/* Charges */}
-                    {(sumChargesRecup > 0 || sumChargesNonRecup > 0) && (
-                      <div className="grid grid-cols-2 gap-3 mt-3">
-                        {sumChargesRecup > 0 && (
-                          <div className="bg-stone-50 rounded-lg p-3 border border-stone-200 text-xs">
-                            <div className="text-stone-500 uppercase text-[10px] mb-0.5">Charges récupérables totales</div>
-                            <div className="font-semibold text-stone-900">{sumChargesRecup.toLocaleString('fr-FR')} €/mois <span className="text-stone-500 font-normal">({(sumChargesRecup * 12).toLocaleString('fr-FR')} €/an)</span></div>
-                          </div>
-                        )}
-                        {sumChargesNonRecup > 0 && (
-                          <div className="bg-stone-50 rounded-lg p-3 border border-stone-200 text-xs">
-                            <div className="text-stone-500 uppercase text-[10px] mb-0.5">Charges non récupérables totales</div>
-                            <div className="font-semibold text-stone-900">{sumChargesNonRecup.toLocaleString('fr-FR')} €/an</div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-          )}
           {/* ═══ DESCRIPTION ═══ */}
           {mandat.description && (
             <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
@@ -2949,715 +2825,437 @@ function OwnerSelector({ mandat, client, entity = 'mandat', reload }) {
   );
 }
 
-// === FICHE DETAIL CLIENT ===
-function ClientDetail({ client, reload, interactions = [], onBack, onEdit, deals = [], mandats = [], onOpenMandat }) {
-  const { user, profile } = useAuth();
-  const allProfilesCache = [];
+// === CLIENTS ===
+function ClientDetail({ client, onBack, onEdit, mandats, deals, interactions, reload, onOpenMandat }) {
+  const clientDeals = deals.filter(d => d.clientId === client.id);
+  const clientInteractions = (interactions || []).filter(i => i.clientId === client.id);
 
-  if (!client) return null;
-
-  // Helpers
-  const fullName = [client.prenom, client.nom].filter(Boolean).join(' ') || 'Client sans nom';
-  const initials = [(client.prenom || '').charAt(0), (client.nom || '').charAt(0)].join('').toUpperCase() || '??';
-
-  // Calcul des mandats matchant ce client
-  const matches = matchMandatsForClient(client, mandats) || [];
-
-  // Interactions filtrees pour ce client uniquement
-  const clientInteractions = (interactions || [])
-    .filter(i => i.client_id === client.id)
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    .slice(0, 8);
-
-  // Format budget
-  const formatBudget = () => {
-    const min = client.budget_min;
-    const max = client.budget_max;
-    if (!min && !max) return 'Non defini';
-    const fmt = (n) => {
-      if (!n) return '?';
-      if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M€';
-      if (n >= 1e3) return Math.round(n / 1e3) + 'k€';
-      return n + '€';
-    };
-    if (min && max) return `${fmt(min)} - ${fmt(max)}`;
-    if (min) return `> ${fmt(min)}`;
-    return `< ${fmt(max)}`;
-  };
-
-  // Badge marché
-  const marcheBadge = client.marche === 'b2b'
-    ? { label: 'B2B - Investisseur', bg: 'bg-sage-50', text: 'text-sage-dark' }
-    : client.marche === 'b2c'
-    ? { label: 'B2C - Habitation', bg: 'bg-emerald-50', text: 'text-emerald-700' }
-    : null;
-
-  // Badge maturité
-  const maturiteBadge = client.maturite ? {
-    label: client.maturite,
-    bg: client.maturite === 'Chaud' ? 'bg-amber-50' : client.maturite === 'Tiede' ? 'bg-cream-200' : 'bg-stone-50',
-    text: client.maturite === 'Chaud' ? 'text-amber-700' : 'text-stone-700',
-  } : null;
+  // Calcul des matches (côté front, en attendant le scoring back)
+  const matches = useMemo(() => {
+    if (!client) return [];
+    return matchMandatsForClient(client, mandats || []);
+  }, [client, mandats]);
 
   return (
-    <div className="p-6 max-w-6xl">
-      {/* Bouton retour */}
-      <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-800 mb-4">
-        <ArrowLeft className="w-4 h-4" /> Retour aux clients
+    <div className="p-8 max-w-6xl">
+      <button onClick={onBack} className="text-sm text-stone-500 hover:text-stone-900 mb-4 flex items-center gap-1">
+        <ArrowLeft className="w-4 h-4" /> Retour à la liste
       </button>
 
-      {/* HEADER */}
-      <div className="bg-white rounded-xl border border-cream-dark p-6 mb-4 shadow-luxe">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-4 flex-1 min-w-0">
-            {/* Avatar */}
-            <div className="w-16 h-16 rounded-full bg-sage-50 flex items-center justify-center text-sage-dark text-xl font-semibold flex-shrink-0">
-              {initials}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap mb-1">
-                <h1 className="font-display text-2xl font-semibold text-stone-900">{fullName}</h1>
-                {marcheBadge && (
-                  <span className={`${marcheBadge.bg} ${marcheBadge.text} text-xs px-2 py-0.5 rounded-md font-medium`}>{marcheBadge.label}</span>
-                )}
-                {maturiteBadge && (
-                  <span className={`${maturiteBadge.bg} ${maturiteBadge.text} text-xs px-2 py-0.5 rounded-md font-medium`}>{maturiteBadge.label}</span>
-                )}
-              </div>
-              <div className="text-sm text-stone-500 flex gap-4 flex-wrap">
-                {client.societe && (
-                  <span className="flex items-center gap-1.5"><Briefcase className="w-3.5 h-3.5" />{client.societe}</span>
-                )}
-                {client.owner && (
-                  <span className="flex items-center gap-1.5"><UserIcon className="w-3.5 h-3.5" />{client.owner}</span>
-                )}
-                {client.source && (
-                  <span className="flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5" />{client.source}</span>
-                )}
-              </div>
-            </div>
-          </div>
-          {/* Actions */}
-          <div className="flex gap-2 flex-shrink-0">
-            {client.email && (
-              <a href={`mailto:${client.email}`} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-white border border-stone-200 rounded-lg hover:bg-cream-50 text-stone-700">
-                <Mail className="w-3.5 h-3.5" /> Email
-              </a>
+      <div className="flex items-start justify-between mb-6 gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 mb-1 flex-wrap">
+            <h1 className="font-display text-3xl font-semibold text-stone-900">
+              {client.prenom} {client.nom}
+            </h1>
+            {client.societe && (
+              <span className="text-stone-500 text-lg">· {client.societe}</span>
             )}
-            {client.tel && (
-              <a href={`tel:${client.tel}`} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-white border border-stone-200 rounded-lg hover:bg-cream-50 text-stone-700">
-                <Phone className="w-3.5 h-3.5" /> Appel
-              </a>
+          </div>
+          <div className="flex items-center gap-3 text-sm text-stone-500 flex-wrap">
+            {client.typologie && <span className="px-2 py-0.5 bg-sage-50 text-sage-darker rounded-full text-xs border border-sage-light">{client.typologie}</span>}
+            {client.maturite && <MaturiteBadge maturite={client.maturite} />}
+            {client.statut && <span className="text-xs">{client.statut}</span>}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <OwnerSelector client={client} entity="client" reload={reload} />
+          <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
+            <Edit2 className="w-4 h-4" /> Modifier
+          </button>
+        </div>
+      </div>
+
+      {/* ═══ CONTACT ═══ */}
+      <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
+        <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Coordonnées</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <DetailItem label="Email" value={client.email || '—'} />
+          <DetailItem label="Téléphone" value={client.tel || '—'} />
+          {client.adresse && <DetailItem label="Adresse" value={client.adresse} />}
+          {client.ville && <DetailItem label="Ville" value={client.ville} />}
+        </div>
+      </div>
+
+      {/* ═══ CRITÈRES RECHERCHE ═══ */}
+      {(client.budgetMin || client.budgetMax || (client.zones || []).length > 0 || (client.typologiesRecherchees || []).length > 0) && (
+        <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
+          <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Critères de recherche</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <DetailItem label="Budget" value={
+              client.budgetMin || client.budgetMax
+                ? `${formatPrixCompact(client.budgetMin || 0)} → ${formatPrixCompact(client.budgetMax || 0)}`
+                : '—'
+            } />
+            <DetailItem label="Surface" value={
+              client.surfaceMin || client.surfaceMax
+                ? `${client.surfaceMin || '?'}m² → ${client.surfaceMax || '?'}m²`
+                : '—'
+            } />
+            {(client.typologiesRecherchees || []).length > 0 && (
+              <div className="col-span-2">
+                <div className="text-xs uppercase tracking-wide text-stone-500 mb-2">Typologies recherchées</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {(client.typologiesRecherchees || []).map((t, i) => (
+                    <span key={i} className="text-xs px-2 py-1 bg-sage-50 text-sage-darker rounded-full border border-sage-light">{t}</span>
+                  ))}
+                </div>
+              </div>
             )}
-            <button onClick={onEdit} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-ink-deep text-white rounded-lg hover:bg-stone-800">
-              <Edit className="w-3.5 h-3.5" /> Modifier
-            </button>
+            {(client.zones || []).length > 0 && (
+              <div className="col-span-2">
+                <div className="text-xs uppercase tracking-wide text-stone-500 mb-2">Zones</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {(client.zones || []).map((z, i) => (
+                    <span key={i} className="text-xs px-2 py-1 bg-stone-100 text-stone-700 rounded-full">{z}</span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      </div>
+      )}
 
-      {/* KPIs */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <div className="bg-cream-50 p-3 rounded-lg">
-          <div className="text-[10px] uppercase tracking-wide text-stone-500 mb-1">Budget</div>
-          <div className="text-lg font-semibold text-stone-900">{formatBudget()}</div>
+      {/* ═══ MATCHING MANDATS ═══ */}
+      {matches.length > 0 && (
+        <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
+          <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-sage-dark" /> Mandats correspondants ({matches.length})
+          </h2>
+          <ClientMatches matches={matches} onOpenMandat={onOpenMandat} />
         </div>
-        <div className="bg-cream-50 p-3 rounded-lg">
-          <div className="text-[10px] uppercase tracking-wide text-stone-500 mb-1">Rendement min</div>
-          <div className="text-lg font-semibold text-stone-900">{client.rendement_min ? `${client.rendement_min}%` : 'Non defini'}</div>
-        </div>
-        <div className="bg-cream-50 p-3 rounded-lg">
-          <div className="text-[10px] uppercase tracking-wide text-stone-500 mb-1">Mandats matches</div>
-          <div className="text-lg font-semibold text-stone-900">{matches.length}</div>
-        </div>
-      </div>
+      )}
 
-      {/* Coordonnees */}
-      <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
-        <div className="text-sm font-medium text-stone-700 mb-3 flex items-center gap-1.5">
-          <Inbox className="w-4 h-4 text-sage-dark" /> Coordonnees
-        </div>
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          {client.email && (
-            <div>
-              <div className="text-xs text-stone-500 mb-0.5">Email</div>
-              <div className="text-stone-900">{client.email}</div>
-            </div>
-          )}
-          {client.tel && (
-            <div>
-              <div className="text-xs text-stone-500 mb-0.5">Telephone</div>
-              <div className="text-stone-900">{client.tel}</div>
-            </div>
-          )}
-          {client.societe && (
-            <div>
-              <div className="text-xs text-stone-500 mb-0.5">Societe</div>
-              <div className="text-stone-900">{client.societe}</div>
-            </div>
-          )}
-          {client.source && (
-            <div>
-              <div className="text-xs text-stone-500 mb-0.5">Source</div>
-              <div className="text-stone-900">{client.source}</div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Recherche / Criteres */}
-      <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
-        <div className="text-sm font-medium text-stone-700 mb-3 flex items-center gap-1.5">
-          <MapPin className="w-4 h-4 text-sage-dark" /> Recherche
-        </div>
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div>
-            <div className="text-xs text-stone-500 mb-1">Typologies recherchees</div>
-            <div className="flex gap-1.5 flex-wrap">
-              {Array.isArray(client.typologies_recherchees) && client.typologies_recherchees.length > 0 ? (
-                client.typologies_recherchees.map((t, i) => (
-                  <span key={i} className="bg-sage-50 text-sage-dark text-[11px] px-2 py-0.5 rounded-md">{t}</span>
-                ))
-              ) : (
-                <span className="text-stone-400 text-xs">Aucune</span>
-              )}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-stone-500 mb-1">Zones</div>
-            <div className="flex gap-1.5 flex-wrap">
-              {Array.isArray(client.zones) && client.zones.length > 0 ? (
-                client.zones.map((z, i) => (
-                  <span key={i} className="bg-emerald-50 text-emerald-700 text-[11px] px-2 py-0.5 rounded-md">{z}</span>
-                ))
-              ) : (
-                <span className="text-stone-400 text-xs">Aucune</span>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Mandats compatibles */}
-      <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-sm font-medium text-stone-700 flex items-center gap-1.5">
-            <Sparkles className="w-4 h-4 text-sage-dark" /> Mandats compatibles
-          </div>
-          <span className="bg-sage-50 text-sage-dark text-xs px-2 py-0.5 rounded-md">{matches.length} match{matches.length > 1 ? 'es' : ''}</span>
-        </div>
-        {matches.length === 0 ? (
-          <div className="text-center text-stone-400 text-sm py-6">Aucun mandat compatible pour le moment</div>
-        ) : (
+      {/* ═══ DEALS ═══ */}
+      {clientDeals.length > 0 && (
+        <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
+          <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Deals ({clientDeals.length})</h2>
           <div className="space-y-2">
-            {matches.slice(0, 5).map(({ mandat: m, score, raisons }) => (
-              <div
-                key={m.id}
-                onClick={() => onOpenMandat?.(m.id)}
-                className="border border-cream-dark rounded-lg p-3 cursor-pointer hover:bg-cream-50 transition-colors"
-              >
-                <div className="flex justify-between items-start mb-1.5">
-                  <div className="font-medium text-sm text-stone-900">{m.nom || m.adresse || 'Mandat sans nom'}</div>
-                  <span className={`text-xs px-2 py-0.5 rounded-md font-medium ${
-                    score >= 80 ? 'bg-emerald-50 text-emerald-700' :
-                    score >= 60 ? 'bg-amber-50 text-amber-700' :
-                    'bg-stone-50 text-stone-600'
-                  }`}>{score}%</span>
-                </div>
-                <div className="text-xs text-stone-500 mb-1.5">
-                  {[
-                    m.prix ? `${(m.prix / 1e6).toFixed(1)}M€` : null,
-                    m.surface ? `${m.surface} m²` : null,
-                    m.rendement ? `Rdt ${m.rendement}%` : null,
-                  ].filter(Boolean).join(' · ')}
-                </div>
-                {Array.isArray(raisons) && raisons.length > 0 && (
-                  <div className="flex gap-1 flex-wrap">
-                    {raisons.slice(0, 3).map((r, i) => (
-                      <span key={i} className="bg-cream-100 text-stone-600 text-[10px] px-1.5 py-0.5 rounded">{r}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Emails échangés avec ce client */}
-      <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
-        <div className="text-sm font-medium text-stone-700 mb-3 flex items-center gap-1.5">
-          <Mail className="w-4 h-4 text-sage-dark" /> Emails échangés
-        </div>
-        <ClientEmails client={client} />
-      </div>
-
-      {/* Interactions */}
-      <div className="bg-white rounded-xl border border-cream-dark p-4">
-        <div className="text-sm font-medium text-stone-700 mb-3 flex items-center gap-1.5">
-          <MessageSquare className="w-4 h-4 text-sage-dark" /> Interactions ({clientInteractions.length})
-        </div>
-        {clientInteractions.length === 0 ? (
-          <div className="text-center text-stone-400 text-sm py-6">Aucune interaction pour le moment</div>
-        ) : (
-          <div className="space-y-2.5">
-            {clientInteractions.map(i => {
-              const date = i.created_at ? new Date(i.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-              const TypeIcon = i.type === 'email_sortant' || i.type === 'email_entrant' ? Mail : i.type === 'appel' ? Phone : MessageSquare;
+            {clientDeals.map(d => {
+              const mandat = mandats.find(m => m.id === d.mandatId);
               return (
-                <div key={i.id} className="flex gap-2.5 items-start">
-                  <div className="w-7 h-7 rounded-full bg-sage-50 flex items-center justify-center flex-shrink-0">
-                    <TypeIcon className="w-3.5 h-3.5 text-sage-dark" />
-                  </div>
+                <button key={d.id} onClick={() => mandat && onOpenMandat?.(mandat.id)} className="w-full flex items-center justify-between p-3 bg-stone-50 rounded-lg hover:bg-stone-100 text-left">
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm text-stone-800">{i.resume || i.type || 'Interaction'}</div>
-                    <div className="text-[11px] text-stone-500">{date}{i.created_by ? ` \u00b7 ${i.created_by}` : ''}</div>
+                    <div className="text-sm font-medium text-stone-900 truncate">{mandat?.nom || 'Mandat inconnu'}</div>
+                    <div className="text-xs text-stone-500">{d.statut}</div>
                   </div>
-                </div>
+                  <DealStatutBadge statut={d.statut} />
+                </button>
               );
             })}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Assistant IA — sidebar fixe en bas \u00e0 droite */}
-      <ClientAIAssistant client={client} mandats={mandats} />
+      {/* ═══ EMAILS ═══ */}
+      <ClientEmails client={client} reload={reload} />
+
+      {/* ═══ INTERACTIONS ═══ */}
+      {clientInteractions.length > 0 && (
+        <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
+          <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Historique des échanges ({clientInteractions.length})</h2>
+          <div className="space-y-3">
+            {clientInteractions.slice(0, 10).map(int => (
+              <div key={int.id} className="flex items-start gap-3 pb-3 border-b border-cream-dark last:border-0">
+                <TypeInteractionBadge type={int.type} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-stone-900">{int.objet || int.notes || '—'}</div>
+                  <div className="text-xs text-stone-500 mt-0.5">
+                    {int.date && new Date(int.date).toLocaleDateString('fr-FR')} · {int.par || '—'}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ ASSISTANT IA CLIENT ═══ */}
+      <ClientAIAssistant client={client} />
     </div>
   );
 }
-// === CLIENTS ===
+
 function ClientsTab({ clients, reload, mandats, deals, interactions, pendingClientId, onPendingClientConsumed, onOpenMandat }) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [search, setSearch] = useState('');
   const [filterTypo, setFilterTypo] = useState('Tous');
-  const [filterMarche, setFilterMarche] = useState('Tous'); // Tous | b2b | b2c
+  const [filterMarche, setFilterMarche] = useState('Tous'); // 'Tous' | 'b2b' | 'b2c'
+  const [filterMine, setFilterMine] = useState(false);
+  const myInitials = getCurrentUserInitials(profile);
   const [editingClient, setEditingClient] = useState(null);
   const [showNew, setShowNew] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
 
-  // Si on arrive ici avec un client à ouvrir (depuis l'Inbox), on l'ouvre direct
+  // Deep-link : ouvre la fiche du client si pendingClientId passé en prop
   useEffect(() => {
-    if (pendingClientId && clients.length > 0) {
+    if (pendingClientId && Array.isArray(clients) && clients.length > 0) {
       const c = clients.find(x => x.id === pendingClientId);
-      if (c) {
-        setSelectedClient(c);
-        onPendingClientConsumed?.();
-      }
+      if (c) { setSelectedClient(c); onPendingClientConsumed?.(); }
     }
-  }, [pendingClientId, clients, onPendingClientConsumed]);
-  const [showVoice, setShowVoice] = useState(false);
-  const [voiceFeedback, setVoiceFeedback] = useState(null);
-  const [showImportContacts, setShowImportContacts] = useState(false);
-  const [outlookConnected, setOutlookConnected] = useState(false);
-
-  useEffect(() => {
-    if (!user) return;
-    supabase.from('user_integrations')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('provider', 'microsoft')
-      .maybeSingle()
-      .then(({ data }) => setOutlookConnected(!!data));
-  }, [user]);
+  }, [pendingClientId, clients]);
 
   const filtered = clients.filter(c => {
-    if (search && !`${c.prenom || ''} ${c.nom} ${c.societe || ''}`.toLowerCase().includes(search.toLowerCase())) return false;
-
-    // Filtre marché (b2b/b2c) — utilise client.marche, sinon déduit de la typologie
-    if (filterMarche !== 'Tous') {
-      const cMarche = c.marche || getMarcheFromTypologieClient(c.typologie);
-      if (cMarche !== filterMarche) return false;
+    if (filterMine && c.owner !== myInitials) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const hay = `${c.prenom || ''} ${c.nom || ''} ${c.societe || ''} ${c.email || ''} ${c.tel || ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
     }
-    // Filtre typologie
-    if (filterTypo !== 'Tous') {
-      const typoLabel = c.sous_typologie ? `${c.typologie} · ${c.sous_typologie}` : c.typologie;
-      if (typoLabel !== filterTypo && c.typologie !== filterTypo) return false;
+    if (filterTypo !== 'Tous' && c.typologie !== filterTypo) return false;
+    if (filterMarche !== 'Tous') {
+      const m = getMarcheFromTypologieClient(c.typologie);
+      if (m !== filterMarche) return false;
     }
     return true;
   });
 
-  const handleSave = async (client) => {
-    const snakeData = toSnake(client);
+  const handleSave = async (clientData) => {
+    const snakeData = toSnake(clientData);
     delete snakeData.created_at;
     delete snakeData.updated_at;
-    let savedClientId = client.id;
-    if (client.id) {
+    let clientId = clientData.id;
+    if (clientData.id) {
       snakeData.updated_by = user?.id;
-      await supabase.from('clients').update(snakeData).eq('id', client.id);
+      await supabase.from('clients').update(snakeData).eq('id', clientData.id);
     } else {
       delete snakeData.id;
       snakeData.created_by = user?.id;
       const { data: created } = await supabase.from('clients').insert(snakeData).select().single();
-      if (created) savedClientId = created.id;
+      if (created) clientId = created.id;
     }
     setEditingClient(null);
     setShowNew(false);
     reload();
-    // Trigger matching auto batch (fire-and-forget)
-    if (savedClientId) triggerMatchingBatch({ clientId: savedClientId });
+    if (clientId) triggerMatchingBatch({ clientId });
+  };
+
+  const handleDelete = async (id) => {
+    if (confirm('Supprimer ce client ?')) {
+      await supabase.from('clients').delete().eq('id', id);
+      reload();
+    }
   };
 
   if (selectedClient) {
     const current = clients.find(c => c.id === selectedClient.id) || selectedClient;
-    return <ClientDetail client={current} reload={reload} interactions={interactions} onBack={() => setSelectedClient(null)} onEdit={() => { setEditingClient(current); setSelectedClient(null); }} deals={deals} mandats={mandats} onOpenMandat={onOpenMandat} />;
+    return (
+      <>
+        <ClientDetail
+          client={current}
+          onBack={() => setSelectedClient(null)}
+          onEdit={() => setEditingClient(current)}
+          mandats={mandats}
+          deals={deals}
+          interactions={interactions}
+          reload={reload}
+          onOpenMandat={onOpenMandat}
+        />
+        {editingClient && (
+          <ClientForm client={editingClient} onSave={handleSave} onClose={() => setEditingClient(null)} />
+        )}
+      </>
+    );
   }
 
   return (
-    <div className="p-8 max-w-7xl">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="font-display text-4xl font-semibold text-stone-900 mb-1">Clients</h1>
-          <p className="text-stone-500">{filtered.length} investisseur{filtered.length > 1 ? 's' : ''}</p>
+    <div className="p-6 max-w-none">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div className="flex items-baseline gap-3">
+          <h1 className="font-display text-2xl font-semibold text-stone-900">Clients</h1>
+          <span className="text-stone-500 text-sm">{filtered.length} client{filtered.length > 1 ? 's' : ''}</span>
         </div>
-        <div className="flex items-center gap-2">
-          {outlookConnected && (
-            <button onClick={() => setShowImportContacts(true)} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-cream-dark text-ink rounded-lg hover:bg-cream-50 text-sm font-medium">
-              <Download className="w-4 h-4" /> Importer Outlook
-            </button>
-          )}
-          <button onClick={() => setShowVoice(true)} className="flex items-center gap-2 px-4 py-2.5 gradient-sage-dark text-white rounded-lg hover:opacity-90 text-sm font-medium shadow-md">
-            <Mic className="w-4 h-4" /> Note vocale
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50 text-sm">
+            <Upload className="w-4 h-4" /> Importer
           </button>
-          <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-4 py-2.5 bg-ink-deep text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
+          <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-3 py-2 bg-ink-deep text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
             <Plus className="w-4 h-4" /> Nouveau client
           </button>
         </div>
       </div>
 
-      {voiceFeedback && (
-        <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-sm">
-          <CheckCircle2 className="w-4 h-4 text-emerald-700" />
-          <span className="text-emerald-900">
-            {voiceFeedback.action === 'update' ? 'Fiche client enrichie' : 'Nouveau client créé'} via note vocale avec succès.
-          </span>
-          <button onClick={() => setVoiceFeedback(null)} className="ml-auto text-emerald-700 hover:text-emerald-900">
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-
-      <div className="flex gap-3 mb-6">
-        <div className="flex-1 relative">
+      <div className="flex gap-3 mb-6 flex-wrap">
+        <div className="flex-1 relative min-w-[280px]">
           <Search className="w-4 h-4 absolute left-3 top-3 text-stone-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher..." 
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher (nom, société, email…)" 
             className="w-full pl-10 pr-4 py-2.5 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" />
         </div>
-        {/* Toggle marché B2B / B2C */}
         <div className="flex bg-white border border-stone-200 rounded-lg overflow-hidden">
-          <button
-            onClick={() => setFilterMarche('Tous')}
-            className={`px-3 py-2.5 text-xs font-medium ${filterMarche === 'Tous' ? 'bg-ink-deep text-white' : 'text-stone-600 hover:bg-stone-50'}`}
-          >
-            Tous
-          </button>
-          <button
-            onClick={() => setFilterMarche('b2b')}
-            className={`px-3 py-2.5 text-xs font-medium border-l border-stone-200 ${filterMarche === 'b2b' ? 'bg-sage-100 text-sage-darker' : 'text-stone-600 hover:bg-stone-50'}`}
-            title="Investissement (B2B)"
-          >
-            B2B
-          </button>
-          <button
-            onClick={() => setFilterMarche('b2c')}
-            className={`px-3 py-2.5 text-xs font-medium border-l border-stone-200 ${filterMarche === 'b2c' ? 'bg-blue-100 text-blue-900' : 'text-stone-600 hover:bg-stone-50'}`}
-            title="Habitation (B2C)"
-          >
-            B2C
-          </button>
+          <button onClick={() => setFilterMarche('Tous')} className={`px-3 py-2.5 text-xs font-medium ${filterMarche === 'Tous' ? 'bg-ink-deep text-white' : 'text-stone-600 hover:bg-stone-50'}`}>Tous</button>
+          <button onClick={() => setFilterMarche('b2b')} className={`px-3 py-2.5 text-xs font-medium border-l border-stone-200 ${filterMarche === 'b2b' ? 'bg-sage-100 text-sage-darker' : 'text-stone-600 hover:bg-stone-50'}`}>B2B</button>
+          <button onClick={() => setFilterMarche('b2c')} className={`px-3 py-2.5 text-xs font-medium border-l border-stone-200 ${filterMarche === 'b2c' ? 'bg-blue-100 text-blue-900' : 'text-stone-600 hover:bg-stone-50'}`}>B2C</button>
         </div>
-
-        {/* Select typologie avec optgroups */}
         <select value={filterTypo} onChange={e => setFilterTypo(e.target.value)} className="px-4 py-2.5 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
-          <option value="Tous">Toutes typologies</option>
-          <optgroup label="Investissement (B2B)">
-            <option value="Foncières">Foncières (toutes)</option>
-            <option value="Foncières · Privées">Foncières · Privées</option>
-            <option value="Foncières · Publiques">Foncières · Publiques</option>
-            <option value="Marchands de biens">Marchands de biens</option>
-            <option value="Fonds">Fonds</option>
-            <option value="Promoteurs">Promoteurs</option>
-            <option value="Family Office">Family Office</option>
-          </optgroup>
-          <optgroup label="Habitation (B2C)">
-            <option value="Particuliers">Particuliers</option>
-          </optgroup>
+          <option>Tous</option>
+          {TYPOLOGIES_CLIENT.map(t => <option key={t}>{t}</option>)}
         </select>
+        <label className="flex items-center gap-2 px-3 py-2.5 bg-white border border-stone-200 rounded-lg text-sm cursor-pointer">
+          <input type="checkbox" checked={filterMine} onChange={e => setFilterMine(e.target.checked)} />
+          <span>Mes clients</span>
+        </label>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        {filtered.map(c => {
-          const nbDeals = deals.filter(d => d.clientId === c.id && !['Perdu','Refusé'].includes(d.statut)).length;
-          const clientInteractions = interactions.filter(i => i.clientId === c.id);
-          const lastInter = clientInteractions[0];
-          return (
-            <div key={c.id} onClick={() => setSelectedClient(c)} className="bg-white rounded-xl p-5 shadow-luxe hover:shadow-luxe-hover border border-stone-200 cursor-pointer">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <div className="font-display text-lg font-semibold text-stone-900">{c.prenom} {c.nom}</div>
-                  <div className="text-sm text-stone-600">{c.societe}</div>
-                </div>
-                <MaturiteBadge maturite={c.maturite} />
-              </div>
-              <div className="flex flex-wrap gap-1.5 mb-3">
-                {(() => {
-                  const cMarche = c.marche || getMarcheFromTypologieClient(c.typologie);
-                  const cSousTypo = c.sous_typologie;
-                  const typoLabel = cSousTypo ? `${c.typologie} \u00b7 ${cSousTypo}` : c.typologie;
-                  const filterValue = cSousTypo ? `${c.typologie} \u00b7 ${cSousTypo}` : c.typologie;
-                  const badgeClass = cMarche === 'b2c'
-                    ? 'bg-blue-50 text-blue-800 hover:bg-blue-100'
-                    : 'bg-sage-50 text-sage-darker hover:bg-sage-100';
-                  return (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setFilterTypo(filterValue); }}
-                      className={`text-xs px-2 py-0.5 rounded-full transition-colors ${badgeClass}`}
-                      title={`Filtrer par ${typoLabel}`}
-                    >
-                      {typoLabel}
-                    </button>
-                  );
-                })()}
-                {(c.zones || []).slice(0, 2).map(z => <span key={z} className="text-xs px-2 py-0.5 bg-sage-50 text-sage-dark rounded-full">{z}</span>)}
-              </div>
-              <div className="grid grid-cols-3 gap-3 pt-3 border-t border-cream">
-                <div><div className="text-[10px] text-stone-500 uppercase">Budget</div><div className="text-xs font-medium text-stone-900">{(parseFloat(c.budgetMin)/1000000).toFixed(1)}-{(parseFloat(c.budgetMax)/1000000).toFixed(1)}M€</div></div>
-                <div><div className="text-[10px] text-stone-500 uppercase">Rdt min</div><div className="text-xs font-medium text-stone-900">{c.rendementMin}%</div></div>
-                <div><div className="text-[10px] text-stone-500 uppercase">Deals</div><div className="text-xs font-medium text-stone-900">{nbDeals}</div></div>
-              </div>
-              {lastInter && (
-                <div className="mt-3 pt-3 border-t border-stone-100 text-xs text-stone-500 flex items-center gap-1.5">
-                  <Clock className="w-3 h-3" />
-                  Dernière interaction : {new Date(lastInter.date).toLocaleDateString('fr-FR')}
-                </div>
-              )}
-            </div>
-          );
-        })}
+      <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-stone-50 border-b border-cream-dark">
+            <tr>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Nom</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Société</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Typologie</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Budget</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Contact</th>
+              <th className="text-center px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide w-12">Owner</th>
+              <th className="w-12"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(c => (
+              <tr key={c.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer group" onClick={() => setSelectedClient(c)}>
+                <td className="px-3 py-3">
+                  <div className="font-medium text-stone-900 text-sm">{c.prenom} {c.nom}</div>
+                </td>
+                <td className="px-3 py-3 text-sm text-stone-700">{c.societe || '—'}</td>
+                <td className="px-3 py-3 text-sm">
+                  {c.typologie ? (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-sage-50 text-sage-darker border border-sage-light">{c.typologie}</span>
+                  ) : <span className="text-stone-400">—</span>}
+                </td>
+                <td className="px-3 py-3 text-sm text-stone-700">
+                  {c.budgetMin || c.budgetMax ? `${formatPrixCompact(c.budgetMin || 0)} → ${formatPrixCompact(c.budgetMax || 0)}` : '—'}
+                </td>
+                <td className="px-3 py-3 text-sm text-stone-600">
+                  <div className="truncate max-w-[200px]">{c.email || c.tel || '—'}</div>
+                </td>
+                <td className="px-3 py-3 text-center">
+                  <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-sage-100 text-sage-darker text-xs font-semibold border border-sage-light" title={'Owner: ' + (c.owner || '—')}>
+                    {c.owner || '?'}
+                  </div>
+                </td>
+                <td className="px-3 py-2">
+                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100" onClick={e => e.stopPropagation()}>
+                    <button onClick={() => setEditingClient(c)} className="p-1.5 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded"><Edit2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => handleDelete(c.id)} className="p-1.5 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {filtered.length === 0 && <div className="p-12 text-center text-stone-500 text-sm">Aucun client trouvé</div>}
       </div>
 
       {(editingClient || showNew) && (
-        <ClientForm client={editingClient} onSave={handleSave} onClose={() => { setEditingClient(null); setShowNew(false); }} />
-      )}
-
-      {showVoice && (
-        <VoiceNoteModal
-          existingClients={clients}
-          onClose={() => setShowVoice(false)}
-          onSuccess={(action, clientId) => {
-            setShowVoice(false);
-            setVoiceFeedback({ action, clientId });
-            reload();
-            setTimeout(() => setVoiceFeedback(null), 5000);
-          }}
+        <ClientForm
+          client={editingClient}
+          onSave={handleSave}
+          onClose={() => { setEditingClient(null); setShowNew(false); }}
         />
       )}
-
-      {showImportContacts && (
-        <ContactsImportModal
-          onClose={() => setShowImportContacts(false)}
-          onImported={() => { setShowImportContacts(false); reload(); }}
-        />
+      {showImport && (
+        <ContactsImportModal onClose={() => setShowImport(false)} onImported={() => { setShowImport(false); reload(); }} />
       )}
     </div>
   );
 }
 
+// === FORMULAIRE CLIENT ===
 function ClientForm({ client, onSave, onClose }) {
+  const { profile } = useAuth();
+  const userInitials = getCurrentUserInitials(profile);
   const [data, setData] = useState(client || {
-    nom: '', prenom: '', societe: '', tel: '', email: '',
-    marche: 'b2b',
-    typologie: 'Foncières', sous_typologie: '',
-    nature: 'Privée',
-    budgetMin: 0, budgetMax: 0,
-    rendementMin: 0, zones: [], typologiesRecherchees: [],
-    statut: 'Actif', maturite: 'Moyen', origine: 'Apporteur', owner: 'TB'
+    prenom: '', nom: '', societe: '', email: '', tel: '',
+    adresse: '', ville: '', typologie: '',
+    budgetMin: 0, budgetMax: 0, surfaceMin: 0, surfaceMax: 0,
+    typologiesRecherchees: [], zones: [],
+    rendementMin: 0, statut: 'Actif', maturite: 'Tiède',
+    owner: userInitials, notes: '',
   });
-
-  // Si on édite un client existant sans `marche`, on le déduit de la typologie
-  useEffect(() => {
-    if (client && !data.marche) {
-      const inferred = getMarcheFromTypologieClient(data.typologie) || 'b2b';
-      setData(d => ({ ...d, marche: inferred }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const update = (k, v) => setData({ ...data, [k]: v });
-  const toggleArray = (key, value) => {
-    const arr = data[key] || [];
-    update(key, arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value]);
-  };
-
-  const marche = data.marche || 'b2b';
-
-  // Liste des typologies dispos selon le marché
-  const TYPOLOGIES_B2C = ['Particuliers'];
-  const TYPOLOGIES_B2B = ['Foncières', 'Marchands de biens', 'Fonds', 'Promoteurs', 'Family Office'];
-  const typologiesAvailable = marche === 'b2c' ? TYPOLOGIES_B2C : TYPOLOGIES_B2B;
-
-  const showSousTypologie = clientHasSousTypologie(data.typologie);
-  const sousTypologiesOptions = getSousTypologiesForClient(data.typologie);
-
-  // Switch marché : reset typologie + typologies recherchées (catalogue différent)
-  const handleMarcheChange = (newMarche) => {
-    if (newMarche === marche) return;
-    const defaultTypologie = newMarche === 'b2c' ? 'Particuliers' : 'Foncières';
-    setData({
-      ...data,
-      marche: newMarche,
-      typologie: defaultTypologie,
-      sous_typologie: '',
-      typologiesRecherchees: []
-    });
-  };
-
-  // Switch typologie (à l'intérieur d'un même marché)
-  const handleTypologieChange = (newTypologie) => {
-    const newSousTypologies = getSousTypologiesForClient(newTypologie);
-    setData({
-      ...data,
-      typologie: newTypologie,
-      sous_typologie: newSousTypologies.length > 0 ? (newSousTypologies.includes(data.sous_typologie) ? data.sous_typologie : '') : '',
-    });
-  };
+  const marche = getMarcheFromTypologieClient(data.typologie);
 
   return (
     <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-6" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-luxe-hover max-w-2xl w-full max-h-[90vh] overflow-y-auto scrollbar-thin" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-6 border-b border-cream-dark">
+      <div className="bg-white rounded-xl shadow-luxe-hover max-w-2xl w-full max-h-[92vh] overflow-y-auto scrollbar-thin" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-6 border-b border-stone-200 sticky top-0 bg-white z-10">
           <h2 className="font-display text-2xl font-semibold text-stone-900">{client ? 'Modifier' : 'Nouveau'} client</h2>
-          <button onClick={onClose}><X className="w-5 h-5 text-stone-500" /></button>
+          <button onClick={onClose} className="text-stone-500 hover:text-stone-900"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="p-6 space-y-4">
-          {/* TOGGLE MARCHÉ — toujours en haut, pilote le reste du formulaire */}
-          <Field label="Marché">
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleMarcheChange('b2b')}
-                className={`px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${marche === 'b2b' ? 'bg-sage-100 border-sage-dark text-sage-darker' : 'bg-white border-stone-200 text-stone-600 hover:border-sage-light'}`}
-              >
-                <div className="font-semibold">Investissement</div>
-                <div className="text-[11px] opacity-70 mt-0.5">B2B &middot; Foncières, Fonds, Promoteurs...</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleMarcheChange('b2c')}
-                className={`px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${marche === 'b2c' ? 'bg-blue-100 border-blue-600 text-blue-900' : 'bg-white border-stone-200 text-stone-600 hover:border-blue-300'}`}
-              >
-                <div className="font-semibold">Habitation</div>
-                <div className="text-[11px] opacity-70 mt-0.5">B2C &middot; Particuliers</div>
-              </button>
-            </div>
-          </Field>
-
           <div className="grid grid-cols-2 gap-3">
             <Field label="Prénom"><input type="text" value={data.prenom || ''} onChange={e => update('prenom', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
-            <Field label="Nom"><input type="text" value={data.nom} onChange={e => update('nom', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
+            <Field label="Nom"><input type="text" value={data.nom || ''} onChange={e => update('nom', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
           </div>
-
-          <Field label="Société"><input type="text" value={data.societe || ''} onChange={e => update('societe', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
-
+          <Field label="Société (optionnel)"><input type="text" value={data.societe || ''} onChange={e => update('societe', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Téléphone"><input type="tel" value={data.tel || ''} onChange={e => update('tel', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
             <Field label="Email"><input type="email" value={data.email || ''} onChange={e => update('email', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
+            <Field label="Téléphone"><input type="text" value={data.tel || ''} onChange={e => update('tel', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Typologie">
-              <select
-                value={data.typologie || ''}
-                onChange={e => handleTypologieChange(e.target.value)}
-                className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900"
-              >
-                {typologiesAvailable.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </Field>
-            {showSousTypologie ? (
-              <Field label="Sous-typologie">
-                <select value={data.sous_typologie || ''} onChange={e => update('sous_typologie', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
-                  <option value="">&mdash; Choisir &mdash;</option>
-                  {sousTypologiesOptions.map(st => <option key={st} value={st}>{st}</option>)}
-                </select>
-              </Field>
-            ) : (
-              <Field label="Maturité">
-                <select value={data.maturite} onChange={e => update('maturite', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
-                  <option>Haute</option><option>Moyen</option><option>Basse</option>
-                </select>
-              </Field>
-            )}
-          </div>
-
-          {showSousTypologie && (
-            <Field label="Maturité">
-              <select value={data.maturite} onChange={e => update('maturite', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
-                <option>Haute</option><option>Moyen</option><option>Basse</option>
-              </select>
-            </Field>
-          )}
-
-          <div className="grid grid-cols-3 gap-3">
-            <Field label="Budget min (€)"><input type="number" value={data.budgetMin} onChange={e => update('budgetMin', +e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
-            <Field label="Budget max (€)"><input type="number" value={data.budgetMax} onChange={e => update('budgetMax', +e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
-            <Field label="Rdt min (%)"><input type="number" step="0.1" value={data.rendementMin} onChange={e => update('rendementMin', +e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
-          </div>
-
-          <Field label="Zones recherchées">
-            <div className="flex flex-wrap gap-2">
-              {ZONES.map(z => (
-                <button key={z} type="button" onClick={() => toggleArray('zones', z)}
-                  className={`px-3 py-1 text-xs rounded-full border ${(data.zones || []).includes(z) ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{z}</button>
-              ))}
-            </div>
+          <Field label="Typologie">
+            <select value={data.typologie || ''} onChange={e => update('typologie', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
+              <option value="">— Choisir —</option>
+              {TYPOLOGIES_CLIENT.map(t => <option key={t}>{t}</option>)}
+            </select>
           </Field>
-
-          {marche === 'b2b' && (
-            <Field label="Typologies recherchées (Investissement)">
-              <CascadeSelectMulti
-                value={data.typologiesRecherchees || []}
-                onChange={(arr) => update('typologiesRecherchees', arr)}
-              />
-            </Field>
-          )}
-
-          {marche === 'b2c' && (
-            <>
-              <Field label="Types d'habitation recherchés">
-                <div className="flex flex-wrap gap-2">
-                  {TYPES_HABITATION_B2C.map(t => (
-                    <button key={t} type="button" onClick={() => toggleArray('typologiesRecherchees', t)}
-                      className={`px-3 py-1 text-xs rounded-full border ${(data.typologiesRecherchees || []).includes(t) ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{t}</button>
-                  ))}
-                </div>
-              </Field>
-              <Field label="Nombre de pièces recherchées">
-                <div className="flex flex-wrap gap-2">
-                  {NB_PIECES.map(p => (
-                    <button key={p} type="button" onClick={() => toggleArray('typologiesRecherchees', p)}
-                      className={`px-3 py-1 text-xs rounded-full border ${(data.typologiesRecherchees || []).includes(p) ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>{p}</button>
-                  ))}
-                </div>
-              </Field>
-            </>
-          )}
-
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Origine">
-              <select value={data.origine} onChange={e => update('origine', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
-                <option>Apporteur</option><option>Salon</option><option>Pub</option><option>Mandant</option><option>Site web</option><option>Autre</option>
+            <Field label="Budget min (€)"><input type="number" value={data.budgetMin || 0} onChange={e => update('budgetMin', +e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
+            <Field label="Budget max (€)"><input type="number" value={data.budgetMax || 0} onChange={e => update('budgetMax', +e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Surface min (m²)"><input type="number" value={data.surfaceMin || 0} onChange={e => update('surfaceMin', +e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
+            <Field label="Surface max (m²)"><input type="number" value={data.surfaceMax || 0} onChange={e => update('surfaceMax', +e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
+          </div>
+          <Field label="Typologies recherchées">
+            {marche === 'b2c' ? (
+              <CascadeSelectMulti
+                tree={{ 'Habitation': TYPES_HABITATION_B2C }}
+                values={data.typologiesRecherchees || []}
+                onChange={(vals) => update('typologiesRecherchees', vals)}
+              />
+            ) : (
+              <CascadeSelectMulti
+                tree={TYPES_ACTIF_B2B_TREE}
+                values={data.typologiesRecherchees || []}
+                onChange={(vals) => update('typologiesRecherchees', vals)}
+              />
+            )}
+          </Field>
+          <Field label="Zones recherchées">
+            <input
+              type="text"
+              value={(data.zones || []).join(', ')}
+              onChange={e => update('zones', e.target.value.split(',').map(z => z.trim()).filter(Boolean))}
+              placeholder="Paris 1er, Paris 7e, Neuilly..."
+              className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900"
+            />
+          </Field>
+          <Field label="Rendement minimum (%)">
+            <input type="number" step="0.01" value={data.rendementMin || 0} onChange={e => update('rendementMin', +e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Statut">
+              <select value={data.statut || 'Actif'} onChange={e => update('statut', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
+                <option>Actif</option>
+                <option>Inactif</option>
+                <option>Mandant</option>
               </select>
             </Field>
-            <Field label="Statut">
-              <select value={data.statut} onChange={e => update('statut', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
-                <option>Actif</option><option>Veille</option><option>Inactif</option>
+            <Field label="Maturité">
+              <select value={data.maturite || 'Tiède'} onChange={e => update('maturite', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
+                <option>Chaud</option>
+                <option>Tiède</option>
+                <option>Froid</option>
               </select>
             </Field>
           </div>
+          <Field label="Notes">
+            <textarea value={data.notes || ''} onChange={e => update('notes', e.target.value)} rows={3} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" />
+          </Field>
         </div>
 
-        <div className="flex gap-2 justify-end p-6 border-t border-stone-200 bg-cream-50">
+        <div className="flex gap-2 justify-end p-6 border-t border-stone-200 bg-stone-50 sticky bottom-0">
           <button onClick={onClose} className="px-4 py-2 text-sm text-stone-700 hover:bg-cream-200 rounded-lg">Annuler</button>
           <button onClick={() => onSave(data)} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Enregistrer</button>
         </div>
