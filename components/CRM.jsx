@@ -44,6 +44,7 @@ import { VisiteModal, MandantModal } from './MandatModals';
 import CascadeSelect from './CascadeSelect';
 import MediasModal from './MediasModal';
 import ReferencesView from './ReferencesView';
+import AvisDeValeurEditor from './AvisDeValeurEditor';
 import {   formatPrix,   formatPrixCompact,   toCamel,   toSnake,   isManager,   getDPEClass,   getDPEColor,   STATUTS_MANDAT,   STATUTS_DEAL,   TYPES_ACTIF,   TYPES_ACTIF_B2B_TREE,   TYPES_HABITATION_B2C,   TYPOLOGIES_CLIENT,   ZONES,   NB_PIECES,   PORTAILS,   STATUTS_PORTAIL,   getSousTypesForFamille,   familleHasSousTypes,   getMarcheFromTypologieClient,   getSousTypologiesForClient,   clientHasSousTypologie,   groupTypologiesRecherchees,   getCoverPhoto,   getPhotos, } from '@/lib/crm-constants';
 import {
   Field,
@@ -899,6 +900,18 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
         )}
       </>
     );
+  {showAvisValeur && (
+        <AvisDeValeurEditor
+          mandat={mandat}
+          onClose={() => setShowAvisValeur(false)}
+          onSaved={(newAvis) => {
+            // Mettre à jour le mandat local pour afficher la pastille
+            mandat.avisValeur = newAvis;
+            mandat.avis_valeur = newAvis;
+            reload?.();
+          }}
+        />
+      )}
   }
 
   return (
@@ -2328,13 +2341,15 @@ function NewClientMiniForm({ prefillName, onSave, onCancel }) {
 function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, annonces, allProfiles = [], onOpenMatching, onOpenEmailDrafts }) {
   const [openModal, setOpenModal] = useState(null); // 'photos' | 'visite' | 'mandant' | null
   const [aiAnalyzeOpen, setAiAnalyzeOpen] = useState(false);
-  const [lightboxOpen, setLightboxOpen] = useState(false); 
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [showAvisValeur, setShowAvisValeur] = useState(false);
   const mandatDeals = deals.filter(d => d.mandatId === mandat.id);
   const alerts = mandat.alerts || [];
   const highlights = mandat.highlights || [];
   const mandatTodos = (todos || []).filter(t => t.lienType === 'mandat' && t.lienId === mandat.id);
   const mandatAnnonce = (annonces || []).find(a => a.mandatId === mandat.id);
   const isPublished = mandatAnnonce && Object.values(mandatAnnonce.portails || {}).some(p => p === 'En ligne');
+  
 
   // KPIs
   const nbMatching = clients.filter(c => {
@@ -2878,7 +2893,14 @@ function ClientDetail({ client, onBack, onEdit, mandats, deals, interactions, re
           <OwnerSelector client={client} entity="client" reload={reload} />
           <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
             <Edit2 className="w-4 h-4" /> Modifier
-          </button>
+          <button 
+          onClick={() => setShowAvisValeur(true)} 
+          className="flex items-center gap-1.5 px-3 py-2 text-xs bg-sage-50 border border-sage-light text-sage-darker rounded-lg hover:bg-sage-100"
+          title="Saisir / éditer l'avis de valeur"
+        >
+          📊 Avis de valeur
+          {mandat.avisValeur && <span className="ml-1 w-1.5 h-1.5 bg-sage-dark rounded-full"></span>}
+        </button>
         </div>
       </div>
 
