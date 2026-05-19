@@ -1,23 +1,21 @@
 // ═══════════════════════════════════════════════════════════════════
-// components/ReferencesImportFromSiteModal.jsx (v2 - gestion erreurs)
+// components/ReferencesImportFromSiteModal.jsx (v3 - debug erreurs)
 // ═══════════════════════════════════════════════════════════════════
 
 'use client';
 import React, { useState } from 'react';
-import { X, Globe, Check, AlertCircle, Loader2, Building2, MapPin } from 'lucide-react';
+import { X, Globe, Check, AlertCircle, Loader2, Building2, MapPin, ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getTypologieIcon, getTypologieLabel } from '@/lib/references-constants';
 
-// Helper : parser une réponse en JSON même si le serveur renvoie du HTML d'erreur
 async function safeJsonParse(res) {
   const text = await res.text();
   try {
     return { ok: true, data: JSON.parse(text), status: res.status };
   } catch (e) {
-    // Pas du JSON : on extrait le 1er bout de texte lisible
     const preview = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
-    return { 
-      ok: false, 
+    return {
+      ok: false,
       error: `Serveur a renvoyé du non-JSON (HTTP ${res.status}). Aperçu: "${preview}..."`,
       status: res.status,
       rawPreview: preview
@@ -31,6 +29,7 @@ export default function ReferencesImportFromSiteModal({ onClose, onImported }) {
   const [selectedUrls, setSelectedUrls] = useState(new Set());
   const [errorMsg, setErrorMsg] = useState('');
   const [result, setResult] = useState(null);
+  const [showErrorDetails, setShowErrorDetails] = useState(false);
 
   async function startPreview() {
     setStep('loading-preview');
@@ -47,29 +46,20 @@ export default function ReferencesImportFromSiteModal({ onClose, onImported }) {
       });
 
       const parsed = await safeJsonParse(res);
-      
       if (!parsed.ok) {
-        // Erreur côté serveur (HTML, 500, timeout, etc.)
-        if (parsed.status === 504 || parsed.status === 524) {
-          setErrorMsg(`Timeout serveur (HTTP ${parsed.status}). Le scraping prend trop de temps. Réessaye dans quelques secondes.`);
-        } else if (parsed.status >= 500) {
-          setErrorMsg(`Erreur serveur (HTTP ${parsed.status}). ${parsed.error}`);
-        } else {
-          setErrorMsg(parsed.error);
-        }
+        setErrorMsg(parsed.error);
         setStep('error');
         return;
       }
-
       if (!parsed.data.ok) {
-        setErrorMsg(parsed.data.error || 'Erreur inconnue côté serveur');
+        setErrorMsg(parsed.data.error || 'Erreur inconnue');
         setStep('error');
         return;
       }
 
       const fichesData = parsed.data.fiches || [];
       if (fichesData.length === 0) {
-        setErrorMsg('Aucune fiche extraite du site. Le site a peut-être changé de structure.');
+        setErrorMsg('Aucune fiche extraite');
         setStep('error');
         return;
       }
@@ -94,25 +84,25 @@ export default function ReferencesImportFromSiteModal({ onClose, onImported }) {
       const res = await fetch('/api/references/import-from-site', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          token, 
+        body: JSON.stringify({
+          token,
           mode: 'import',
           selectedUrls: Array.from(selectedUrls)
         }),
       });
-      
+
       const parsed = await safeJsonParse(res);
       if (!parsed.ok) {
         setErrorMsg(parsed.error);
         setStep('error');
         return;
       }
-      
+
       setResult(parsed.data);
       setStep('done');
-      
+
       if (parsed.data.created > 0) {
-        setTimeout(() => onImported?.(), 2500);
+        setTimeout(() => onImported?.(), 3500);
       }
     } catch (e) {
       setErrorMsg(`Erreur réseau: ${e.message}`);
@@ -155,14 +145,14 @@ export default function ReferencesImportFromSiteModal({ onClose, onImported }) {
               <div className="bg-sage-50 rounded-xl p-5 border border-sage-light">
                 <h3 className="text-sm font-medium text-stone-900 mb-2">Comment ça marche</h3>
                 <ol className="text-sm text-stone-700 space-y-1.5 list-decimal list-inside">
-                  <li>On scanne la page <strong>Dernières ventes</strong> du site I&P</li>
-                  <li>On extrait chaque vente (titre, surface, ville, photos)</li>
-                  <li>Tu vois la <strong>liste complète</strong> et tu coches ce que tu veux garder</li>
-                  <li>On crée les fiches dans le CRM avec les photos téléchargées</li>
+                  <li>On scanne la page <strong>Dernières ventes</strong></li>
+                  <li>Liste rapide en quelques secondes</li>
+                  <li>Tu coches max <strong>15 références</strong> à la fois</li>
+                  <li>Import + téléchargement des photos</li>
                 </ol>
               </div>
               <div className="bg-amber-50 rounded-xl p-4 border border-amber-200 text-xs text-amber-900">
-                <strong>⚠️ À noter :</strong> les <strong>prix</strong> et <strong>dates</strong> ne sont pas publiés sur le site. Les références seront créées avec un prix à 0 € : tu compléteras ensuite manuellement.
+                <strong>⚠️ Limite Vercel :</strong> max 15 références par import (sinon timeout). Si tu en sélectionnes plus, relance l'import pour les autres.
               </div>
               <button
                 onClick={startPreview}
@@ -178,8 +168,7 @@ export default function ReferencesImportFromSiteModal({ onClose, onImported }) {
             <div className="flex flex-col items-center justify-center py-12">
               <Loader2 className="w-12 h-12 animate-spin text-sage-dark mb-4" />
               <h3 className="font-display text-lg font-semibold text-stone-900 mb-1">Analyse en cours...</h3>
-              <p className="text-sm text-stone-500">Scan de la page liste + extraction de chaque fiche</p>
-              <p className="text-xs text-stone-400 mt-3">⏱️ Compte 30-60 secondes</p>
+              <p className="text-sm text-stone-500">~ 5 secondes</p>
             </div>
           )}
 
@@ -192,6 +181,7 @@ export default function ReferencesImportFromSiteModal({ onClose, onImported }) {
                   </h3>
                   <p className="text-xs text-stone-500">
                     {selectedUrls.size} sélectionnée{selectedUrls.size > 1 ? 's' : ''}
+                    {selectedUrls.size > 15 && <span className="text-amber-700 ml-2">(max 15 par import)</span>}
                   </p>
                 </div>
                 <button onClick={toggleAll} className="text-xs text-sage-dark hover:underline">
@@ -212,8 +202,8 @@ export default function ReferencesImportFromSiteModal({ onClose, onImported }) {
                     >
                       <div className="flex gap-3">
                         <div className="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-cream-100">
-                          {f.photos?.[0] ? (
-                            <img src={f.photos[0]} alt="" className="w-full h-full object-cover" />
+                          {f.coverPhoto ? (
+                            <img src={f.coverPhoto} alt="" className="w-full h-full object-cover" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
                               <Building2 className="w-6 h-6 text-stone-300" />
@@ -251,7 +241,7 @@ export default function ReferencesImportFromSiteModal({ onClose, onImported }) {
                   Annuler
                 </button>
                 <button onClick={startImport} disabled={selectedUrls.size === 0} className="flex-1 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink disabled:opacity-50">
-                  Importer {selectedUrls.size} référence{selectedUrls.size > 1 ? 's' : ''}
+                  Importer {Math.min(selectedUrls.size, 15)} référence{selectedUrls.size > 1 ? 's' : ''}
                 </button>
               </div>
             </div>
@@ -261,25 +251,70 @@ export default function ReferencesImportFromSiteModal({ onClose, onImported }) {
             <div className="flex flex-col items-center justify-center py-12">
               <Loader2 className="w-12 h-12 animate-spin text-sage-dark mb-4" />
               <h3 className="font-display text-lg font-semibold text-stone-900 mb-1">Import en cours...</h3>
-              <p className="text-sm text-stone-500">Téléchargement des photos + création des fiches</p>
-              <p className="text-xs text-stone-400 mt-3">⏱️ Compte ~2-3s par référence</p>
+              <p className="text-sm text-stone-500">Téléchargement photos + création fiches</p>
+              <p className="text-xs text-stone-400 mt-3">⏱️ ~30-40 secondes</p>
             </div>
           )}
 
           {step === 'done' && result && (
             <div className="space-y-3">
-              <div className="bg-emerald-50 rounded-xl p-6 border border-emerald-200 text-center">
-                <Check className="w-12 h-12 text-emerald-600 mx-auto mb-2" />
-                <h3 className="text-base font-medium text-emerald-900 mb-1">
+              <div className={`rounded-xl p-6 border text-center ${
+                result.created > 0 
+                  ? 'bg-emerald-50 border-emerald-200' 
+                  : 'bg-red-50 border-red-200'
+              }`}>
+                {result.created > 0 ? (
+                  <Check className="w-12 h-12 text-emerald-600 mx-auto mb-2" />
+                ) : (
+                  <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-2" />
+                )}
+                <h3 className={`text-base font-medium mb-1 ${
+                  result.created > 0 ? 'text-emerald-900' : 'text-red-900'
+                }`}>
                   {result.created} référence{result.created > 1 ? 's' : ''} importée{result.created > 1 ? 's' : ''}
                 </h3>
                 {result.errors?.length > 0 && (
                   <p className="text-sm text-amber-700">{result.errors.length} échec{result.errors.length > 1 ? 's' : ''}</p>
                 )}
+                {result.skipMessage && (
+                  <p className="text-xs text-stone-600 mt-2">{result.skipMessage}</p>
+                )}
               </div>
-              <div className="bg-amber-50 rounded-xl p-3 border border-amber-200 text-xs text-amber-900">
-                💡 <strong>Prochaine étape :</strong> ouvre chaque référence pour saisir le prix et la date de vente.
-              </div>
+
+              {/* DÉTAIL DES ERREURS (déplié si 0 import réussi) */}
+              {result.errors?.length > 0 && (
+                <div className="bg-stone-50 rounded-xl border border-stone-200">
+                  <button
+                    onClick={() => setShowErrorDetails(!showErrorDetails)}
+                    className="w-full flex items-center justify-between p-3 text-left hover:bg-stone-100 rounded-xl"
+                  >
+                    <span className="text-sm font-medium text-stone-900">
+                      Détail des {result.errors.length} erreur{result.errors.length > 1 ? 's' : ''}
+                    </span>
+                    {(showErrorDetails || result.created === 0) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  </button>
+                  {(showErrorDetails || result.created === 0) && (
+                    <div className="px-3 pb-3 space-y-1.5 max-h-60 overflow-y-auto">
+                      {result.errors.map((e, i) => (
+                        <div key={i} className="text-xs bg-white p-2 rounded border border-red-200">
+                          <div className="text-red-700 font-mono break-all">{e.error || 'Erreur inconnue'}</div>
+                          {e.url && (
+                            <div className="text-stone-500 mt-1 truncate" title={e.url}>
+                              URL: {e.url.replace('https://www.immeubles-patrimoine.fr/biens_vendus/', '...')}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {result.created > 0 && (
+                <div className="bg-amber-50 rounded-xl p-3 border border-amber-200 text-xs text-amber-900">
+                  💡 N'oublie pas de saisir prix et date pour chaque référence.
+                </div>
+              )}
             </div>
           )}
 
@@ -293,14 +328,6 @@ export default function ReferencesImportFromSiteModal({ onClose, onImported }) {
                     <p className="text-xs text-red-700 break-words">{errorMsg}</p>
                   </div>
                 </div>
-              </div>
-              <div className="bg-stone-50 rounded-xl p-3 border border-stone-200 text-xs text-stone-600">
-                <strong>💡 Que faire ?</strong>
-                <ul className="list-disc list-inside mt-1 space-y-0.5">
-                  <li>Si "Timeout" : réessaye dans quelques secondes</li>
-                  <li>Si "Serveur a renvoyé du non-JSON" : le scraping a planté côté serveur (regarde les logs Vercel)</li>
-                  <li>Si "Session expirée" : déconnecte-toi et reconnecte-toi</li>
-                </ul>
               </div>
               <button onClick={() => setStep('intro')} className="w-full px-3 py-2 text-sm bg-white border border-red-200 text-red-700 rounded-lg hover:bg-red-100">
                 Réessayer
