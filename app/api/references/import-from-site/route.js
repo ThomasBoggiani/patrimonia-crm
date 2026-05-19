@@ -1,148 +1,135 @@
 // ═══════════════════════════════════════════════════════════════════
-// app/api/references/import-from-site/route.js
-// Scrape le site immeubles-patrimoine.fr/dernieres-ventes/
-// + chaque fiche individuelle pour extraire les références
+// app/api/references/import-from-site/route.js (v2 - robuste)
+// Scrape immeubles-patrimoine.fr/dernieres-ventes/
 // ═══════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // 60s max pour ce job
+export const maxDuration = 60;
+export const runtime = 'nodejs';
 
 const SITE_BASE = 'https://www.immeubles-patrimoine.fr';
 const LIST_URL = `${SITE_BASE}/dernieres-ventes/`;
 
-// ─── Mapping nom -> typologies CRM ───
+async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { 
+      ...options, 
+      signal: controller.signal,
+      headers: { 'User-Agent': 'PatrimoniaCRM/1.0', ...(options.headers || {}) },
+    });
+    clearTimeout(timeoutId);
+    return res;
+  } catch (e) {
+    clearTimeout(timeoutId);
+    throw e;
+  }
+}
+
 function deduireTypologies(nom, categorie) {
   const n = (nom || '').toLowerCase();
   const c = (categorie || '').toLowerCase();
   const typos = new Set();
 
-  // Catégorie I&P → typologie de base
   if (c.includes('appartement')) typos.add('appartement');
-  if (c.includes('hôtel') || c.includes('hotel') || c.includes('hébergement')) typos.add('hotel');
+  if (c.includes('hotel') || c.includes('hébergement') || c.includes('hebergement')) typos.add('hotel');
   if (c.includes('immeuble')) {
-    // À affiner par le nom
     if (n.includes('mixte')) typos.add('mixte');
     else if (n.includes('tertiaire') || n.includes('bureaux')) typos.add('tertiaire');
-    else if (n.includes('habitation') || n.includes('haussmannien') || n.includes('résidentiel')) typos.add('habitation');
+    else if (n.includes('habitation') || n.includes('haussmannien') || n.includes('résidentiel') || n.includes('residentiel')) typos.add('habitation');
     else typos.add('habitation');
   }
   if (c.includes('locaux') || c.includes('commerc')) typos.add('commercial');
-  if (c.includes('promotion')) {
-    // Promotion = projet construction. On laisse en "habitation" par défaut.
-    typos.add('habitation');
-  }
+  if (c.includes('promotion')) typos.add('habitation');
 
-  // Mots-clés du nom (peuvent ajouter des typologies)
   if (n.includes('hôtel particulier') || n.includes('hotel particulier')) {
-    typos.delete('hotel'); typos.add('hotel_particulier');
+    typos.delete('hotel');
+    typos.add('hotel_particulier');
   }
   if (n.includes('mixte')) typos.add('mixte');
   if (n.includes('bureaux') || n.includes('tertiaire')) typos.add('tertiaire');
   if (n.includes('commercial') || n.includes('boutique')) typos.add('commercial');
   if (n.includes('studio') || n.includes('loft') || /\bT[1-9]\b/i.test(n)) typos.add('appartement');
   if (n.includes('maison') || n.includes('villa')) typos.add('maison');
-  if (n.includes('résidence') && c.includes('promotion')) typos.add('habitation');
 
-  if (typos.size === 0) typos.add('habitation'); // fallback
+  if (typos.size === 0) typos.add('habitation');
   return Array.from(typos);
 }
 
-// ─── Helpers d'extraction ───
 function extractSurface(text) {
-  const m = String(text || '').match(/(\d+[\s.,]?\d*)\s*(?:m²|m2)/i);
+  if (!text) return null;
+  const m = String(text).match(/(\d+[\s.,]?\d*)\s*(?:m²|m2)/i);
   if (!m) return null;
-  return parseFloat(m[1].replace(/\s/g, '').replace(',', '.'));
-}
-
-function extractVille(text) {
-  // Cherche en MAJUSCULES (ex: "PARIS 18E", "AUBERVILLIERS", "GENÈVE")
-  const m = String(text || '').match(/([A-ZÉÈÊÀÂÔ][A-ZÉÈÊÀÂÔ\s-]+?(?:\s\d{1,2}[EÈ]|[A-ZÉÈÊÀÂÔ])+)/);
-  return m ? m[1].trim() : null;
+  const v = parseFloat(m[1].replace(/\s/g, '').replace(',', '.'));
+  return isFinite(v) ? v : null;
 }
 
 function extractCodePostal(text) {
-  const m = String(text || '').match(/\b(75\d{3}|9[0-9]{4}|7[5-8]\d{3}|\d{5})\b/);
+  if (!text) return null;
+  const m = String(text).match(/\b(7[5-8]\d{3}|9[0-9]{4}|\d{5})\b/);
   if (m) return m[1];
-  // Arrondissement Paris
-  const m2 = String(text || '').match(/Paris\s*(\d{1,2})[eEèÈ]?/i);
+  const m2 = String(text).match(/Paris\s*(\d{1,2})[eEèÈ]?/i);
   if (m2) return '750' + String(m2[1]).padStart(2, '0');
   return null;
 }
 
-// ─── Scrape page liste : extrait toutes les URLs de fiches ───
 async function fetchListUrls() {
-  const res = await fetch(LIST_URL, { 
-    headers: { 'User-Agent': 'PatrimoniaCRM/1.0' },
-    cache: 'no-store'
-  });
-  if (!res.ok) throw new Error(`Liste KO : ${res.status}`);
+  const res = await fetchWithTimeout(LIST_URL, { cache: 'no-store' }, 15000);
+  if (!res.ok) throw new Error(`Liste KO: HTTP ${res.status}`);
   const html = await res.text();
-
-  // Extraction simple par regex (pas de DOM côté serveur)
-  // Cherche tous les liens vers /biens_vendus/...
+  
   const regex = /href="(https:\/\/www\.immeubles-patrimoine\.fr\/biens_vendus\/[^"]+)"/g;
   const urls = new Set();
   let m;
-  while ((m = regex.exec(html)) !== null) {
-    urls.add(m[1]);
-  }
+  while ((m = regex.exec(html)) !== null) urls.add(m[1]);
   return Array.from(urls);
 }
 
-// ─── Scrape une fiche individuelle ───
 async function fetchFiche(url) {
   try {
-    const res = await fetch(url, { 
-      headers: { 'User-Agent': 'PatrimoniaCRM/1.0' },
-      cache: 'no-store'
-    });
+    const res = await fetchWithTimeout(url, { cache: 'no-store' }, 8000);
     if (!res.ok) return null;
     const html = await res.text();
 
-    // Titre H1
     const titreMatch = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
     const nom = titreMatch ? titreMatch[1].trim() : null;
     if (!nom) return null;
 
-    // Catégorie : recherche "Catégorie :" suivi du texte
-    const catMatch = html.match(/Cat[ée]gorie\s*:\s*<\/strong>\s*([^<\n]+)/i)
-                  || html.match(/<strong>Cat[ée]gorie\s*:<\/strong>\s*([^<\n]+)/i)
-                  || html.match(/\*\*Cat[ée]gorie\s*:\*\*\s*([^\n<]+)/i);
-    const categorie = catMatch ? catMatch[1].trim() : null;
+    const catMatch = html.match(/Cat[ée]gorie\s*[:\.]\s*<\/strong>\s*([^<\n]+)/i)
+                  || html.match(/<strong>\s*Cat[ée]gorie\s*[:\.]?\s*<\/strong>\s*([^<\n]+)/i);
+    const categorie = catMatch ? catMatch[1].replace(/^[\s:.]+/, '').trim() : null;
 
-    // Localisation
-    const locMatch = html.match(/Localisation\s*:\s*<\/strong>\s*([^<\n]+)/i)
-                  || html.match(/<strong>Localisation\s*:<\/strong>\s*([^<\n]+)/i)
-                  || html.match(/\*\*Localisation\s*:\*\*\s*([^\n<]+)/i);
-    const localisation = locMatch ? locMatch[1].trim() : null;
+    const locMatch = html.match(/Localisation\s*[:\.]\s*<\/strong>\s*([^<\n]+)/i)
+                  || html.match(/<strong>\s*Localisation\s*[:\.]?\s*<\/strong>\s*([^<\n]+)/i);
+    const localisation = locMatch ? locMatch[1].replace(/^[\s:.]+/, '').trim() : null;
 
-    // Description : paragraphe juste après les méta-infos
-    // Cherche le premier <p>...</p> contenant une description (>50 chars)
-    const descRegex = /<p[^>]*>([^<]{60,800})<\/p>/g;
-    let descMatch;
     let description = null;
+    const descRegex = /<p[^>]*>([^<]+(?:<(?!\/p)[^>]+>[^<]*)*)<\/p>/g;
+    let descMatch;
     while ((descMatch = descRegex.exec(html)) !== null) {
-      const txt = descMatch[1].replace(/&nbsp;/g, ' ').replace(/&#\d+;/g, ' ').trim();
-      // Skip si c'est juste du contenu de cookies/menus
-      if (txt.length > 60 && !txt.toLowerCase().includes('cookie') && !txt.toLowerCase().includes('navigation')) {
+      const txt = descMatch[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();
+      if (txt.length > 60 && txt.length < 1000 
+          && !txt.toLowerCase().includes('cookie') 
+          && !txt.toLowerCase().includes('navigation')
+          && !txt.toLowerCase().includes('voir les détails')
+          && !txt.toLowerCase().includes('mentions légales')) {
         description = txt;
         break;
       }
     }
 
-    // Photo principale : 1re image après le h1, qui pointe vers /uploads/
     const photoRegex = /<img[^>]+src="(https:\/\/www\.immeubles-patrimoine\.fr\/wp-content\/uploads\/[^"]+)"/g;
     const photos = [];
     let photoMatch;
     while ((photoMatch = photoRegex.exec(html)) !== null) {
-      const url = photoMatch[1];
-      // Skip logos, icônes
-      if (url.includes('logo') || url.includes('cropped-')) continue;
-      photos.push(url);
-      if (photos.length >= 5) break; // 5 photos max
+      const u = photoMatch[1];
+      if (u.includes('logo') || u.includes('cropped-')) continue;
+      if (!photos.includes(u)) photos.push(u);
+      if (photos.length >= 5) break;
     }
 
     return {
@@ -152,26 +139,24 @@ async function fetchFiche(url) {
       description,
       photos,
       url,
-      surface: extractSurface(nom),
-      arrondissement: extractCodePostal(localisation || nom),
+      surface: extractSurface(nom) || extractSurface(localisation),
+      arrondissement: extractCodePostal(localisation) || extractCodePostal(nom),
       ville: localisation,
       typologies: deduireTypologies(nom, categorie),
     };
   } catch (e) {
-    console.error('[fetchFiche] erreur:', url, e.message);
+    console.error('[fetchFiche]', url, e.message);
     return null;
   }
 }
 
-// ─── Télécharger une photo et l'uploader sur Supabase Storage ───
 async function uploadPhotoToSupabase(supabase, photoUrl, refSlug) {
   try {
-    const res = await fetch(photoUrl, { cache: 'no-store' });
+    const res = await fetchWithTimeout(photoUrl, { cache: 'no-store' }, 8000);
     if (!res.ok) return null;
     const buf = await res.arrayBuffer();
     const blob = new Uint8Array(buf);
     
-    // Détection MIME
     let ext = 'jpg';
     let mime = 'image/jpeg';
     if (photoUrl.endsWith('.webp')) { ext = 'webp'; mime = 'image/webp'; }
@@ -183,25 +168,34 @@ async function uploadPhotoToSupabase(supabase, photoUrl, refSlug) {
       upsert: false
     });
     if (error) {
-      console.warn('[uploadPhoto] erreur:', error.message);
+      console.warn('[upload]', error.message);
       return null;
     }
     const { data: { publicUrl } } = supabase.storage.from('mandat-docs').getPublicUrl(path);
     return { url: publicUrl, storage_path: path };
   } catch (e) {
-    console.warn('[uploadPhoto] exception:', e.message);
+    console.warn('[upload exception]', e.message);
     return null;
   }
 }
 
-// ─── ROUTE POST : 2 modes : 'preview' ou 'import' ───
 export async function POST(req) {
   try {
-    const body = await req.json();
-    const { token, mode, selectedUrls } = body;
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      return NextResponse.json({ error: 'Body JSON invalide' }, { status: 400 });
+    }
+
+    const { token, mode, selectedUrls } = body || {};
 
     if (!token) {
       return NextResponse.json({ error: 'Token manquant' }, { status: 401 });
+    }
+
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      return NextResponse.json({ error: 'Config Supabase manquante côté serveur' }, { status: 500 });
     }
 
     const supabase = createClient(
@@ -210,37 +204,41 @@ export async function POST(req) {
       { global: { headers: { Authorization: `Bearer ${token}` } } }
     );
 
-    // Vérifier l'utilisateur
     const { data: userData, error: userErr } = await supabase.auth.getUser(token);
     if (userErr || !userData?.user) {
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
     }
     const userId = userData.user.id;
 
-    // ═══ MODE 1 : PREVIEW ═══
-    // Scrape la liste + chaque fiche, renvoie l'aperçu pour validation
     if (mode === 'preview') {
-      const urls = await fetchListUrls();
-      if (urls.length === 0) {
-        return NextResponse.json({ error: 'Aucune fiche trouvée sur le site' }, { status: 500 });
+      console.log('[import-from-site] PREVIEW start');
+      let urls;
+      try {
+        urls = await fetchListUrls();
+      } catch (e) {
+        return NextResponse.json({ error: `Erreur scraping liste: ${e.message}` }, { status: 500 });
       }
+      
+      if (urls.length === 0) {
+        return NextResponse.json({ error: 'Aucune fiche trouvée sur le site (regex peut-être obsolète)' }, { status: 500 });
+      }
+      
+      console.log(`[import-from-site] ${urls.length} URLs trouvées`);
 
-      // Scrape toutes les fiches en parallèle (par lots de 5)
       const fiches = [];
-      const BATCH = 5;
+      const BATCH = 8;
       for (let i = 0; i < urls.length; i += BATCH) {
         const batch = urls.slice(i, i + BATCH);
-        const results = await Promise.all(batch.map(u => fetchFiche(u)));
+        const results = await Promise.allSettled(batch.map(u => fetchFiche(u)));
         for (const r of results) {
-          if (r) fiches.push(r);
+          if (r.status === 'fulfilled' && r.value) fiches.push(r.value);
         }
       }
 
-      return NextResponse.json({ ok: true, count: fiches.length, fiches });
+      console.log(`[import-from-site] ${fiches.length}/${urls.length} fiches scrappées`);
+      return NextResponse.json({ ok: true, count: fiches.length, total: urls.length, fiches });
     }
 
-    // ═══ MODE 2 : IMPORT ═══
-    // Reçoit la liste des URLs validées, scrape + upload photos + insère en BDD
     if (mode === 'import') {
       if (!Array.isArray(selectedUrls) || selectedUrls.length === 0) {
         return NextResponse.json({ error: 'Aucune URL sélectionnée' }, { status: 400 });
@@ -257,12 +255,10 @@ export async function POST(req) {
             continue;
           }
 
-          // Slug pour les noms de fichiers
-          const slug = fiche.nom.toLowerCase()
-            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          const slug = (fiche.nom || 'reference')
+            .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
             .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
 
-          // Télécharger jusqu'à 5 photos vers Supabase Storage
           const medias = [];
           for (let i = 0; i < Math.min(5, fiche.photos.length); i++) {
             const uploaded = await uploadPhotoToSupabase(supabase, fiche.photos[i], slug);
@@ -276,16 +272,15 @@ export async function POST(req) {
             }
           }
 
-          // Insert la référence
           const { error: insErr } = await supabase.from('references_ventes').insert({
             nom: fiche.nom,
-            adresse: null, // pas dispo
+            adresse: null,
             ville: fiche.ville,
             arrondissement: fiche.arrondissement,
             typologies: fiche.typologies,
             surface: fiche.surface || null,
-            prix_vente: 0, // À compléter manuellement
-            tranche_prix: '<1M', // placeholder, à corriger après saisie du prix
+            prix_vente: 0,
+            tranche_prix: '<1M',
             date_vente: null,
             commentaire_commercial: fiche.description,
             medias,
@@ -309,7 +304,9 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Mode invalide (preview ou import)' }, { status: 400 });
 
   } catch (e) {
-    console.error('[import-from-site] erreur globale:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    console.error('[import-from-site] EXCEPTION GLOBALE:', e);
+    return NextResponse.json({ 
+      error: `Exception serveur: ${e.message || 'inconnue'}`,
+    }, { status: 500 });
   }
 }
