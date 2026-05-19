@@ -1,347 +1,310 @@
 // ═══════════════════════════════════════════════════════════════════
-// components/ReferencesImportModal.jsx
-// Import en masse de références depuis un fichier Excel (.xlsx)
+// components/ReferencesImportFromSiteModal.jsx (v2 - gestion erreurs)
 // ═══════════════════════════════════════════════════════════════════
 
 'use client';
-import React, { useState, useRef } from 'react';
-import { X, Upload, Download, AlertCircle, Check, Loader2, FileSpreadsheet } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import React, { useState } from 'react';
+import { X, Globe, Check, AlertCircle, Loader2, Building2, MapPin } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/lib/auth';
-import { 
-  TYPOLOGIES_REFERENCE, 
-  TRANCHES_PRIX_REFERENCE, 
-  getTrancheFromPrix 
-} from '@/lib/references-constants';
+import { getTypologieIcon, getTypologieLabel } from '@/lib/references-constants';
 
-export default function ReferencesImportModal({ onClose, onImported }) {
-  const { user } = useAuth();
-  const [parsing, setParsing] = useState(false);
-  const [parsed, setParsed] = useState(null); // {rows, errors}
-  const [importing, setImporting] = useState(false);
+// Helper : parser une réponse en JSON même si le serveur renvoie du HTML d'erreur
+async function safeJsonParse(res) {
+  const text = await res.text();
+  try {
+    return { ok: true, data: JSON.parse(text), status: res.status };
+  } catch (e) {
+    // Pas du JSON : on extrait le 1er bout de texte lisible
+    const preview = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
+    return { 
+      ok: false, 
+      error: `Serveur a renvoyé du non-JSON (HTTP ${res.status}). Aperçu: "${preview}..."`,
+      status: res.status,
+      rawPreview: preview
+    };
+  }
+}
+
+export default function ReferencesImportFromSiteModal({ onClose, onImported }) {
+  const [step, setStep] = useState('intro');
+  const [fiches, setFiches] = useState([]);
+  const [selectedUrls, setSelectedUrls] = useState(new Set());
+  const [errorMsg, setErrorMsg] = useState('');
   const [result, setResult] = useState(null);
-  const fileRef = useRef(null);
 
-  // Template Excel téléchargeable
-  function downloadTemplate() {
-    const headers = [
-      'nom', 'adresse', 'ville', 'arrondissement',
-      'typologies (séparer par ;)', 'surface_m2', 'nb_lots',
-      'prix_vente', 'date_vente (YYYY-MM-DD)', 'duree_commercialisation_semaines',
-      'type_acquereur', 'commentaire_commercial', 'confidentiel (oui/non)'
-    ];
-    const exampleRows = [
-      [
-        'Immeuble mixte – Aubervilliers',
-        '12 rue Henri Barbusse, Aubervilliers',
-        'Aubervilliers',
-        '93300',
-        'mixte;tertiaire',
-        1553,
-        12,
-        4800000,
-        '2024-03-15',
-        6,
-        'Family office',
-        'Vente en bloc à un family office français en 6 semaines, prix au-dessus du marché.',
-        'non'
-      ],
-      [
-        'Immeuble d\'habitation – 18e arrdt',
-        '45 rue Caulaincourt, 75018 Paris',
-        'Paris',
-        '75018',
-        'habitation',
-        485,
-        8,
-        2900000,
-        '2024-06-20',
-        4,
-        'Investisseur privé',
-        'Vente entièrement louée à un investisseur patrimonial, prix conforme au marché.',
-        'non'
-      ],
-    ];
-    
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...exampleRows]);
-    // Largeur des colonnes
-    ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length, 18) }));
-    
-    // Feuille de référence : valeurs valides
-    const refSheet = XLSX.utils.aoa_to_sheet([
-      ['VALEURS VALIDES'],
-      [''],
-      ['Typologies disponibles (utiliser ces valeurs exactes, séparées par ;)'],
-      ...TYPOLOGIES_REFERENCE.map(t => [t.value, t.label]),
-      [''],
-      ['Tranches de prix (déduites automatiquement du prix de vente)'],
-      ...TRANCHES_PRIX_REFERENCE.map(t => [t.value, t.label]),
-    ]);
-    refSheet['!cols'] = [{ wch: 25 }, { wch: 40 }];
+  async function startPreview() {
+    setStep('loading-preview');
+    setErrorMsg('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { setErrorMsg('Session expirée. Reconnecte-toi.'); setStep('error'); return; }
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Références');
-    XLSX.utils.book_append_sheet(wb, refSheet, 'Aide');
-    XLSX.writeFile(wb, 'template_references_ventes.xlsx');
+      const res = await fetch('/api/references/import-from-site', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, mode: 'preview' }),
+      });
+
+      const parsed = await safeJsonParse(res);
+      
+      if (!parsed.ok) {
+        // Erreur côté serveur (HTML, 500, timeout, etc.)
+        if (parsed.status === 504 || parsed.status === 524) {
+          setErrorMsg(`Timeout serveur (HTTP ${parsed.status}). Le scraping prend trop de temps. Réessaye dans quelques secondes.`);
+        } else if (parsed.status >= 500) {
+          setErrorMsg(`Erreur serveur (HTTP ${parsed.status}). ${parsed.error}`);
+        } else {
+          setErrorMsg(parsed.error);
+        }
+        setStep('error');
+        return;
+      }
+
+      if (!parsed.data.ok) {
+        setErrorMsg(parsed.data.error || 'Erreur inconnue côté serveur');
+        setStep('error');
+        return;
+      }
+
+      const fichesData = parsed.data.fiches || [];
+      if (fichesData.length === 0) {
+        setErrorMsg('Aucune fiche extraite du site. Le site a peut-être changé de structure.');
+        setStep('error');
+        return;
+      }
+
+      setFiches(fichesData);
+      setSelectedUrls(new Set(fichesData.map(f => f.url)));
+      setStep('preview');
+    } catch (e) {
+      setErrorMsg(`Erreur réseau: ${e.message}`);
+      setStep('error');
+    }
   }
 
-  async function handleFile(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setParsing(true);
-    setResult(null);
-    setParsed(null);
-    
+  async function startImport() {
+    if (selectedUrls.size === 0) return;
+    setStep('importing');
     try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-      const sheetName = wb.SheetNames[0];
-      const raw = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
-      
-      const validTypologies = TYPOLOGIES_REFERENCE.map(t => t.value);
-      const rows = [];
-      const errors = [];
-      
-      raw.forEach((row, idx) => {
-        const lineNum = idx + 2; // +2 car ligne 1 = headers, idx 0-based
-        
-        // Récupérer la valeur quelle que soit la casse/variation
-        const get = (keys) => {
-          for (const k of keys) {
-            for (const rk of Object.keys(row)) {
-              if (rk.toLowerCase().includes(k.toLowerCase())) return row[rk];
-            }
-          }
-          return '';
-        };
-        
-        const nom = String(get(['nom']) || '').trim();
-        if (!nom) {
-          errors.push({ line: lineNum, error: 'Nom manquant' });
-          return;
-        }
-        
-        const prixVente = parseFloat(get(['prix_vente', 'prix vente'])) || 0;
-        if (!prixVente) {
-          errors.push({ line: lineNum, error: `"${nom}" : Prix de vente manquant ou invalide` });
-          return;
-        }
-        
-        const typoStr = String(get(['typologies']) || '').trim();
-        const typologies = typoStr.split(/[;,|]/).map(s => s.trim().toLowerCase()).filter(t => validTypologies.includes(t));
-        if (typologies.length === 0) {
-          errors.push({ line: lineNum, error: `"${nom}" : Aucune typologie valide (valeurs : ${validTypologies.join(', ')})` });
-          return;
-        }
-        
-        const dateVenteRaw = get(['date_vente', 'date vente']);
-        let dateVente = null;
-        if (dateVenteRaw) {
-          if (dateVenteRaw instanceof Date) {
-            dateVente = dateVenteRaw.toISOString().split('T')[0];
-          } else {
-            const d = new Date(String(dateVenteRaw));
-            if (!isNaN(d)) dateVente = d.toISOString().split('T')[0];
-          }
-        }
-        
-        const conf = String(get(['confidentiel'])).toLowerCase().trim();
-        const confidentiel = ['oui', 'yes', 'true', '1', 'x'].includes(conf);
-        
-        rows.push({
-          nom,
-          adresse: String(get(['adresse']) || '').trim() || null,
-          ville: String(get(['ville']) || '').trim() || null,
-          arrondissement: String(get(['arrondissement', 'code_postal'])).trim() || null,
-          typologies,
-          surface: parseFloat(get(['surface'])) || null,
-          nb_lots: parseInt(get(['nb_lots', 'nb lots'])) || null,
-          prix_vente: prixVente,
-          tranche_prix: getTrancheFromPrix(prixVente),
-          date_vente: dateVente,
-          duree_commercialisation_semaines: parseInt(get(['duree_commercialisation', 'semaines'])) || null,
-          type_acquereur: String(get(['type_acquereur', 'acquereur'])).trim() || null,
-          commentaire_commercial: String(get(['commentaire_commercial', 'commentaire'])).trim() || null,
-          confidentiel,
-          medias: [],
-        });
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { setErrorMsg('Session expirée'); setStep('error'); return; }
+
+      const res = await fetch('/api/references/import-from-site', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          token, 
+          mode: 'import',
+          selectedUrls: Array.from(selectedUrls)
+        }),
       });
       
-      setParsed({ rows, errors });
+      const parsed = await safeJsonParse(res);
+      if (!parsed.ok) {
+        setErrorMsg(parsed.error);
+        setStep('error');
+        return;
+      }
+      
+      setResult(parsed.data);
+      setStep('done');
+      
+      if (parsed.data.created > 0) {
+        setTimeout(() => onImported?.(), 2500);
+      }
     } catch (e) {
-      alert('Erreur lecture fichier : ' + e.message);
+      setErrorMsg(`Erreur réseau: ${e.message}`);
+      setStep('error');
     }
-    setParsing(false);
   }
 
-  async function handleImport() {
-    if (!parsed?.rows?.length) return;
-    setImporting(true);
-    let success = 0, failed = 0;
-    
-    for (const row of parsed.rows) {
-      try {
-        const { error } = await supabase
-          .from('references_ventes')
-          .insert({ ...row, created_by: user?.id });
-        if (error) {
-          console.warn('Erreur insert:', row.nom, error.message);
-          failed++;
-        } else {
-          success++;
-        }
-      } catch (e) {
-        failed++;
-      }
-    }
-    
-    setResult({ success, failed, total: parsed.rows.length });
-    setImporting(false);
-    if (success > 0) {
-      setTimeout(() => onImported?.(), 2000);
-    }
+  function toggleSelection(url) {
+    const newSet = new Set(selectedUrls);
+    if (newSet.has(url)) newSet.delete(url);
+    else newSet.add(url);
+    setSelectedUrls(newSet);
+  }
+
+  function toggleAll() {
+    if (selectedUrls.size === fiches.length) setSelectedUrls(new Set());
+    else setSelectedUrls(new Set(fiches.map(f => f.url)));
   }
 
   return (
     <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-6" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-luxe-hover max-w-2xl w-full max-h-[90vh] overflow-y-auto scrollbar-thin" onClick={e => e.stopPropagation()}>
-        
-        <div className="flex items-center justify-between p-6 border-b border-stone-200">
+      <div className="bg-white rounded-xl shadow-luxe-hover max-w-4xl w-full max-h-[92vh] overflow-y-auto scrollbar-thin" onClick={e => e.stopPropagation()}>
+
+        <div className="flex items-center justify-between p-6 border-b border-stone-200 sticky top-0 bg-white z-10">
           <div>
-            <h2 className="font-display text-xl font-semibold text-stone-900">Importer des références</h2>
-            <p className="text-xs text-stone-500 mt-0.5">Format Excel (.xlsx)</p>
+            <h2 className="font-display text-xl font-semibold text-stone-900 flex items-center gap-2">
+              <Globe className="w-5 h-5 text-sage-dark" />
+              Importer depuis le site I&P
+            </h2>
+            <p className="text-xs text-stone-500 mt-0.5">immeubles-patrimoine.fr/dernieres-ventes</p>
           </div>
-          <button onClick={onClose} className="text-stone-500 hover:text-stone-900"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="text-stone-500 hover:text-stone-900">
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        <div className="p-6 space-y-4">
-          {!parsed && !result && (
-            <>
-              {/* Étape 1 : télécharger le template */}
-              <div className="bg-sage-50 rounded-xl p-4 border border-sage-light">
-                <div className="flex items-start gap-3">
-                  <FileSpreadsheet className="w-5 h-5 text-sage-dark flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <h3 className="text-sm font-medium text-stone-900 mb-1">Étape 1 — Télécharger le template</h3>
-                    <p className="text-xs text-stone-600 mb-3">Le fichier contient les colonnes attendues et 2 lignes d'exemple. Une 2ᵉ feuille "Aide" liste les valeurs valides.</p>
-                    <button 
-                      onClick={downloadTemplate}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sage-dark text-white rounded-lg text-xs hover:bg-sage-darker"
-                    >
-                      <Download className="w-3.5 h-3.5" /> Télécharger template_references.xlsx
-                    </button>
-                  </div>
-                </div>
+        <div className="p-6">
+          {step === 'intro' && (
+            <div className="space-y-4">
+              <div className="bg-sage-50 rounded-xl p-5 border border-sage-light">
+                <h3 className="text-sm font-medium text-stone-900 mb-2">Comment ça marche</h3>
+                <ol className="text-sm text-stone-700 space-y-1.5 list-decimal list-inside">
+                  <li>On scanne la page <strong>Dernières ventes</strong> du site I&P</li>
+                  <li>On extrait chaque vente (titre, surface, ville, photos)</li>
+                  <li>Tu vois la <strong>liste complète</strong> et tu coches ce que tu veux garder</li>
+                  <li>On crée les fiches dans le CRM avec les photos téléchargées</li>
+                </ol>
               </div>
-
-              {/* Étape 2 : uploader */}
-              <div className="bg-cream-50 rounded-xl p-4 border border-cream-dark">
-                <div className="flex items-start gap-3">
-                  <Upload className="w-5 h-5 text-stone-600 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <h3 className="text-sm font-medium text-stone-900 mb-1">Étape 2 — Importer ton fichier rempli</h3>
-                    <p className="text-xs text-stone-600 mb-3">Une fois ton fichier prêt, importe-le ici. Les lignes seront validées avant insertion.</p>
-                    <input 
-                      ref={fileRef} 
-                      type="file" 
-                      accept=".xlsx,.xls" 
-                      onChange={handleFile} 
-                      className="hidden" 
-                    />
-                    <button 
-                      onClick={() => fileRef.current?.click()}
-                      disabled={parsing}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-ink-deep text-white rounded-lg text-xs hover:bg-stone-800 disabled:opacity-50"
-                    >
-                      {parsing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                      {parsing ? 'Analyse en cours...' : 'Choisir un fichier Excel'}
-                    </button>
-                  </div>
-                </div>
+              <div className="bg-amber-50 rounded-xl p-4 border border-amber-200 text-xs text-amber-900">
+                <strong>⚠️ À noter :</strong> les <strong>prix</strong> et <strong>dates</strong> ne sont pas publiés sur le site. Les références seront créées avec un prix à 0 € : tu compléteras ensuite manuellement.
               </div>
-
-              <div className="bg-amber-50 rounded-xl p-3 border border-amber-200 text-xs text-amber-900">
-                💡 <strong>Important :</strong> les photos doivent être ajoutées manuellement après l'import (édition de chaque référence).
-              </div>
-            </>
+              <button
+                onClick={startPreview}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-ink-deep text-white rounded-xl hover:bg-ink font-medium"
+              >
+                <Globe className="w-4 h-4" />
+                Lancer l'analyse du site
+              </button>
+            </div>
           )}
 
-          {parsed && !result && (
-            <div className="space-y-3">
-              <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
-                <div className="flex items-center gap-2 mb-1">
-                  <Check className="w-4 h-4 text-emerald-700" />
-                  <h3 className="text-sm font-medium text-emerald-900">{parsed.rows.length} référence(s) prête(s) à importer</h3>
+          {step === 'loading-preview' && (
+            <div className="flex flex-col items-center justify-center py-12">
+              <Loader2 className="w-12 h-12 animate-spin text-sage-dark mb-4" />
+              <h3 className="font-display text-lg font-semibold text-stone-900 mb-1">Analyse en cours...</h3>
+              <p className="text-sm text-stone-500">Scan de la page liste + extraction de chaque fiche</p>
+              <p className="text-xs text-stone-400 mt-3">⏱️ Compte 30-60 secondes</p>
+            </div>
+          )}
+
+          {step === 'preview' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-display text-lg font-semibold text-stone-900">
+                    {fiches.length} référence{fiches.length > 1 ? 's' : ''} trouvée{fiches.length > 1 ? 's' : ''}
+                  </h3>
+                  <p className="text-xs text-stone-500">
+                    {selectedUrls.size} sélectionnée{selectedUrls.size > 1 ? 's' : ''}
+                  </p>
                 </div>
-                {parsed.errors.length > 0 && (
-                  <p className="text-xs text-emerald-700">+ {parsed.errors.length} ligne(s) ignorée(s) (voir ci-dessous)</p>
-                )}
+                <button onClick={toggleAll} className="text-xs text-sage-dark hover:underline">
+                  {selectedUrls.size === fiches.length ? 'Tout désélectionner' : 'Tout sélectionner'}
+                </button>
               </div>
 
-              {parsed.errors.length > 0 && (
-                <div className="bg-red-50 rounded-xl p-4 border border-red-200 max-h-40 overflow-y-auto">
-                  <h4 className="text-xs font-medium text-red-900 mb-2 flex items-center gap-1">
-                    <AlertCircle className="w-3.5 h-3.5" /> {parsed.errors.length} erreur(s) :
-                  </h4>
-                  <ul className="text-xs text-red-800 space-y-1">
-                    {parsed.errors.slice(0, 10).map((e, i) => (
-                      <li key={i}>Ligne {e.line} : {e.error}</li>
-                    ))}
-                    {parsed.errors.length > 10 && <li>... et {parsed.errors.length - 10} autre(s)</li>}
-                  </ul>
-                </div>
-              )}
-
-              <div className="max-h-60 overflow-y-auto bg-stone-50 rounded-xl p-3 text-xs">
-                <table className="w-full">
-                  <thead>
-                    <tr className="text-stone-600">
-                      <th className="text-left pb-1">Nom</th>
-                      <th className="text-left pb-1">Typologies</th>
-                      <th className="text-right pb-1">Prix</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {parsed.rows.slice(0, 20).map((r, i) => (
-                      <tr key={i} className="border-t border-stone-200">
-                        <td className="py-1 text-stone-800 truncate max-w-xs">{r.nom}</td>
-                        <td className="py-1 text-stone-600">{r.typologies.join(', ')}</td>
-                        <td className="py-1 text-right text-stone-800">{(r.prix_vente || 0).toLocaleString('fr-FR')} €</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {parsed.rows.length > 20 && <p className="text-stone-400 mt-2">... et {parsed.rows.length - 20} autre(s)</p>}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto scrollbar-thin">
+                {fiches.map(f => {
+                  const isSelected = selectedUrls.has(f.url);
+                  return (
+                    <button
+                      key={f.url}
+                      onClick={() => toggleSelection(f.url)}
+                      className={`text-left p-3 rounded-xl border transition-all ${
+                        isSelected ? 'bg-sage-50 border-sage-light shadow-sm' : 'bg-white border-stone-200 hover:border-stone-300'
+                      }`}
+                    >
+                      <div className="flex gap-3">
+                        <div className="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-cream-100">
+                          {f.photos?.[0] ? (
+                            <img src={f.photos[0]} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Building2 className="w-6 h-6 text-stone-300" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start gap-2">
+                            <input type="checkbox" checked={isSelected} onChange={() => toggleSelection(f.url)} className="mt-0.5 flex-shrink-0" onClick={e => e.stopPropagation()} />
+                            <h4 className="text-sm font-medium text-stone-900 leading-tight line-clamp-2">{f.nom}</h4>
+                          </div>
+                          {f.ville && (
+                            <p className="text-xs text-stone-500 flex items-center gap-1 mt-1 ml-5">
+                              <MapPin className="w-3 h-3 flex-shrink-0" />
+                              <span className="truncate">{f.ville}</span>
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 mt-1 ml-5 flex-wrap">
+                            {(f.typologies || []).slice(0, 2).map(t => (
+                              <span key={t} className="text-[10px] px-1.5 py-0.5 bg-white text-sage-darker rounded-full border border-sage-light">
+                                {getTypologieIcon(t)} {getTypologieLabel(t)}
+                              </span>
+                            ))}
+                            {f.surface && <span className="text-[10px] text-stone-500">{f.surface} m²</span>}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
 
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => { setParsed(null); if (fileRef.current) fileRef.current.value = ''; }}
-                  className="flex-1 px-4 py-2 text-sm text-stone-700 bg-white border border-stone-200 hover:bg-cream-100 rounded-lg"
-                >
+              <div className="flex gap-2 pt-3 border-t border-stone-200">
+                <button onClick={onClose} className="flex-1 px-4 py-2 text-sm text-stone-700 bg-white border border-stone-200 hover:bg-cream-100 rounded-lg">
                   Annuler
                 </button>
-                <button 
-                  onClick={handleImport}
-                  disabled={importing || parsed.rows.length === 0}
-                  className="flex-1 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  {importing ? 'Import en cours…' : `Importer ${parsed.rows.length} référence(s)`}
+                <button onClick={startImport} disabled={selectedUrls.size === 0} className="flex-1 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink disabled:opacity-50">
+                  Importer {selectedUrls.size} référence{selectedUrls.size > 1 ? 's' : ''}
                 </button>
               </div>
             </div>
           )}
 
-          {result && (
-            <div className="bg-emerald-50 rounded-xl p-6 border border-emerald-200 text-center">
-              <Check className="w-12 h-12 text-emerald-600 mx-auto mb-2" />
-              <h3 className="text-base font-medium text-emerald-900 mb-1">Import terminé</h3>
-              <p className="text-sm text-emerald-700">
-                {result.success} référence(s) ajoutée(s)
-                {result.failed > 0 && ` · ${result.failed} échec(s)`}
-              </p>
+          {step === 'importing' && (
+            <div className="flex flex-col items-center justify-center py-12">
+              <Loader2 className="w-12 h-12 animate-spin text-sage-dark mb-4" />
+              <h3 className="font-display text-lg font-semibold text-stone-900 mb-1">Import en cours...</h3>
+              <p className="text-sm text-stone-500">Téléchargement des photos + création des fiches</p>
+              <p className="text-xs text-stone-400 mt-3">⏱️ Compte ~2-3s par référence</p>
+            </div>
+          )}
+
+          {step === 'done' && result && (
+            <div className="space-y-3">
+              <div className="bg-emerald-50 rounded-xl p-6 border border-emerald-200 text-center">
+                <Check className="w-12 h-12 text-emerald-600 mx-auto mb-2" />
+                <h3 className="text-base font-medium text-emerald-900 mb-1">
+                  {result.created} référence{result.created > 1 ? 's' : ''} importée{result.created > 1 ? 's' : ''}
+                </h3>
+                {result.errors?.length > 0 && (
+                  <p className="text-sm text-amber-700">{result.errors.length} échec{result.errors.length > 1 ? 's' : ''}</p>
+                )}
+              </div>
+              <div className="bg-amber-50 rounded-xl p-3 border border-amber-200 text-xs text-amber-900">
+                💡 <strong>Prochaine étape :</strong> ouvre chaque référence pour saisir le prix et la date de vente.
+              </div>
+            </div>
+          )}
+
+          {step === 'error' && (
+            <div className="space-y-3">
+              <div className="bg-red-50 rounded-xl p-6 border border-red-200">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-medium text-red-900 mb-1">Erreur</h3>
+                    <p className="text-xs text-red-700 break-words">{errorMsg}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-stone-50 rounded-xl p-3 border border-stone-200 text-xs text-stone-600">
+                <strong>💡 Que faire ?</strong>
+                <ul className="list-disc list-inside mt-1 space-y-0.5">
+                  <li>Si "Timeout" : réessaye dans quelques secondes</li>
+                  <li>Si "Serveur a renvoyé du non-JSON" : le scraping a planté côté serveur (regarde les logs Vercel)</li>
+                  <li>Si "Session expirée" : déconnecte-toi et reconnecte-toi</li>
+                </ul>
+              </div>
+              <button onClick={() => setStep('intro')} className="w-full px-3 py-2 text-sm bg-white border border-red-200 text-red-700 rounded-lg hover:bg-red-100">
+                Réessayer
+              </button>
             </div>
           )}
         </div>
