@@ -2547,13 +2547,21 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           )}
 
           {/* ═══ ÉTAT LOCATIF ═══ */}
-          {Array.isArray(mandat.etatLocatif || mandat.etat_locatif) && (mandat.etatLocatif || mandat.etat_locatif).length > 0 && (
-            <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-              <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-sage-dark" />État locatif
-              </h2>
-              {(() => {
-                const lots = mandat.etatLocatif || mandat.etat_locatif || [];
+          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
+            <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-sage-dark" />État locatif
+            </h2>
+            {(() => {
+              const lots = mandat.etatLocatif || mandat.etat_locatif || [];
+              if (!Array.isArray(lots) || lots.length === 0) {
+                return (
+                  <div className="text-center py-8 text-stone-400">
+                    <Building2 className="w-8 h-8 mx-auto mb-2 text-stone-300" />
+                    <p className="text-sm">Aucun lot saisi pour ce mandat</p>
+                    <p className="text-xs text-stone-400 mt-1">Clique sur "Modifier" pour ajouter des lots</p>
+                  </div>
+                );
+              }
                 const sumSurface = lots.reduce((s, l) => s + (parseFloat(l.surface) || 0), 0);
                 const sumLoyer = lots.reduce((s, l) => s + (parseFloat(l.loyer) || 0), 0);
                 const sumChargesRecup = lots.reduce((s, l) => s + (parseFloat(l.charges_recup) || 0), 0);
@@ -2672,7 +2680,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
                 );
               })()}
             </div>
-          )}
 
           {/* ═══ DESCRIPTION ═══ */}
           {mandat.description && (
