@@ -2375,10 +2375,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
             <Edit2 className="w-4 h-4" /> Modifier
           </button>
-          <button onClick={() => setShowAvisValeur(true)} className="flex items-center gap-2 px-3 py-2 bg-sage-50 border border-sage-light text-sage-darker rounded-lg text-sm hover:bg-sage-100" title="Saisir / éditer l'avis de valeur">
-            📊 Avis de valeur
-            {(mandat.avisValeur || mandat.avis_valeur) && <span className="ml-1 w-1.5 h-1.5 bg-sage-dark rounded-full"></span>}
-          </button>
         </div>
       </div>
 
@@ -2438,7 +2434,10 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           <FolderOpen className="w-3.5 h-3.5" /> Documents
         </button>
         <button onClick={() => onOpenEmailDrafts?.(mandat.id)} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-sage-50 border border-sage-light text-sage-darker rounded-lg hover:bg-sage-100">
-          <Mail className="w-3.5 h-3.5" /> Pr&eacute;parer mails clients
+          <Mail className="w-3.5 h-3.5" /> Préparer mails clients
+        </button>
+        <button onClick={() => setShowAvisValeur(true)} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50" title="Saisir / éditer l'avis de valeur">
+          📊 Avis de valeur {(mandat.avisValeur || mandat.avis_valeur) && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
         </button>
 
         <div className="flex-1" />
