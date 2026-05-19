@@ -22,6 +22,7 @@ import {
 import { formatPrix, formatPrixCompact, toCamel, toSnake } from '@/lib/crm-constants';
 import ReferenceForm from './ReferenceForm';
 import ReferencesImportModal from './ReferencesImportModal';
+import ReferencesImportFromSiteModal from './ReferencesImportFromSiteModal';
 
 export default function ReferencesView() {
   const { user } = useAuth();
@@ -34,6 +35,7 @@ export default function ReferencesView() {
   const [editingRef, setEditingRef] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showImportFromSite, setShowImportFromSite] = useState(false);
 
   useEffect(() => { loadReferences(); }, []);
 
@@ -152,6 +154,13 @@ export default function ReferencesView() {
           )}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <button 
+            onClick={() => setShowImportFromSite(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs bg-sage-50 border border-sage-light text-sage-darker rounded-lg hover:bg-sage-100"
+            title="Scrape automatiquement les ventes du site immeubles-patrimoine.fr"
+          >
+            🌐 Importer depuis le site I&P
+          </button>
           <button 
             onClick={() => setShowImport(true)}
             className="flex items-center gap-1.5 px-3 py-2 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50"
@@ -280,7 +289,10 @@ export default function ReferencesView() {
               <Trophy className="w-12 h-12 mx-auto mb-3 text-stone-300" />
               <p className="text-sm mb-3">Aucune référence pour le moment</p>
               <p className="text-xs text-stone-400 mb-4">Ajoute tes plus belles ventes pour qu'elles apparaissent dans les avis de valeur</p>
-              <div className="flex gap-2 justify-center">
+              <div className="flex gap-2 justify-center flex-wrap">
+                <button onClick={() => setShowImportFromSite(true)} className="px-4 py-2 bg-sage-100 border border-sage-light text-sage-darker rounded-lg text-sm hover:bg-sage-200 font-medium">
+                  🌐 Importer depuis le site I&P
+                </button>
                 <button onClick={() => setShowImport(true)} className="px-4 py-2 bg-white border border-stone-200 rounded-lg text-sm hover:bg-cream-50">
                   Importer Excel
                 </button>
@@ -321,10 +333,15 @@ export default function ReferencesView() {
           onImported={() => { setShowImport(false); loadReferences(); }}
         />
       )}
+      {showImportFromSite && (
+        <ReferencesImportFromSiteModal
+          onClose={() => setShowImportFromSite(false)}
+          onImported={() => { setShowImportFromSite(false); loadReferences(); }}
+        />
+      )}
     </div>
   );
 }
-
 // ═══════════════════════════════════════════════════════════════════
 // ReferenceCard — Une carte de référence dans la grille
 // ═══════════════════════════════════════════════════════════════════
