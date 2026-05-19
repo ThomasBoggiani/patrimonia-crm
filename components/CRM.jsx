@@ -43,6 +43,7 @@ import PdfExportButtons from '@/components/PdfExportButtons';
 import { VisiteModal, MandantModal } from './MandatModals';
 import CascadeSelect from './CascadeSelect';
 import MediasModal from './MediasModal';
+import ReferencesView from './ReferencesView';
 import {   formatPrix,   formatPrixCompact,   toCamel,   toSnake,   isManager,   getDPEClass,   getDPEColor,   STATUTS_MANDAT,   STATUTS_DEAL,   TYPES_ACTIF,   TYPES_ACTIF_B2B_TREE,   TYPES_HABITATION_B2C,   TYPOLOGIES_CLIENT,   ZONES,   NB_PIECES,   PORTAILS,   STATUTS_PORTAIL,   getSousTypesForFamille,   familleHasSousTypes,   getMarcheFromTypologieClient,   getSousTypologiesForClient,   clientHasSousTypologie,   groupTypologiesRecherchees,   getCoverPhoto,   getPhotos, } from '@/lib/crm-constants';
 import {
   Field,
@@ -923,13 +924,16 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
               💼 NV + Comm.
             </button>
           </div>
-          {/* Toggle Liste / Kanban */}
+          {/* Toggle Liste / Kanban / Références */}
           <div className="flex items-center bg-stone-100 rounded-lg p-0.5">
             <button onClick={() => setView('list')} className={`px-3 py-1.5 text-xs font-medium rounded-md ${view === 'list' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'}`}>
               Liste
             </button>
             <button onClick={() => setView('kanban')} className={`px-3 py-1.5 text-xs font-medium rounded-md ${view === 'kanban' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'}`}>
               Kanban
+            </button>
+            <button onClick={() => setView('references')} className={`px-3 py-1.5 text-xs font-medium rounded-md ${view === 'references' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'}`} title="Bibliothèque de ventes historiques">
+              ⭐ Références
             </button>
           </div>
           <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-3 py-2 bg-ink-deep text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
@@ -996,7 +1000,12 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
         </select>
       </div>
 
-      {view === 'kanban' ? (         <MandatsKanban mandats={filtered} onSelectMandat={setSelectedMandat} reload={reload} secondaryDisplay={secondaryDisplay} />       ) : (       <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden">
+      {view === 'references' ? (
+        <ReferencesView />
+      ) : view === 'kanban' ? (
+        <MandatsKanban mandats={filtered} onSelectMandat={setSelectedMandat} reload={reload} secondaryDisplay={secondaryDisplay} />
+      ) : (
+        <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden">
         <table className="w-full">
               <colgroup>
                 <col style={{ width: '100px' }} />
