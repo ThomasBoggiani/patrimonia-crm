@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════
-// app/api/references/import-from-site/route.js (v3 - timeout fix)
-// PREVIEW : extrait tout depuis la page liste (1 fetch, ~3s)
-// IMPORT : fetch détaillé + photos uniquement pour les URLs sélectionnées
+// app/api/references/import-from-site/route.js (v4 - bucket + html entities)
+// - Upload photos sur bucket mandat-photos (PUBLIC)
+// - Décode les entités HTML dans titres/descriptions (&#8211; -> –)
 // ═══════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
@@ -13,6 +13,7 @@ export const runtime = 'nodejs';
 
 const SITE_BASE = 'https://www.immeubles-patrimoine.fr';
 const LIST_URL = `${SITE_BASE}/dernieres-ventes/`;
+const BUCKET_PHOTOS = 'mandat-photos'; // bucket public, image/* only, 5 MB max
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
   const controller = new AbortController();
@@ -29,6 +30,52 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
     clearTimeout(timeoutId);
     throw e;
   }
+}
+
+// ─── Décodage des entités HTML ───
+// Convertit &#8211; → –, &amp; → &, &eacute; → é, etc.
+function decodeHtmlEntities(text) {
+  if (!text) return text;
+  return String(text)
+    // Entités numériques décimales : &#8211;
+    .replace(/&#(\d+);/g, (m, code) => String.fromCharCode(parseInt(code, 10)))
+    // Entités numériques hexadécimales : &#x2013;
+    .replace(/&#x([0-9a-fA-F]+);/g, (m, code) => String.fromCharCode(parseInt(code, 16)))
+    // Entités nommées les plus courantes
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&eacute;/g, 'é')
+    .replace(/&egrave;/g, 'è')
+    .replace(/&ecirc;/g, 'ê')
+    .replace(/&euml;/g, 'ë')
+    .replace(/&agrave;/g, 'à')
+    .replace(/&acirc;/g, 'â')
+    .replace(/&auml;/g, 'ä')
+    .replace(/&iuml;/g, 'ï')
+    .replace(/&icirc;/g, 'î')
+    .replace(/&ocirc;/g, 'ô')
+    .replace(/&ouml;/g, 'ö')
+    .replace(/&ugrave;/g, 'ù')
+    .replace(/&ucirc;/g, 'û')
+    .replace(/&uuml;/g, 'ü')
+    .replace(/&ccedil;/g, 'ç')
+    .replace(/&ndash;/g, '–')
+    .replace(/&mdash;/g, '—')
+    .replace(/&laquo;/g, '«')
+    .replace(/&raquo;/g, '»')
+    .replace(/&hellip;/g, '…')
+    .replace(/&rsquo;/g, '’')
+    .replace(/&lsquo;/g, '‘')
+    .replace(/&rdquo;/g, '”')
+    .replace(/&ldquo;/g, '“')
+    .replace(/&euro;/g, '€')
+    // Nettoyer les espaces multiples
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function deduireTypologies(nom, categorieListe) {
@@ -78,86 +125,63 @@ function extractCodePostal(text) {
   return null;
 }
 
-// ─── PREVIEW : extraction depuis la page liste UNIQUEMENT ───
-// La page liste contient pour chaque vente :
-// - un lien vers la fiche détaillée
-// - un titre type "Vendu Immeubles" + "Immeuble mixte de 1552 m2 – Aubervilliers"
-// - une image (la 1re photo)
-// - la ville en majuscules
 async function fetchFichesFromList() {
   const res = await fetchWithTimeout(LIST_URL, { cache: 'no-store' }, 12000);
   if (!res.ok) throw new Error(`Liste KO: HTTP ${res.status}`);
   const html = await res.text();
 
-  // On split par sections h2 (Appartements, Hôtels, Immeubles, Locaux commerciaux, Promotion)
   const sections = html.split(/<h2[^>]*>/i);
-  
   const fiches = [];
   const seen = new Set();
 
   for (const section of sections) {
-    // Extraire le titre de la section (premier h2 du chunk)
     const titreSectionMatch = section.match(/^([^<]+)<\/h2>/i);
-    const categorieListe = titreSectionMatch ? titreSectionMatch[1].trim() : '';
+    const categorieListe = titreSectionMatch ? decodeHtmlEntities(titreSectionMatch[1].trim()) : '';
 
-    // Extraire tous les liens <a href="...biens_vendus/..."> dans cette section
     const linkRegex = /<a[^>]+href="(https:\/\/www\.immeubles-patrimoine\.fr\/biens_vendus\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
     let linkMatch;
     while ((linkMatch = linkRegex.exec(section)) !== null) {
       const url = linkMatch[1];
       const innerContent = linkMatch[2];
-      
+
       if (seen.has(url)) continue;
       seen.add(url);
 
-      // Extraire le titre depuis le contenu : c'est généralement à la fin avant la ville
-      // Pattern : "Vendu CategorieXXXXXXXXX VILLE"
-      // ou : "...Title... CategorieXXX TitreLong VILLE"
-      
-      // Stratégie : on extrait tout le texte (sans HTML) et on cherche le pattern
       const textOnly = innerContent
-        .replace(/<img[^>]+alt="([^"]*)"[^>]*>/g, ' ') // images : ignorer
+        .replace(/<img[^>]+alt="([^"]*)"[^>]*>/g, ' ')
         .replace(/<[^>]+>/g, ' ')
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&')
-        .replace(/&#\d+;/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
+      const textDecoded = decodeHtmlEntities(textOnly);
 
-      // Le pattern est : "Vendu <Categorie><Titre du bien> <VILLE>"
-      // Ex: "Vendu ImmeublesImmeuble mixte de 1552 m2 – Aubervilliers AUBERVILLIERS"
-      // On cherche "Vendu" puis on prend tout jusqu'à la ville en majuscules à la fin
-      
       let nom = null;
-      let villeMajMatch = textOnly.match(/\s([A-ZÉÈÊÀÂÔÇ][A-ZÉÈÊÀÂÔÇ\s\d°ÈÉ\-\/]+)\s*$/);
+      let villeMajMatch = textDecoded.match(/\s([A-ZÉÈÊÀÂÔÇ][A-ZÉÈÊÀÂÔÇ\s\d°ÈÉ\-\/]+)\s*$/);
       const ville = villeMajMatch ? villeMajMatch[1].trim() : null;
-      
-      // Le titre est juste avant la ville
-      const venduMatch = textOnly.match(/Vendu\s+\S+?([A-Z][^A-Z]+(?:\s[^A-Z]+)*?)\s+[A-ZÉÈÊÀÂÔÇ]+/);
+
+      const venduMatch = textDecoded.match(/Vendu\s+\S+?([A-Z][^A-Z]+(?:\s[^A-Z]+)*?)\s+[A-ZÉÈÊÀÂÔÇ]+/);
       if (venduMatch) {
         nom = venduMatch[1].trim();
       } else {
-        // Fallback : prendre tout après "Vendu " et avant la dernière partie en majuscules
-        const fallback = textOnly.replace(/^.*?Vendu\s+\S+?/, '').replace(/\s+[A-ZÉÈÊÀÂÔÇ\s\d°ÈÉ\-\/]+$/, '').trim();
+        const fallback = textDecoded.replace(/^.*?Vendu\s+\S+?/, '').replace(/\s+[A-ZÉÈÊÀÂÔÇ\s\d°ÈÉ\-\/]+$/, '').trim();
         if (fallback.length > 10) nom = fallback;
       }
-      
-      // Re-fallback : utiliser le slug de l'URL
+
       if (!nom || nom.length < 10) {
         const slugPart = url.split('/biens_vendus/')[1] || '';
-        nom = slugPart.replace(/-/g, ' ').replace(/%c2%b2/gi, 'm²').replace(/^\w/, c => c.toUpperCase());
+        nom = decodeURIComponent(slugPart).replace(/-/g, ' ').replace(/^\w/, c => c.toUpperCase());
       }
 
-      // Extraire la 1re image (cover) de ce lien
+      // Décoder une dernière fois (au cas où il reste des entités)
+      nom = decodeHtmlEntities(nom);
+
       const imgMatch = innerContent.match(/<img[^>]+src="(https:\/\/www\.immeubles-patrimoine\.fr\/wp-content\/uploads\/[^"]+)"/);
       const coverPhoto = imgMatch && !imgMatch[1].includes('logo') && !imgMatch[1].includes('cropped-')
-        ? imgMatch[1] 
+        ? imgMatch[1]
         : null;
 
-      // Skipper si pas dans une catégorie connue (= les liens en pied de page, sidebar, etc.)
       if (!categorieListe || categorieListe.length > 60) continue;
       const cl = categorieListe.toLowerCase();
-      if (!cl.includes('appartement') && !cl.includes('hotel') 
+      if (!cl.includes('appartement') && !cl.includes('hotel')
           && !cl.includes('hôtel') && !cl.includes('hébergement')
           && !cl.includes('immeuble') && !cl.includes('locaux')
           && !cl.includes('commerc') && !cl.includes('promotion')) continue;
@@ -178,7 +202,6 @@ async function fetchFichesFromList() {
   return fiches;
 }
 
-// ─── IMPORT : fetch détaillé d'une seule fiche (avec photos) ───
 async function fetchFicheDetailed(url) {
   try {
     const res = await fetchWithTimeout(url, { cache: 'no-store' }, 6000);
@@ -186,22 +209,23 @@ async function fetchFicheDetailed(url) {
     const html = await res.text();
 
     const titreMatch = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
-    const nom = titreMatch ? titreMatch[1].trim() : null;
+    const nom = titreMatch ? decodeHtmlEntities(titreMatch[1].trim()) : null;
     if (!nom) return null;
 
     const catMatch = html.match(/Cat[ée]gorie\s*[:\.]\s*<\/strong>\s*([^<\n]+)/i)
                   || html.match(/<strong>\s*Cat[ée]gorie\s*[:\.]?\s*<\/strong>\s*([^<\n]+)/i);
-    const categorie = catMatch ? catMatch[1].replace(/^[\s:.]+/, '').trim() : null;
+    const categorie = catMatch ? decodeHtmlEntities(catMatch[1].replace(/^[\s:.]+/, '').trim()) : null;
 
     const locMatch = html.match(/Localisation\s*[:\.]\s*<\/strong>\s*([^<\n]+)/i)
                   || html.match(/<strong>\s*Localisation\s*[:\.]?\s*<\/strong>\s*([^<\n]+)/i);
-    const localisation = locMatch ? locMatch[1].replace(/^[\s:.]+/, '').trim() : null;
+    const localisation = locMatch ? decodeHtmlEntities(locMatch[1].replace(/^[\s:.]+/, '').trim()) : null;
 
     let description = null;
     const descRegex = /<p[^>]*>([^<]+(?:<(?!\/p)[^>]+>[^<]*)*)<\/p>/g;
     let descMatch;
     while ((descMatch = descRegex.exec(html)) !== null) {
-      const txt = descMatch[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();
+      const rawTxt = descMatch[1].replace(/<[^>]+>/g, '');
+      const txt = decodeHtmlEntities(rawTxt);
       if (txt.length > 60 && txt.length < 1000
           && !txt.toLowerCase().includes('cookie')
           && !txt.toLowerCase().includes('navigation')
@@ -247,13 +271,21 @@ async function uploadPhotoToSupabase(supabase, photoUrl, refSlug) {
     const buf = await res.arrayBuffer();
     const blob = new Uint8Array(buf);
 
+    // Si > 5 MB, on skip (limite du bucket mandat-photos)
+    if (blob.length > 5 * 1024 * 1024) {
+      console.warn('[upload] photo trop grosse:', blob.length, 'bytes');
+      return null;
+    }
+
+    // mandat-photos accepte uniquement jpeg/png/webp/heic
     let ext = 'jpg';
     let mime = 'image/jpeg';
     if (photoUrl.endsWith('.webp')) { ext = 'webp'; mime = 'image/webp'; }
     else if (photoUrl.endsWith('.png')) { ext = 'png'; mime = 'image/png'; }
+    else if (photoUrl.endsWith('.heic')) { ext = 'heic'; mime = 'image/heic'; }
 
     const path = `references/${refSlug}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const { error } = await supabase.storage.from('mandat-docs').upload(path, blob, {
+    const { error } = await supabase.storage.from(BUCKET_PHOTOS).upload(path, blob, {
       contentType: mime,
       upsert: false
     });
@@ -261,7 +293,7 @@ async function uploadPhotoToSupabase(supabase, photoUrl, refSlug) {
       console.warn('[upload]', error.message);
       return null;
     }
-    const { data: { publicUrl } } = supabase.storage.from('mandat-docs').getPublicUrl(path);
+    const { data: { publicUrl } } = supabase.storage.from(BUCKET_PHOTOS).getPublicUrl(path);
     return { url: publicUrl, storage_path: path };
   } catch (e) {
     console.warn('[upload exception]', e.message);
@@ -300,12 +332,11 @@ export async function POST(req) {
     }
     const userId = userData.user.id;
 
-    // ═══ PREVIEW : ULTRA-RAPIDE, depuis la page liste seule ═══
     if (mode === 'preview') {
       try {
         const fiches = await fetchFichesFromList();
         if (fiches.length === 0) {
-          return NextResponse.json({ error: 'Aucune fiche trouvée sur le site (regex obsolète ?)' }, { status: 500 });
+          return NextResponse.json({ error: 'Aucune fiche trouvée sur le site' }, { status: 500 });
         }
         return NextResponse.json({ ok: true, count: fiches.length, fiches });
       } catch (e) {
@@ -313,13 +344,11 @@ export async function POST(req) {
       }
     }
 
-    // ═══ IMPORT : fetch détaillé en parallèle ═══
     if (mode === 'import') {
       if (!Array.isArray(selectedUrls) || selectedUrls.length === 0) {
         return NextResponse.json({ error: 'Aucune URL sélectionnée' }, { status: 400 });
       }
 
-      // Limiter à 15 références par batch pour éviter le timeout
       const MAX_IMPORT = 15;
       const toImport = selectedUrls.slice(0, MAX_IMPORT);
       const skipped = selectedUrls.length - toImport.length;
@@ -327,7 +356,6 @@ export async function POST(req) {
       let created = 0;
       const errors = [];
 
-      // Process en parallèle par lots de 4
       const BATCH = 4;
       for (let i = 0; i < toImport.length; i += BATCH) {
         const batch = toImport.slice(i, i + BATCH);
@@ -340,7 +368,6 @@ export async function POST(req) {
             .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
 
           const medias = [];
-          // Maximum 3 photos par référence pour rester rapide
           for (let i = 0; i < Math.min(3, fiche.photos.length); i++) {
             const uploaded = await uploadPhotoToSupabase(supabase, fiche.photos[i], slug);
             if (uploaded) {
@@ -383,19 +410,19 @@ export async function POST(req) {
         }
       }
 
-      return NextResponse.json({ 
-        ok: true, 
-        created, 
+      return NextResponse.json({
+        ok: true,
+        created,
         errors,
         skipped,
         skipMessage: skipped > 0 ? `${skipped} référence(s) non traitée(s) — relance l'import pour les ajouter` : null
       });
     }
 
-    return NextResponse.json({ error: 'Mode invalide (preview ou import)' }, { status: 400 });
+    return NextResponse.json({ error: 'Mode invalide' }, { status: 400 });
 
   } catch (e) {
-    console.error('[import-from-site] EXCEPTION GLOBALE:', e);
+    console.error('[import-from-site] EXCEPTION:', e);
     return NextResponse.json({
       error: `Exception serveur: ${e.message || 'inconnue'}`,
     }, { status: 500 });
