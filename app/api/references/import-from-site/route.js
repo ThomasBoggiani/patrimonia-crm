@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════
-// app/api/references/import-from-site/route.js (v2 - robuste)
-// Scrape immeubles-patrimoine.fr/dernieres-ventes/
+// app/api/references/import-from-site/route.js (v3 - timeout fix)
+// PREVIEW : extrait tout depuis la page liste (1 fetch, ~3s)
+// IMPORT : fetch détaillé + photos uniquement pour les URLs sélectionnées
 // ═══════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
@@ -13,12 +14,12 @@ export const runtime = 'nodejs';
 const SITE_BASE = 'https://www.immeubles-patrimoine.fr';
 const LIST_URL = `${SITE_BASE}/dernieres-ventes/`;
 
-async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { 
-      ...options, 
+    const res = await fetch(url, {
+      ...options,
       signal: controller.signal,
       headers: { 'User-Agent': 'PatrimoniaCRM/1.0', ...(options.headers || {}) },
     });
@@ -30,9 +31,9 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
   }
 }
 
-function deduireTypologies(nom, categorie) {
+function deduireTypologies(nom, categorieListe) {
   const n = (nom || '').toLowerCase();
-  const c = (categorie || '').toLowerCase();
+  const c = (categorieListe || '').toLowerCase();
   const typos = new Set();
 
   if (c.includes('appartement')) typos.add('appartement');
@@ -77,21 +78,110 @@ function extractCodePostal(text) {
   return null;
 }
 
-async function fetchListUrls() {
-  const res = await fetchWithTimeout(LIST_URL, { cache: 'no-store' }, 15000);
+// ─── PREVIEW : extraction depuis la page liste UNIQUEMENT ───
+// La page liste contient pour chaque vente :
+// - un lien vers la fiche détaillée
+// - un titre type "Vendu Immeubles" + "Immeuble mixte de 1552 m2 – Aubervilliers"
+// - une image (la 1re photo)
+// - la ville en majuscules
+async function fetchFichesFromList() {
+  const res = await fetchWithTimeout(LIST_URL, { cache: 'no-store' }, 12000);
   if (!res.ok) throw new Error(`Liste KO: HTTP ${res.status}`);
   const html = await res.text();
+
+  // On split par sections h2 (Appartements, Hôtels, Immeubles, Locaux commerciaux, Promotion)
+  const sections = html.split(/<h2[^>]*>/i);
   
-  const regex = /href="(https:\/\/www\.immeubles-patrimoine\.fr\/biens_vendus\/[^"]+)"/g;
-  const urls = new Set();
-  let m;
-  while ((m = regex.exec(html)) !== null) urls.add(m[1]);
-  return Array.from(urls);
+  const fiches = [];
+  const seen = new Set();
+
+  for (const section of sections) {
+    // Extraire le titre de la section (premier h2 du chunk)
+    const titreSectionMatch = section.match(/^([^<]+)<\/h2>/i);
+    const categorieListe = titreSectionMatch ? titreSectionMatch[1].trim() : '';
+
+    // Extraire tous les liens <a href="...biens_vendus/..."> dans cette section
+    const linkRegex = /<a[^>]+href="(https:\/\/www\.immeubles-patrimoine\.fr\/biens_vendus\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+    let linkMatch;
+    while ((linkMatch = linkRegex.exec(section)) !== null) {
+      const url = linkMatch[1];
+      const innerContent = linkMatch[2];
+      
+      if (seen.has(url)) continue;
+      seen.add(url);
+
+      // Extraire le titre depuis le contenu : c'est généralement à la fin avant la ville
+      // Pattern : "Vendu CategorieXXXXXXXXX VILLE"
+      // ou : "...Title... CategorieXXX TitreLong VILLE"
+      
+      // Stratégie : on extrait tout le texte (sans HTML) et on cherche le pattern
+      const textOnly = innerContent
+        .replace(/<img[^>]+alt="([^"]*)"[^>]*>/g, ' ') // images : ignorer
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&#\d+;/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      // Le pattern est : "Vendu <Categorie><Titre du bien> <VILLE>"
+      // Ex: "Vendu ImmeublesImmeuble mixte de 1552 m2 – Aubervilliers AUBERVILLIERS"
+      // On cherche "Vendu" puis on prend tout jusqu'à la ville en majuscules à la fin
+      
+      let nom = null;
+      let villeMajMatch = textOnly.match(/\s([A-ZÉÈÊÀÂÔÇ][A-ZÉÈÊÀÂÔÇ\s\d°ÈÉ\-\/]+)\s*$/);
+      const ville = villeMajMatch ? villeMajMatch[1].trim() : null;
+      
+      // Le titre est juste avant la ville
+      const venduMatch = textOnly.match(/Vendu\s+\S+?([A-Z][^A-Z]+(?:\s[^A-Z]+)*?)\s+[A-ZÉÈÊÀÂÔÇ]+/);
+      if (venduMatch) {
+        nom = venduMatch[1].trim();
+      } else {
+        // Fallback : prendre tout après "Vendu " et avant la dernière partie en majuscules
+        const fallback = textOnly.replace(/^.*?Vendu\s+\S+?/, '').replace(/\s+[A-ZÉÈÊÀÂÔÇ\s\d°ÈÉ\-\/]+$/, '').trim();
+        if (fallback.length > 10) nom = fallback;
+      }
+      
+      // Re-fallback : utiliser le slug de l'URL
+      if (!nom || nom.length < 10) {
+        const slugPart = url.split('/biens_vendus/')[1] || '';
+        nom = slugPart.replace(/-/g, ' ').replace(/%c2%b2/gi, 'm²').replace(/^\w/, c => c.toUpperCase());
+      }
+
+      // Extraire la 1re image (cover) de ce lien
+      const imgMatch = innerContent.match(/<img[^>]+src="(https:\/\/www\.immeubles-patrimoine\.fr\/wp-content\/uploads\/[^"]+)"/);
+      const coverPhoto = imgMatch && !imgMatch[1].includes('logo') && !imgMatch[1].includes('cropped-')
+        ? imgMatch[1] 
+        : null;
+
+      // Skipper si pas dans une catégorie connue (= les liens en pied de page, sidebar, etc.)
+      if (!categorieListe || categorieListe.length > 60) continue;
+      const cl = categorieListe.toLowerCase();
+      if (!cl.includes('appartement') && !cl.includes('hotel') 
+          && !cl.includes('hôtel') && !cl.includes('hébergement')
+          && !cl.includes('immeuble') && !cl.includes('locaux')
+          && !cl.includes('commerc') && !cl.includes('promotion')) continue;
+
+      fiches.push({
+        nom: nom.trim(),
+        categorieListe,
+        ville,
+        coverPhoto,
+        url,
+        surface: extractSurface(nom),
+        arrondissement: extractCodePostal(ville) || extractCodePostal(nom),
+        typologies: deduireTypologies(nom, categorieListe),
+      });
+    }
+  }
+
+  return fiches;
 }
 
-async function fetchFiche(url) {
+// ─── IMPORT : fetch détaillé d'une seule fiche (avec photos) ───
+async function fetchFicheDetailed(url) {
   try {
-    const res = await fetchWithTimeout(url, { cache: 'no-store' }, 8000);
+    const res = await fetchWithTimeout(url, { cache: 'no-store' }, 6000);
     if (!res.ok) return null;
     const html = await res.text();
 
@@ -112,8 +202,8 @@ async function fetchFiche(url) {
     let descMatch;
     while ((descMatch = descRegex.exec(html)) !== null) {
       const txt = descMatch[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();
-      if (txt.length > 60 && txt.length < 1000 
-          && !txt.toLowerCase().includes('cookie') 
+      if (txt.length > 60 && txt.length < 1000
+          && !txt.toLowerCase().includes('cookie')
           && !txt.toLowerCase().includes('navigation')
           && !txt.toLowerCase().includes('voir les détails')
           && !txt.toLowerCase().includes('mentions légales')) {
@@ -145,24 +235,24 @@ async function fetchFiche(url) {
       typologies: deduireTypologies(nom, categorie),
     };
   } catch (e) {
-    console.error('[fetchFiche]', url, e.message);
+    console.error('[fetchFicheDetailed]', url, e.message);
     return null;
   }
 }
 
 async function uploadPhotoToSupabase(supabase, photoUrl, refSlug) {
   try {
-    const res = await fetchWithTimeout(photoUrl, { cache: 'no-store' }, 8000);
+    const res = await fetchWithTimeout(photoUrl, { cache: 'no-store' }, 6000);
     if (!res.ok) return null;
     const buf = await res.arrayBuffer();
     const blob = new Uint8Array(buf);
-    
+
     let ext = 'jpg';
     let mime = 'image/jpeg';
     if (photoUrl.endsWith('.webp')) { ext = 'webp'; mime = 'image/webp'; }
     else if (photoUrl.endsWith('.png')) { ext = 'png'; mime = 'image/png'; }
-    
-    const path = `references/${refSlug}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
+
+    const path = `references/${refSlug}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const { error } = await supabase.storage.from('mandat-docs').upload(path, blob, {
       contentType: mime,
       upsert: false
@@ -210,57 +300,48 @@ export async function POST(req) {
     }
     const userId = userData.user.id;
 
+    // ═══ PREVIEW : ULTRA-RAPIDE, depuis la page liste seule ═══
     if (mode === 'preview') {
-      console.log('[import-from-site] PREVIEW start');
-      let urls;
       try {
-        urls = await fetchListUrls();
+        const fiches = await fetchFichesFromList();
+        if (fiches.length === 0) {
+          return NextResponse.json({ error: 'Aucune fiche trouvée sur le site (regex obsolète ?)' }, { status: 500 });
+        }
+        return NextResponse.json({ ok: true, count: fiches.length, fiches });
       } catch (e) {
         return NextResponse.json({ error: `Erreur scraping liste: ${e.message}` }, { status: 500 });
       }
-      
-      if (urls.length === 0) {
-        return NextResponse.json({ error: 'Aucune fiche trouvée sur le site (regex peut-être obsolète)' }, { status: 500 });
-      }
-      
-      console.log(`[import-from-site] ${urls.length} URLs trouvées`);
-
-      const fiches = [];
-      const BATCH = 8;
-      for (let i = 0; i < urls.length; i += BATCH) {
-        const batch = urls.slice(i, i + BATCH);
-        const results = await Promise.allSettled(batch.map(u => fetchFiche(u)));
-        for (const r of results) {
-          if (r.status === 'fulfilled' && r.value) fiches.push(r.value);
-        }
-      }
-
-      console.log(`[import-from-site] ${fiches.length}/${urls.length} fiches scrappées`);
-      return NextResponse.json({ ok: true, count: fiches.length, total: urls.length, fiches });
     }
 
+    // ═══ IMPORT : fetch détaillé en parallèle ═══
     if (mode === 'import') {
       if (!Array.isArray(selectedUrls) || selectedUrls.length === 0) {
         return NextResponse.json({ error: 'Aucune URL sélectionnée' }, { status: 400 });
       }
 
+      // Limiter à 15 références par batch pour éviter le timeout
+      const MAX_IMPORT = 15;
+      const toImport = selectedUrls.slice(0, MAX_IMPORT);
+      const skipped = selectedUrls.length - toImport.length;
+
       let created = 0;
       const errors = [];
 
-      for (const url of selectedUrls) {
-        try {
-          const fiche = await fetchFiche(url);
-          if (!fiche) {
-            errors.push({ url, error: 'Fiche introuvable' });
-            continue;
-          }
+      // Process en parallèle par lots de 4
+      const BATCH = 4;
+      for (let i = 0; i < toImport.length; i += BATCH) {
+        const batch = toImport.slice(i, i + BATCH);
+        const results = await Promise.allSettled(batch.map(async (url) => {
+          const fiche = await fetchFicheDetailed(url);
+          if (!fiche) return { url, error: 'Fiche introuvable' };
 
           const slug = (fiche.nom || 'reference')
             .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
             .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
 
           const medias = [];
-          for (let i = 0; i < Math.min(5, fiche.photos.length); i++) {
+          // Maximum 3 photos par référence pour rester rapide
+          for (let i = 0; i < Math.min(3, fiche.photos.length); i++) {
             const uploaded = await uploadPhotoToSupabase(supabase, fiche.photos[i], slug);
             if (uploaded) {
               medias.push({
@@ -288,24 +369,34 @@ export async function POST(req) {
             created_by: userId,
           });
 
-          if (insErr) {
-            errors.push({ url, error: insErr.message });
+          if (insErr) return { url, error: insErr.message };
+          return { ok: true };
+        }));
+
+        for (const r of results) {
+          if (r.status === 'fulfilled') {
+            if (r.value?.ok) created++;
+            else if (r.value?.error) errors.push(r.value);
           } else {
-            created++;
+            errors.push({ error: r.reason?.message || 'unknown' });
           }
-        } catch (e) {
-          errors.push({ url, error: e.message });
         }
       }
 
-      return NextResponse.json({ ok: true, created, errors });
+      return NextResponse.json({ 
+        ok: true, 
+        created, 
+        errors,
+        skipped,
+        skipMessage: skipped > 0 ? `${skipped} référence(s) non traitée(s) — relance l'import pour les ajouter` : null
+      });
     }
 
     return NextResponse.json({ error: 'Mode invalide (preview ou import)' }, { status: 400 });
 
   } catch (e) {
     console.error('[import-from-site] EXCEPTION GLOBALE:', e);
-    return NextResponse.json({ 
+    return NextResponse.json({
       error: `Exception serveur: ${e.message || 'inconnue'}`,
     }, { status: 500 });
   }
