@@ -2862,8 +2862,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
     {/* Quelque chose */}
 
       {/* Assistant IA — sidebar fixe en bas à droite */}
-      <MandatAIAssistant mandat={mandat} />
-
+      <MandatAIAssistant mandat={mandat} onMandatUpdate={reload} />
       {/* Modal Analyser avec l'IA — analyse complète des documents du mandat */}
       <AIAnalyzeModal
         open={aiAnalyzeOpen}
