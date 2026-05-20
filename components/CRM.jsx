@@ -2458,18 +2458,18 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
       <div className="sticky top-0 z-30 bg-cream-50/95 backdrop-blur-sm border-b border-cream-dark -mx-8 px-8 py-2.5">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] uppercase tracking-wider text-sage-dark font-semibold pr-2 border-r border-cream-dark mr-1">📌 Données</span>
-          <a href="#identite" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🏠 Identité</a>
-          <a href="#finance" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">💰 Finance</a>
-          <a href="#locatif" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🏢 Locatif</a>
-          <a href="#technique" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🔧 Technique</a>
-          <a href="#mandant" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">👤 Mandant</a>
+          <button onClick={() => document.getElementById('identite')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🏠 Identité</button>
+          <button onClick={() => document.getElementById('finance')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">💰 Finance</button>
+          <button onClick={() => document.getElementById('locatif')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🏢 Locatif</button>
+          <button onClick={() => document.getElementById('technique')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🔧 Technique</button>
+          <button onClick={() => document.getElementById('mandant')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">👤 Mandant</button>
           <button onClick={() => setOpenModal('visite')} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors flex items-center gap-1">
             👁️ Visite
             {(mandat.visiteInfo || mandat.visite_info) && Object.values(mandat.visiteInfo || mandat.visite_info).some(v => v) && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>}
           </button>
-          <a href="#photos" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📷 Médias</a>
-          <a href="#documents" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📂 Documents</a>
-          <a href="#stats" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📊 Stats</a>
+          <button onClick={() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📷 Médias</button>
+          <button onClick={() => document.getElementById('documents')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📂 Documents</button>
+          <button onClick={() => document.getElementById('stats')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📊 Stats</button>
         </div>
       </div>
 
