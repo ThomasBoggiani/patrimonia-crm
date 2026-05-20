@@ -1,11 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════
-// components/AICreateModal.jsx
-// Modal unifié : Fichiers + Texte + Voix → Mandat / Client / Les 2
+// components/AICreateModal.jsx — v2.0
+// Modal universel : Fichiers + Texte + Voix → 6 intentions
+// Intentions : mandat | client | both | task | event | email | note
 // ═══════════════════════════════════════════════════════════════════
 
 'use client';
 import { useState, useRef } from 'react';
-import { X, Sparkles, FileText, Mic, MicOff, Upload, Loader2, Check, AlertCircle, Building2, User as UserIcon, ArrowRight, Eye, GitMerge } from 'lucide-react';
+import { X, Sparkles, FileText, Mic, MicOff, Upload, Loader2, Check, AlertCircle, Building2, User as UserIcon, GitMerge, CheckSquare, Calendar, Mail, StickyNote } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, getCurrentUserInitials } from '@/lib/auth';
 import MergeMandatsModal from './MergeMandatsModal';
@@ -14,21 +15,13 @@ const TYPE_LABELS = {
   mandat: { label: 'Mandat (bien à vendre)', icon: Building2, color: 'sage' },
   client: { label: 'Client (acheteur)', icon: UserIcon, color: 'blue' },
   both: { label: 'Mandat + Client', icon: Sparkles, color: 'purple' },
+  task: { label: 'Tâche / Rappel', icon: CheckSquare, color: 'amber' },
+  event: { label: 'Rendez-vous', icon: Calendar, color: 'indigo' },
+  email: { label: 'Email à rédiger', icon: Mail, color: 'cyan' },
+  note: { label: 'Note libre', icon: StickyNote, color: 'stone' },
   unknown: { label: 'Indéterminé', icon: AlertCircle, color: 'stone' },
 };
 
-/**
- * Redimensionne une image côté client via canvas + JPEG compression.
- * - max 1600x1600 (largement suffisant pour analyse IA et fiches CRM)
- * - JPEG qualité 0.85 (excellent compromis taille/qualité)
- * - Préserve le ratio
- * - Pour photos > 5MB, réduit typiquement de 90-95%
- *
- * @param {File} file - Fichier image source
- * @param {number} maxSize - Côté max en pixels (default 1600)
- * @param {number} quality - Qualité JPEG entre 0 et 1 (default 0.85)
- * @returns {Promise<File>} Nouveau File optimisé (extension .jpg)
- */
 async function resizeImage(file, maxSize = 1600, quality = 0.85) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -49,13 +42,11 @@ async function resizeImage(file, maxSize = 1600, quality = 0.85) {
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
-        // Fond blanc pour éviter les artéfacts en cas de transparence (PNG → JPG)
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
         canvas.toBlob((blob) => {
           if (!blob) return reject(new Error('Conversion canvas → blob échouée'));
-          // Construit un nouveau File avec extension .jpg pour cohérence
           const baseName = file.name.replace(/\.[^.]+$/, '');
           const newFile = new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' });
           resolve(newFile);
@@ -71,18 +62,18 @@ async function resizeImage(file, maxSize = 1600, quality = 0.85) {
 
 export default function AICreateModal({ open, onClose, defaultType, onCreated }) {
   const { profile } = useAuth();
-  const [tab, setTab] = useState('text'); // 'files' | 'text' | 'audio'
+  const [tab, setTab] = useState('text');
   const [text, setText] = useState('');
   const [files, setFiles] = useState([]);
   const [recording, setRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState(null);
   const [audioTranscription, setAudioTranscription] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
-  const [progress, setProgress] = useState(null); // { label, current, total }
+  const [progress, setProgress] = useState(null);
   const [result, setResult] = useState(null);
   const [creating, setCreating] = useState(false);
   const [forcedType, setForcedType] = useState(null);
-  const [mergeWith, setMergeWith] = useState(null); // { id, label } du mandat à fusionner
+  const [mergeWith, setMergeWith] = useState(null);
   const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -118,38 +109,23 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
       } else if (tab === 'files') {
         if (files.length === 0) { alert('Ajoute au moins 1 fichier'); setAnalyzing(false); return; }
 
-        // ─── 1. Optimiser les images côté client (resize 1600px max + JPEG q85) ───
-        // Évite les timeouts Vercel et les limites tokens Anthropic
-        // Les PDFs/Word ne sont pas modifiés
         setProgress({ label: 'Optimisation des fichiers', current: 0, total: files.length });
         const optimizedFiles = [];
-        let totalBefore = 0;
-        let totalAfter = 0;
         for (let i = 0; i < files.length; i++) {
           const f = files[i];
-          totalBefore += f.size;
           setProgress({ label: 'Optimisation des fichiers', current: i + 1, total: files.length });
           if (f.type.startsWith('image/')) {
             try {
               const optimized = await resizeImage(f, 1600, 0.85);
               optimizedFiles.push(optimized);
-              totalAfter += optimized.size;
             } catch (err) {
-              console.warn('Resize échoué pour', f.name, '— upload tel quel', err);
               optimizedFiles.push(f);
-              totalAfter += f.size;
             }
           } else {
-            // PDF/Word : pas de resize, upload tel quel
             optimizedFiles.push(f);
-            totalAfter += f.size;
           }
         }
 
-        const reductionPct = totalBefore > 0 ? Math.round((1 - totalAfter / totalBefore) * 100) : 0;
-        console.log(`[AICreateModal] Optimisation : ${(totalBefore / 1024 / 1024).toFixed(1)} MB → ${(totalAfter / 1024 / 1024).toFixed(1)} MB (-${reductionPct}%)`);
-
-        // ─── 2. Upload vers Supabase Storage avec tracking erreurs ───
         setProgress({ label: 'Téléversement vers le cloud', current: 0, total: optimizedFiles.length });
         const paths = [];
         const uploadErrors = [];
@@ -169,24 +145,15 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
           }
         }
 
-        if (uploadErrors.length > 0) {
-          console.error('[AICreateModal] Échecs upload:', uploadErrors);
-        }
-
         if (paths.length === 0) {
           setProgress(null);
           alert('Aucun fichier n\'a pu être téléversé.\n\nDétails :\n' + uploadErrors.join('\n'));
           setAnalyzing(false);
           return;
         }
-
         if (uploadErrors.length > 0) {
-          const proceed = confirm(`${uploadErrors.length} fichier(s) en échec, ${paths.length} OK.\n\nContinuer l'analyse avec les fichiers réussis ?`);
-          if (!proceed) {
-            setProgress(null);
-            setAnalyzing(false);
-            return;
-          }
+          const proceed = confirm(`${uploadErrors.length} fichier(s) en échec, ${paths.length} OK.\n\nContinuer ?`);
+          if (!proceed) { setProgress(null); setAnalyzing(false); return; }
         }
 
         body.files = paths;
@@ -220,19 +187,11 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
     setCreating(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
       const { data: { user } } = await supabase.auth.getUser();
-      const token = session?.access_token;
-      if (!token) { setCreating(false); return; }
+      const created = { mandat: null, client: null, task: null, event: null, email: null, note: null };
 
-      console.log('[AICreateModal DEBUG] profile:', profile);
-      console.log('[AICreateModal DEBUG] profile?.prenom:', profile?.prenom);
-      console.log('[AICreateModal DEBUG] profile?.nom:', profile?.nom);
-      console.log('[AICreateModal DEBUG] initials computed:', profile ? getCurrentUserInitials(profile) : 'TB-fallback');
-      const created = { mandat: null, client: null };
-
+      // ─── MANDAT ───
       if ((result.type === 'mandat' || result.type === 'both') && result.mandat) {
-        // Whitelist : on ne garde que les colonnes qui existent vraiment dans la table mandats
         const ALLOWED_MANDAT_COLUMNS = [
           'nom', 'adresse', 'ville', 'marche', 'type', 'sous_type',
           'surface', 'nb_pieces', 'nb_chambres', 'etage', 'annee_construction',
@@ -253,17 +212,11 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
           owner: profile ? getCurrentUserInitials(profile) : 'TB',
           created_by: user?.id,
         }).select().single();
-        if (mErr) {
-          console.error('Erreur création mandat:', mErr);
-          alert('Erreur création mandat : ' + mErr.message);
-        } else {
-          created.mandat = m;
-        }
+        if (mErr) { alert('Erreur création mandat : ' + mErr.message); } else { created.mandat = m; }
       }
 
+      // ─── CLIENT ───
       if ((result.type === 'client' || result.type === 'both') && result.client) {
-        // Whitelist : on ne garde que les colonnes qui existent vraiment dans la table clients.
-        // Évite "Could not find the 'X' column of 'clients' in the schema cache" si l'IA invente des champs.
         const ALLOWED_CLIENT_COLUMNS = [
           'nom', 'prenom', 'societe', 'tel', 'email',
           'typologie', 'nature',
@@ -276,13 +229,6 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
         for (const k of ALLOWED_CLIENT_COLUMNS) {
           if (result.client[k] !== undefined) filteredClient[k] = result.client[k];
         }
-        // Aggrège dans details_recherche les champs ignorés (adresse, website, tel_mobile, etc.)
-        const ignored = Object.keys(result.client).filter(k => !ALLOWED_CLIENT_COLUMNS.includes(k));
-        if (ignored.length > 0) {
-          const extras = ignored.map(k => `${k}: ${result.client[k]}`).join('\n');
-          filteredClient.details_recherche = (filteredClient.details_recherche ? filteredClient.details_recherche + '\n\n' : '') + 'Infos complémentaires :\n' + extras;
-        }
-
         const { data: c, error: cErr } = await supabase.from('clients').insert({
           ...filteredClient,
           zones: filteredClient.zones || [],
@@ -291,12 +237,44 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
           created_by: user?.id,
           owner: filteredClient.owner || (profile ? getCurrentUserInitials(profile) : 'TB'),
         }).select().single();
-        if (cErr) {
-          console.error('Erreur création client:', cErr);
-          alert('Erreur création client : ' + cErr.message);
-        } else {
-          created.client = c;
+        if (cErr) { alert('Erreur création client : ' + cErr.message); } else { created.client = c; }
+      }
+
+      // ─── TASK ───
+      if (result.type === 'task' && result.task) {
+        const taskData = {
+          titre: result.task.titre || 'Tâche sans titre',
+          priorite: result.task.priorite || 'Moyenne',
+          statut: 'À faire',
+          echeance: result.task.echeance || null,
+          assignee: profile ? `${profile.prenom || ''} ${profile.nom || ''}`.trim() : null,
+          assigned_to_user_id: user?.id || null,
+          created_by: user?.id || null,
+          lien_type: result.task.lien_type || null,
+          lien_id: result.task.linked_id || null,
+        };
+        const { data: t, error: tErr } = await supabase.from('todos').insert(taskData).select().single();
+        if (tErr) { alert('Erreur création tâche : ' + tErr.message); } else {
+          created.task = t;
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('todos-changed'));
+          }
         }
+      }
+
+      // ─── EVENT (placeholder) ───
+      if (result.type === 'event' && result.event) {
+        alert('La création de RDV Outlook arrivera dans la prochaine session.\n\nPour l\'instant : copie le résumé dans ton agenda manuellement.');
+      }
+
+      // ─── EMAIL (placeholder) ───
+      if (result.type === 'email' && result.email) {
+        alert('La rédaction d\'email arrivera dans la prochaine session.\n\nVoici le brouillon proposé par l\'IA :\n\nObjet : ' + (result.email.objet || '') + '\n\n' + (result.email.corps || ''));
+      }
+
+      // ─── NOTE (placeholder) ───
+      if (result.type === 'note' && result.note) {
+        alert('La création de notes arrivera dans la prochaine session.\n\nContenu proposé :\n\n' + (result.note.contenu || ''));
       }
 
       if (onCreated) onCreated(created);
@@ -318,8 +296,6 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
       mr.onstop = async () => {
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         setAudioBlob(blob);
-        // Transcription via API existante /api/analyze-voice (si elle existe)
-        // Sinon, fallback : laisser l'utilisateur compléter manuellement
         await transcribe(blob);
         stream.getTracks().forEach(t => t.stop());
       };
@@ -338,22 +314,25 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
   }
 
   async function transcribe(blob) {
-    // Utilise l'API analyze-voice existante si dispo
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
       const formData = new FormData();
+      if (token) formData.append('token', token);
       formData.append('audio', blob, 'recording.webm');
-      const res = await fetch('/api/analyze-voice', { method: 'POST', body: formData });
+      const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
       const data = await res.json();
-      if (data.ok && data.transcription) {
-        setAudioTranscription(data.transcription);
+      if (data.ok && data.text) {
+        setAudioTranscription(data.text);
       }
     } catch (e) {
-      console.warn('Transcription échouée, à compléter manuellement');
+      console.warn('Transcription échouée');
     }
   }
 
   const detectedType = forcedType || result?.type || 'unknown';
   const TypeIcon = TYPE_LABELS[detectedType]?.icon || AlertCircle;
+  const isImplemented = ['mandat', 'client', 'both', 'task'].includes(detectedType);
 
   return (
     <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-6" onClick={onClose}>
@@ -366,7 +345,7 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
             </div>
             <div>
               <h2 className="font-display text-xl font-semibold text-stone-900">Créer avec l'IA</h2>
-              <p className="text-xs text-stone-500">Fichiers, texte ou voix — l'IA détecte et crée</p>
+              <p className="text-xs text-stone-500">L'IA détecte l'intention et propose l'action adaptée</p>
             </div>
           </div>
           <button onClick={onClose} className="text-stone-500 hover:text-stone-900"><X className="w-5 h-5" /></button>
@@ -375,23 +354,28 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
         {!result && (
           <>
             <div className="px-6 pt-4 flex gap-1 border-b border-stone-200">
-              <TabButton active={tab === 'files'} onClick={() => setTab('files')} icon={Upload}>📁 Fichiers</TabButton>
-              <TabButton active={tab === 'text'} onClick={() => setTab('text')} icon={FileText}>📝 Texte</TabButton>
-              <TabButton active={tab === 'audio'} onClick={() => setTab('audio')} icon={Mic}>🎤 Voix</TabButton>
+              <TabButton active={tab === 'files'} onClick={() => setTab('files')}>📁 Fichiers</TabButton>
+              <TabButton active={tab === 'text'} onClick={() => setTab('text')}>📝 Texte</TabButton>
+              <TabButton active={tab === 'audio'} onClick={() => setTab('audio')}>🎤 Voix</TabButton>
             </div>
 
             <div className="p-6">
               {tab === 'text' && (
                 <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-2">Colle ici le texte à analyser</label>
+                  <label className="block text-xs font-semibold text-stone-700 mb-2">Décris ce que tu veux créer</label>
                   <textarea
                     value={text}
                     onChange={e => setText(e.target.value)}
                     rows={8}
-                    placeholder="Email d'un acheteur, conversation ChatGPT, note de RDV, fiche d'un bien..."
+                    placeholder="Exemples :
+- Un mandat à partir d'un email : « Je vends mon immeuble 9 rue Hoche... »
+- Un acheteur : « Mme Dupont cherche un T3 Paris 8e budget 1M€ »
+- Une tâche : « Rappelle-moi vendredi d'appeler Philippe »
+- Un RDV : « Visite immeuble Versailles jeudi 14h avec Judith »
+- Une note : « Note : le DPE doit être refait avant commercialisation »"
                     className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-sage-dark"
                   />
-                  <p className="text-xs text-stone-500 mt-2">L'IA détectera s'il s'agit d'un mandat, d'un acheteur, ou des deux.</p>
+                  <p className="text-xs text-stone-500 mt-2">L'IA détecte automatiquement l'intention : mandat, client, tâche, RDV, email ou note.</p>
                 </div>
               )}
 
@@ -451,16 +435,11 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-medium text-stone-700 mb-1 flex items-center justify-between gap-2">
                       <span className="truncate">{progress.label}</span>
-                      {progress.total > 0 && (
-                        <span className="text-stone-500 flex-shrink-0">{progress.current}/{progress.total}</span>
-                      )}
+                      {progress.total > 0 && <span className="text-stone-500 flex-shrink-0">{progress.current}/{progress.total}</span>}
                     </div>
                     {progress.total > 0 && (
                       <div className="h-1 bg-stone-200 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-sage-dark transition-all duration-200"
-                          style={{ width: `${Math.round((progress.current / progress.total) * 100)}%` }}
-                        />
+                        <div className="h-full bg-sage-dark transition-all duration-200" style={{ width: `${Math.round((progress.current / progress.total) * 100)}%` }} />
                       </div>
                     )}
                   </div>
@@ -490,7 +469,7 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
 
               <div className="mt-2 flex gap-1 flex-wrap">
                 <span className="text-xs text-stone-500 self-center">Forcer :</span>
-                {['mandat', 'client', 'both'].map(t => (
+                {['mandat', 'client', 'both', 'task', 'event', 'email', 'note'].map(t => (
                   <button key={t} onClick={() => setForcedType(forcedType === t ? null : t)}
                     className={`text-xs px-2 py-0.5 rounded-full border ${forcedType === t || (!forcedType && result.type === t) ? 'bg-sage-100 border-sage-dark text-sage-darker font-medium' : 'bg-white border-stone-200 text-stone-600'}`}>
                     {TYPE_LABELS[t]?.label || t}
@@ -500,35 +479,69 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
             </div>
 
             {(detectedType === 'mandat' || detectedType === 'both') && result.mandat && (
-              <PreviewBlock
-                title="📋 Mandat à créer"
-                data={result.mandat}
-                duplicates={result.duplicates?.mandat}
-                duplicateType="mandat"
-                onMerge={(dupId, dupLabel) => setMergeWith({ id: dupId, label: dupLabel })}
-              />
+              <PreviewBlock title="📋 Mandat à créer" data={result.mandat} duplicates={result.duplicates?.mandat} duplicateType="mandat" onMerge={(dupId, dupLabel) => setMergeWith({ id: dupId, label: dupLabel })} />
             )}
             {(detectedType === 'client' || detectedType === 'both') && result.client && (
-              <PreviewBlock
-                title="👤 Client à créer"
-                data={result.client}
-                duplicates={result.duplicates?.client}
-                duplicateType="client"
-              />
+              <PreviewBlock title="👤 Client à créer" data={result.client} duplicates={result.duplicates?.client} duplicateType="client" />
+            )}
+            {detectedType === 'task' && result.task && (
+              <PreviewBlock title="✅ Tâche à créer" data={result.task} />
+            )}
+            {detectedType === 'event' && result.event && (
+              <>
+                <PreviewBlock title="📅 RDV à créer" data={result.event} />
+                <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
+                  ⚠️ Création RDV Outlook arrive prochainement. Pour l'instant : copie le résumé manuellement dans ton agenda.
+                </div>
+              </>
+            )}
+            {detectedType === 'email' && result.email && (
+              <>
+                <PreviewBlock title="✉️ Email à rédiger" data={result.email} />
+                <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
+                  ⚠️ Envoi d'email arrive prochainement. Pour l'instant : copie le brouillon manuellement.
+                </div>
+              </>
+            )}
+            {detectedType === 'note' && result.note && (
+              <>
+                <PreviewBlock title="📝 Note à enregistrer" data={result.note} />
+                <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
+                  ⚠️ Stockage de notes arrive prochainement.
+                </div>
+              </>
+            )}
+
+            {/* Suggestions de liens (pour task/event/email/note) */}
+            {result.link_suggestions && result.link_suggestions.suggestions && result.link_suggestions.suggestions.length > 0 && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="text-xs font-semibold text-blue-900 mb-1.5">💡 Liens possibles trouvés en BDD :</div>
+                <div className="space-y-1">
+                  {result.link_suggestions.suggestions.map(s => {
+                    const label = s.nom || `${s.prenom || ''} ${s.nom || ''}`.trim() || s.societe;
+                    const sub = s.adresse || s.email || s.societe || '';
+                    return (
+                      <div key={s.id} className="text-xs text-blue-900">
+                        <span className="font-medium">{label}</span>
+                        {sub && <span className="text-blue-700 ml-2">· {sub}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
 
             <div className="flex items-center justify-end gap-2 mt-4 pt-4 border-t border-stone-200">
               <button onClick={() => setResult(null)} className="px-4 py-2 text-sm text-stone-700 hover:bg-stone-100 rounded-lg">← Retour</button>
               <button onClick={handleCreate} disabled={creating || detectedType === 'unknown'} className="flex items-center gap-2 px-4 py-2 bg-stone-900 text-white rounded-lg hover:bg-stone-800 disabled:opacity-50 text-sm">
                 {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                {creating ? 'Création...' : 'Créer ' + (detectedType === 'both' ? 'mandat + client' : detectedType)}
+                {creating ? 'Création...' : isImplemented ? 'Créer ' + (TYPE_LABELS[detectedType]?.label || detectedType) : 'Aperçu (pas encore créable)'}
               </button>
             </div>
           </div>
         )}
       </div>
 
-      {/* Modal de fusion (au-dessus de la modale principale) */}
       {mergeWith && (
         <MergeMandatsModal
           existingMandatId={mergeWith.id}
@@ -536,7 +549,6 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
           onClose={() => setMergeWith(null)}
           onMerged={(mandatId, updates) => {
             setMergeWith(null);
-            // Notifier le parent qu'un mandat a été MAJ (et pas créé)
             if (onCreated) onCreated({ mandat: { id: mandatId, ...updates }, client: null, merged: true });
             reset();
             onClose();
@@ -556,8 +568,7 @@ function TabButton({ active, onClick, children }) {
 }
 
 function PreviewBlock({ title, data, duplicates, duplicateType, onMerge }) {
-  // Masquer 'marche' (champ technique) : on l'affiche dans le titre via le badge
-  const entries = Object.entries(data).filter(([k, v]) => v !== null && v !== undefined && v !== '' && k !== 'marche');
+  const entries = Object.entries(data).filter(([k, v]) => v !== null && v !== undefined && v !== '' && k !== 'marche' && k !== 'lien_hint' && k !== 'lien_type');
   const marcheLabel = data.marche === 'b2c' ? 'Habitation (B2C)' : data.marche === 'b2b' ? 'Investissement (B2B)' : null;
   const hasDuplicates = Array.isArray(duplicates) && duplicates.length > 0;
 
@@ -579,7 +590,6 @@ function PreviewBlock({ title, data, duplicates, duplicateType, onMerge }) {
         )}
       </div>
 
-      {/* Liste des doublons potentiels avec actions (mandat uniquement, fusion non gérée pour clients) */}
       {hasDuplicates && (
         <div className="mb-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
           <div className="text-xs font-semibold text-amber-900 mb-1.5">Fiches déjà en BDD :</div>
@@ -599,20 +609,13 @@ function PreviewBlock({ title, data, duplicates, duplicateType, onMerge }) {
                     {sub && <div className="text-[11px] text-stone-500 truncate">{sub}</div>}
                   </div>
                   {isMandat && onMerge && (
-                    <button
-                      onClick={() => onMerge(d.id, label)}
-                      className="flex items-center gap-1 px-2 py-1 bg-sage-dark text-white rounded text-[11px] hover:bg-sage-darker font-medium flex-shrink-0"
-                      title="Fusionner les nouvelles données dans cette fiche existante"
-                    >
+                    <button onClick={() => onMerge(d.id, label)} className="flex items-center gap-1 px-2 py-1 bg-sage-dark text-white rounded text-[11px] hover:bg-sage-darker font-medium flex-shrink-0">
                       <GitMerge className="w-3 h-3" /> Fusionner
                     </button>
                   )}
                 </div>
               );
             })}
-          </div>
-          <div className="text-[10px] text-amber-700 mt-1.5">
-            💡 Fusionner = mettre à jour la fiche existante avec les nouvelles infos (pas de doublon créé)
           </div>
         </div>
       )}
@@ -622,7 +625,7 @@ function PreviewBlock({ title, data, duplicates, duplicateType, onMerge }) {
           <div key={key} className="flex items-start gap-2 text-xs">
             <span className="text-stone-500 font-medium min-w-[120px]">{key} :</span>
             <span className="text-stone-900 flex-1">
-              {Array.isArray(value) ? value.join(', ') : String(value)}
+              {Array.isArray(value) ? value.join(', ') : (typeof value === 'object' ? JSON.stringify(value) : String(value))}
             </span>
           </div>
         ))}
