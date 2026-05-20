@@ -298,6 +298,15 @@ export default function CRM() {
     setLoading(false);
   }
 
+  // Listener global : recharge les todos quand un composant émet l'event
+  useEffect(() => {
+    async function reloadTodos() {
+      const { data } = await supabase.from('todos').select('*');
+      if (data) setTodos(data.map(toCamel));
+    }
+    window.addEventListener('todos-changed', reloadTodos);
+    return () => window.removeEventListener('todos-changed', reloadTodos);
+  }, []);
   const tabs = [
     { id: 'dashboard', label: 'Tableau de bord', icon: Home },
     { id: 'mandats', label: 'Mandats', icon: Building2 },
