@@ -2486,8 +2486,23 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
         <OwnerSelector mandat={mandat} reload={reload} />
       </div>
 
-      {/* ═══ STICKY BAR : DOCUMENTS À GÉNÉRER ═══ */}
-      <div className="sticky top-0 z-20 bg-cream-50/95 backdrop-blur-sm border-b border-cream-dark -mx-8 px-8 py-2.5 mb-4">
+      {/* ═══ STICKY BAR 1 : NAVIGATION DES DONNÉES ═══ */}
+      <div className="sticky top-0 z-30 bg-cream-50/95 backdrop-blur-sm border-b border-cream-dark -mx-8 px-8 py-2.5">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] uppercase tracking-wider text-sage-dark font-semibold pr-2 border-r border-cream-dark mr-1">📌 Données</span>
+          <a href="#identite" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🏠 Identité</a>
+          <a href="#finance" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">💰 Finance</a>
+          <a href="#locatif" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🏢 Locatif</a>
+          <a href="#technique" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🔧 Technique</a>
+          <a href="#mandant" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">👤 Mandant</a>
+          <a href="#photos" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📷 Médias</a>
+          <a href="#documents" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📂 Documents</a>
+          <a href="#stats" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📊 Stats</a>
+        </div>
+      </div>
+
+      {/* ═══ STICKY BAR 2 : DOCUMENTS À GÉNÉRER ═══ */}
+      <div className="sticky top-[42px] z-20 bg-cream-50/95 backdrop-blur-sm border-b border-cream-dark -mx-8 px-8 py-2.5 mb-4">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] uppercase tracking-wider text-sage-dark font-semibold pr-2 border-r border-cream-dark mr-1">📤 Générer</span>
           <button className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Plaquette commerciale (à venir)">
