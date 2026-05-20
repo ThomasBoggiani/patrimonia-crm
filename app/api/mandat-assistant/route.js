@@ -2,7 +2,6 @@
 // app/api/mandat-assistant/route.js
 // Assistant IA unifié par mandat, avec function calling et historique
 // MOTEUR : OpenAI GPT-4o
-// VERSION : avec logs debug
 // ═══════════════════════════════════════════════════════════════════
 
 import OpenAI from 'openai';
@@ -25,9 +24,6 @@ async function verifyToken(token) {
   return user;
 }
 
-// ─────────────────────────────────────────────────────────
-// SYSTEM PROMPT de l'assistant
-// ─────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `Tu es l'assistant IA dédié à un mandat immobilier dans le CRM Patrimonia (Immeubles & Patrimoine, agence parisienne off-market patrimoniale).
 
 CONTEXTE MÉTIER :
@@ -52,9 +48,6 @@ ARBORESCENCE DES TYPES DE BIENS :
 
 Tu es proactif. Quand on te demande de modifier quelque chose, tu appelles l'outil immédiatement.`;
 
-// ─────────────────────────────────────────────────────────
-// OUTILS de l'assistant (function calling)
-// ─────────────────────────────────────────────────────────
 const TOOLS = [
   {
     type: 'function',
@@ -100,10 +93,6 @@ const TOOLS = [
   },
 ];
 
-// ─────────────────────────────────────────────────────────
-// IMPLEMENTATIONS des outils
-// ─────────────────────────────────────────────────────────
-
 async function tool_update_mandat_field({ mandatId, field, value }) {
   const ALLOWED_FIELDS = [
     'nom', 'adresse', 'ville', 'prix', 'prix_net_vendeur', 'prix_m2', 'surface',
@@ -127,10 +116,8 @@ async function tool_update_mandat_field({ mandatId, field, value }) {
     .select();
 
   if (error) {
-    console.error('[tool_update_mandat_field] erreur Supabase:', error);
     return { ok: false, error: error.message };
   }
-  console.log('[tool_update_mandat_field] OK - rows updated:', data?.length || 0);
   return { ok: true, field, value, rows_updated: data?.length || 0, message: `Champ '${field}' mis à jour avec succès` };
 }
 
@@ -183,20 +170,14 @@ Réponse JSON strict : { "arguments": ["...", "...", "...", "..."] }`;
   }
 }
 
-// ─────────────────────────────────────────────────────────
-// Dispatcher d'outils
-// ─────────────────────────────────────────────────────────
 async function executeToolCall(toolCall, mandatId) {
   const name = toolCall.function.name;
   let args = {};
   try {
     args = JSON.parse(toolCall.function.arguments || '{}');
   } catch (e) {
-    console.error('[executeToolCall] JSON parse error:', e);
     return { ok: false, error: 'Arguments JSON invalides' };
   }
-
-  console.log('[executeToolCall] Exécution:', name, 'avec args:', JSON.stringify(args));
 
   if (name === 'update_mandat_field') {
     return await tool_update_mandat_field({ mandatId, ...args });
@@ -210,9 +191,6 @@ async function executeToolCall(toolCall, mandatId) {
   return { ok: false, error: `Outil inconnu : ${name}` };
 }
 
-// ─────────────────────────────────────────────────────────
-// Récupère le contexte initial d'un mandat
-// ─────────────────────────────────────────────────────────
 async function getMandatContext(mandatId) {
   const { data: mandat } = await supabaseAdmin
     .from('mandats')
@@ -238,9 +216,6 @@ async function getMandatContext(mandatId) {
   return lines.join('\n');
 }
 
-// ─────────────────────────────────────────────────────────
-// Charge ou crée le chat
-// ─────────────────────────────────────────────────────────
 async function loadOrCreateChat(mandatId, userId) {
   const { data } = await supabaseAdmin
     .from('mandat_chats')
@@ -271,9 +246,6 @@ async function saveChat(chatId, messages) {
   if (error) console.error('[mandat-assistant] saveChat error:', error);
 }
 
-// ─────────────────────────────────────────────────────────
-// MAIN HANDLER
-// ─────────────────────────────────────────────────────────
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -315,17 +287,12 @@ export async function POST(request) {
       { role: 'user', content: message },
     ];
 
-    console.log('[mandat-assistant] === Nouvel appel ===');
-    console.log('[mandat-assistant] mandat_id:', mandat_id);
-    console.log('[mandat-assistant] message user:', message);
-    console.log('[mandat-assistant] historique length:', history.length);
-
     let finalResponse = null;
     let updatedHistory = [...history, { role: 'user', content: message }];
+    let mandatModified = false;
+    const modifiedFields = [];
 
     for (let iter = 0; iter < 5; iter++) {
-      console.log('[mandat-assistant] === Iteration', iter, '===');
-
       const response = await openai.chat.completions.create({
         model: 'gpt-4o',
         max_tokens: 1500,
@@ -336,17 +303,11 @@ export async function POST(request) {
       const choice = response.choices[0];
       const assistantMsg = choice.message;
 
-      console.log('[mandat-assistant] finish_reason:', choice.finish_reason);
-      console.log('[mandat-assistant] tool_calls présents:', !!assistantMsg.tool_calls);
-      console.log('[mandat-assistant] content brut:', (assistantMsg.content || '').slice(0, 200));
-
       if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
         finalResponse = assistantMsg.content;
         updatedHistory.push({ role: 'assistant', content: assistantMsg.content });
         break;
       }
-
-      console.log('[mandat-assistant] Tool calls demandés:', JSON.stringify(assistantMsg.tool_calls, null, 2));
 
       messagesForLLM.push(assistantMsg);
       updatedHistory.push({
@@ -357,7 +318,11 @@ export async function POST(request) {
 
       for (const toolCall of assistantMsg.tool_calls) {
         const toolResult = await executeToolCall(toolCall, mandat_id);
-        console.log('[mandat-assistant] Résultat outil:', JSON.stringify(toolResult, null, 2));
+        // Tracker les modifications de champs
+        if (toolCall.function.name === 'update_mandat_field' && toolResult.ok) {
+          mandatModified = true;
+          modifiedFields.push(toolResult.field);
+        }
         const toolMsg = {
           role: 'tool',
           tool_call_id: toolCall.id,
@@ -376,6 +341,8 @@ export async function POST(request) {
       ok: true,
       response: finalResponse,
       chat_id: chat.id,
+      mandat_modified: mandatModified,
+      modified_fields: modifiedFields,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
   } catch (err) {
