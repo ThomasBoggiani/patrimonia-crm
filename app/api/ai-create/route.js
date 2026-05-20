@@ -1,7 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════
 // app/api/ai-create/route.js
-// API unifiée : Fichiers + Texte + Audio → Mandat / Client / Les 2
-// MOTEUR : OpenAI GPT-4o (migré depuis Claude Haiku)
+// API universelle : Fichiers + Texte + Audio → 6 intentions
+// MOTEUR : OpenAI GPT-4o
+// Intentions : mandat | client | both | task | event | email | note | unknown
 // ═══════════════════════════════════════════════════════════════════
 
 import OpenAI from 'openai';
@@ -25,18 +26,34 @@ async function verifyToken(token) {
   return user;
 }
 
-const SYSTEM_PROMPT = `Tu es un expert immobilier patrimonial et acquisition off-market. Tu reçois du contenu (texte, document, transcription vocale) et tu dois :
+function getDateContext() {
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const tomorrow = new Date(now.getTime() + 86400000).toISOString().slice(0, 10);
+  const nextWeek = new Date(now.getTime() + 7 * 86400000).toISOString().slice(0, 10);
+  const dayNames = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+  const todayLabel = dayNames[now.getDay()] + ' ' + now.toLocaleDateString('fr-FR');
+  return { today, tomorrow, nextWeek, todayLabel };
+}
 
-1. DÉTECTER le type de contenu :
+const SYSTEM_PROMPT_BASE = `Tu es l'assistant IA universel du CRM Patrimonia (Immeubles & Patrimoine, agence parisienne off-market patrimoniale).
+
+Tu reçois du contenu (texte, document, transcription vocale) et tu dois :
+
+1. DÉTECTER l'INTENTION :
    - "mandat" : un bien immobilier à vendre
    - "client" : un acheteur potentiel / investisseur
    - "both" : les 2 (ex: un email avec un bien ET un acheteur)
+   - "task" : une tâche à faire / un rappel ("rappelle-moi", "à faire", "ne pas oublier")
+   - "event" : un RDV / rendez-vous / visite avec date et heure ("RDV demain 14h", "visite jeudi 10h")
+   - "email" : un brouillon d'email à rédiger ("rédige un mail à", "réponds à")
+   - "note" : une note libre / observation à enregistrer ("note importante", "info à retenir")
    - "unknown" : impossible à déterminer
 
-2. EXTRAIRE les données pour la (les) fiche(s).
+2. EXTRAIRE les données pour l'intention détectée.
 
 ═══════════════════════════════════════════════════════════════════
-ARBORESCENCE DES TYPES DE BIENS (CRITIQUE)
+ARBORESCENCE DES TYPES DE BIENS (pour mandat)
 ═══════════════════════════════════════════════════════════════════
 
 Pour chaque mandat, tu dois identifier :
@@ -45,7 +62,6 @@ Pour chaque mandat, tu dois identifier :
 - "sous_type" : le sous-type précis (peut être absent si pas pertinent)
 
 ═══ MARCHÉ B2B (investissement professionnel) ═══
-
 Famille "Immeubles" → sous_type parmi : "Habitation", "Mixte", "Commercial"
 Famille "Hôtels" → sous_type parmi : "Hébergements hôteliers", "Hôtels classiques", "Sociaux"
 Famille "Terrains" → pas de sous_type
@@ -53,148 +69,158 @@ Famille "Parking" → pas de sous_type
 Famille "Locaux commerciaux" → sous_type parmi : "Bureaux", "Boutiques", "Retails Park"
 
 ═══ MARCHÉ B2C (habitation pour particulier) ═══
-
 Famille "Résidentiel" → sous_type parmi : "Appartements", "Maison", "Hôtels particuliers"
 
-═══ COMMENT CHOISIR ═══
-
-- Si on parle d'un **immeuble entier** d'appartements → b2b, type="Immeubles", sous_type="Habitation"
-- Si on parle d'un **appartement T3** vendu individuellement → b2c, type="Résidentiel", sous_type="Appartements"
-- Si on parle d'une **maison** vendue à un particulier → b2c, type="Résidentiel", sous_type="Maison"
-- Si on parle d'un **hôtel particulier** comme résidence → b2c, type="Résidentiel", sous_type="Hôtels particuliers"
-- Si on parle d'un **immeuble mixte** (commerces RDC + appartements) → b2b, type="Immeubles", sous_type="Mixte"
-- Si on parle d'un **hôtel** au sens commercial (hôtellerie) → b2b, type="Hôtels", sous_type="Hôtels classiques"
-- Si on parle de **bureaux** d'entreprise → b2b, type="Locaux commerciaux", sous_type="Bureaux"
-- Si on parle d'un **terrain** → b2b, type="Terrains"
-- Dans le doute, B2B est le défaut (le métier de l'agence est l'investissement)
+Dans le doute, B2B est le défaut.
 
 ═══════════════════════════════════════════════════════════════════
 FORMAT DE RÉPONSE (JSON STRICT, pas de markdown)
 ═══════════════════════════════════════════════════════════════════
 
 {
-  "type": "mandat|client|both|unknown",
+  "type": "mandat|client|both|task|event|email|note|unknown",
   "confidence": 0.95,
   "reasoning": "Description courte de ce que tu as détecté",
-  "mandat": {
-    "nom": "...",
-    "adresse": "...",
-    "ville": "...",
-    "marche": "b2b|b2c",
-    "type": "...",
-    "sous_type": "...",
-    "surface": 28.36,
-    "nb_pieces": 2,
-    "nb_chambres": 1,
-    "etage": 2,
-    "annee_construction": 1965,
-    "prix": 399000,
-    "prix_net_vendeur": 380000,
-    "prix_m2": 14069,
-    "honoraires_charge": "De l'acquéreur|Du vendeur",
-    "honoraires_taux": 5.26,
-    "honoraires_montant": 19000,
-    "loyers_annuels": 12000,
-    "rendement": 4.5,
-    "rendement_optimise": 6.2,
-    "charges_annuelles": 7000,
-    "taxe_fonciere": 1500,
-    "dpe_consommation": 208,
-    "dpe_emissions": 45,
-    "dpe_date": "2026-01-13",
-    "mandat_numero": "293",
-    "mandat_type": "EXCLUSIF|SEMI EXCLUSIF|SIMPLE",
-    "mandat_date_echeance": "2026-08-19",
-    "nb_lots": 146,
-    "description": "...",
-    "commercialisation": "Off-market|Mandat exclusif|Mandat simple"
-  },
-  "client": {
-    "prenom": "...",
-    "nom": "...",
-    "societe": "...",
-    "tel": "...",
-    "email": "...",
-    "marche": "b2b|b2c",
-    "typologie": "Foncières|Marchands de biens|Particuliers|Fonds|Promoteurs|Family Office",
-    "sous_typologie": "Privées|Publiques",
-    "nature": "Personne physique|SCI|SARL|SAS|...",
-    "budget_min": 0,
-    "budget_max": 0,
-    "rendement_min": 0,
-    "zones": ["Paris 7e", "Paris 8e"],
-    "typologies_recherchees": ["Immeubles", "Habitation", "Mixte"],
-    "origine": "Apporteur|Réseau|Site web|Email|...",
-    "maturite": "Chaud|Moyen|Froid"
-  }
+  "mandat": { /* si type=mandat ou both */ },
+  "client": { /* si type=client ou both */ },
+  "task": { /* si type=task */ },
+  "event": { /* si type=event */ },
+  "email": { /* si type=email */ },
+  "note": { /* si type=note */ }
 }
 
 ═══════════════════════════════════════════════════════════════════
-COMMENT EXTRAIRE UN CLIENT (CRITIQUE)
+FORMAT mandat (b2b ou b2c)
 ═══════════════════════════════════════════════════════════════════
 
-═══ MARCHÉ CLIENT (b2b vs b2c) ═══
-
-Tu dois TOUJOURS identifier client.marche :
-- "b2c" si typologie="Particuliers" (personne qui cherche pour habiter)
-- "b2b" si typologie ∈ {Foncières, Marchands de biens, Fonds, Promoteurs, Family Office}
-
-Comment choisir :
-- Une personne physique qui cherche un appartement, une maison, un hôtel particulier pour y habiter → b2c, typologie="Particuliers"
-- Une société, fonds, foncière, family office, investisseur professionnel → b2b
-- Une SCI familiale qui cherche un placement locatif → b2b (Marchands de biens ou Particuliers selon contexte ; par défaut Particuliers si très petite SCI personnelle)
-- Dans le doute, B2B est le défaut.
-
-═══ CLIENT B2B : typologies_recherchees ═══
-
-Le tableau "typologies_recherchees" doit contenir les FAMILLES recherchées ET leurs SOUS-TYPES, à PLAT.
-
-Exemples :
-- Client cherche des immeubles mixtes et résidentiels :
-  → ["Immeubles", "Habitation", "Mixte"]
-- Client cherche tous types d'immeubles (pas de précision) :
-  → ["Immeubles"]
-- Client cherche bureaux + boutiques :
-  → ["Locaux commerciaux", "Bureaux", "Boutiques"]
-- Client cherche hôtels et terrains :
-  → ["Hôtels", "Hôtels classiques", "Terrains"]
-
-RÈGLE : si un sous-type est mentionné, AJOUTE AUSSI sa famille parente.
-
-═══ CLIENT B2C : typologies_recherchees ═══
-
-Le tableau "typologies_recherchees" doit contenir les SOUS-TYPES recherchés (Appartements/Maison/Hôtels particuliers) + les NOMBRES DE PIÈCES, à PLAT.
-
-Sous-types possibles : "Appartements", "Maison", "Hôtels particuliers"
-Nombres de pièces possibles : "Studio / T1", "T2", "T3", "T4", "T5", "T6+"
-
-Exemples :
-- Client cherche un T3 ou T4 à Paris :
-  → ["Appartements", "T3", "T4"]
-- Client cherche une maison ou un appartement T5 :
-  → ["Maison", "Appartements", "T5"]
-- Client cherche juste "un bien à habiter" sans précision :
-  → ["Appartements"]
+{
+  "nom": "...",
+  "adresse": "...",
+  "ville": "...",
+  "marche": "b2b|b2c",
+  "type": "...",
+  "sous_type": "...",
+  "surface": 28.36,
+  "nb_pieces": 2,
+  "nb_chambres": 1,
+  "etage": 2,
+  "annee_construction": 1965,
+  "prix": 399000,
+  "prix_net_vendeur": 380000,
+  "prix_m2": 14069,
+  "honoraires_charge": "De l'acquéreur|Du vendeur",
+  "honoraires_taux": 5.26,
+  "honoraires_montant": 19000,
+  "loyers_annuels": 12000,
+  "rendement": 4.5,
+  "rendement_optimise": 6.2,
+  "charges_annuelles": 7000,
+  "taxe_fonciere": 1500,
+  "dpe_consommation": 208,
+  "dpe_emissions": 45,
+  "dpe_date": "2026-01-13",
+  "mandat_numero": "293",
+  "mandat_type": "EXCLUSIF|SEMI EXCLUSIF|SIMPLE",
+  "mandat_date_echeance": "2026-08-19",
+  "nb_lots": 146,
+  "description": "...",
+  "commercialisation": "Off-market|Mandat exclusif|Mandat simple"
+}
 
 ═══════════════════════════════════════════════════════════════════
+FORMAT client
+═══════════════════════════════════════════════════════════════════
 
-RÈGLES :
+{
+  "prenom": "...",
+  "nom": "...",
+  "societe": "...",
+  "tel": "...",
+  "email": "...",
+  "marche": "b2b|b2c",
+  "typologie": "Foncières|Marchands de biens|Particuliers|Fonds|Promoteurs|Family Office",
+  "sous_typologie": "Privées|Publiques",
+  "nature": "Personne physique|SCI|SARL|SAS|...",
+  "budget_min": 0,
+  "budget_max": 0,
+  "rendement_min": 0,
+  "zones": ["Paris 7e", "Paris 8e"],
+  "typologies_recherchees": ["Immeubles", "Habitation", "Mixte"],
+  "origine": "Apporteur|Réseau|Site web|Email|...",
+  "maturite": "Chaud|Moyen|Froid"
+}
+
+═══════════════════════════════════════════════════════════════════
+FORMAT task (tâche à faire)
+═══════════════════════════════════════════════════════════════════
+
+{
+  "titre": "Appeler le mandant pour valider le prix",
+  "echeance": "2026-05-22",
+  "priorite": "Haute|Moyenne|Basse",
+  "lien_type": "mandat|client|null",
+  "lien_hint": "nom ou prénom de la personne / mandat lié, si évoqué (sinon null)"
+}
+
+Pour echeance : utilise la date du jour fournie dans le contexte. "Demain" = jour+1, "vendredi" = prochain vendredi, etc.
+
+═══════════════════════════════════════════════════════════════════
+FORMAT event (RDV / Rendez-vous)
+═══════════════════════════════════════════════════════════════════
+
+{
+  "titre": "Visite immeuble Versailles",
+  "date_debut": "2026-05-22T14:00:00",
+  "date_fin": "2026-05-22T15:00:00",
+  "lieu": "9 rue Hoche, Versailles",
+  "participants": ["Philippe Chibaud", "Judith Kessous"],
+  "description": "Visite avec le mandant et le notaire",
+  "lien_type": "mandat|client|null",
+  "lien_hint": "nom du mandat/client lié si évoqué"
+}
+
+═══════════════════════════════════════════════════════════════════
+FORMAT email (brouillon)
+═══════════════════════════════════════════════════════════════════
+
+{
+  "destinataire": "philippe.chibaud@example.com ou nom si email inconnu",
+  "objet": "Point d'étape mandat Versailles",
+  "corps": "Bonjour Philippe,\\n\\nJe reviens vers vous concernant...",
+  "lien_type": "mandat|client|null",
+  "lien_hint": "nom du mandat/client lié si évoqué"
+}
+
+═══════════════════════════════════════════════════════════════════
+FORMAT note (note libre / observation)
+═══════════════════════════════════════════════════════════════════
+
+{
+  "contenu": "Observation rapide : le DPE n'est plus à jour, à refaire avant commercialisation",
+  "lien_type": "mandat|client|null",
+  "lien_hint": "nom du mandat/client si évoqué"
+}
+
+═══════════════════════════════════════════════════════════════════
+COMMENT EXTRAIRE UN CLIENT (rappel)
+═══════════════════════════════════════════════════════════════════
+
+- client.marche = "b2c" si typologie="Particuliers", sinon "b2b"
+- client.typologies_recherchees pour B2B : familles + sous-types à plat (ex: ["Immeubles", "Habitation", "Mixte"])
+- client.typologies_recherchees pour B2C : sous-types + nb pièces (ex: ["Appartements", "T3", "T4"])
+- Tel : prendre le mobile en priorité (06, 07, +336, +337)
+
+═══════════════════════════════════════════════════════════════════
+RÈGLES GÉNÉRALES
+═══════════════════════════════════════════════════════════════════
+
 - Ne mets PAS les clés que tu ne peux pas extraire (pas de null, pas de '').
-- "type" est OBLIGATOIRE.
-- Pour mandat : "marche" et "type" sont OBLIGATOIRES si on identifie un bien.
-- "sous_type" UNIQUEMENT si pertinent (selon l'arborescence ci-dessus).
-- Pour client : "marche" et "typologie" sont OBLIGATOIRES si on identifie un acheteur.
-- Pour client.sous_typologie : UNIQUEMENT si typologie="Foncières" → "Privées" ou "Publiques". JAMAIS pour les autres typologies.
-- Pour client.typologies_recherchees : respecter STRICTEMENT le vocabulaire ci-dessus (familles + sous-types B2B, ou sous-types + pièces B2C). Pas de mélange B2B/B2C dans le même client.
-- Si type='mandat', n'inclus PAS la clé "client" (et vice-versa).
-- Si type='both', inclus les 2.
-- Si type='unknown', n'inclus ni "mandat" ni "client".
-- RENDEMENTS MANDAT : si la source mentionne UN seul rendement, utilise "rendement" (= rendement présent à ce jour avec locataires en place). Si la source mentionne aussi un rendement "potentiel", "projeté", "après travaux", "après re-location", "optimisé" ou un rendement plus élevé attendu plus tard, mets-le dans "rendement_optimise". Ne dupliquer les 2 que si la source distingue clairement les 2 valeurs.
-- TÉLÉPHONE CLIENT : si la source mentionne plusieurs numéros (fixe + mobile, ou pro + perso), TOUJOURS prendre le mobile/portable en priorité dans le champ "tel". Ignore le fixe. Un numéro mobile français commence par 06, 07, +336, +337.
+- "type" est OBLIGATOIRE (= l'intention détectée).
+- Pour 'task'/'event' : utilise la DATE DU JOUR fournie dans le contexte (jamais d'invention).
+- Si tu ne sais pas, type='unknown'.
 - Pas de préambule, juste le JSON.`;
 
 async function callGPT(userContent) {
-  // userContent est au format Claude (parts), on le convertit pour OpenAI
   const openaiContent = userContent.map(part => {
     if (part.type === 'text') return { type: 'text', text: part.text };
     if (part.type === 'image') {
@@ -204,12 +230,15 @@ async function callGPT(userContent) {
     return null;
   }).filter(Boolean);
 
+  const dc = getDateContext();
+  const fullSystem = SYSTEM_PROMPT_BASE + `\n\n═══ CONTEXTE DATE ═══\nDate du jour : ${dc.today} (${dc.todayLabel})\nDemain : ${dc.tomorrow}\nDans 7 jours : ${dc.nextWeek}`;
+
   const response = await openai.chat.completions.create({
     model: 'gpt-4o',
     max_tokens: 2500,
     response_format: { type: 'json_object' },
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: fullSystem },
       { role: 'user', content: openaiContent },
     ],
   });
@@ -253,6 +282,29 @@ async function findDuplicates(parsed) {
   }
 
   return result;
+}
+
+// Cherche le mandat/client lié évoqué dans une task/event/email/note
+async function resolveLink(lienType, lienHint) {
+  if (!lienHint || !lienType) return null;
+  const hint = lienHint.toLowerCase();
+  if (lienType === 'mandat') {
+    const { data } = await supabaseAdmin
+      .from('mandats')
+      .select('id, nom, adresse, ville')
+      .or(`nom.ilike.%${hint}%,adresse.ilike.%${hint}%,ville.ilike.%${hint}%`)
+      .limit(3);
+    return data && data.length > 0 ? { suggestions: data } : null;
+  }
+  if (lienType === 'client') {
+    const { data } = await supabaseAdmin
+      .from('clients')
+      .select('id, prenom, nom, societe, email')
+      .or(`nom.ilike.%${hint}%,prenom.ilike.%${hint}%,societe.ilike.%${hint}%`)
+      .limit(3);
+    return data && data.length > 0 ? { suggestions: data } : null;
+  }
+  return null;
 }
 
 export async function POST(request) {
@@ -313,15 +365,14 @@ export async function POST(request) {
 
     const { parsed, usage } = await callGPT(userContent);
 
-    if (forceType && ['mandat', 'client', 'both'].includes(forceType)) {
+    if (forceType && ['mandat', 'client', 'both', 'task', 'event', 'email', 'note'].includes(forceType)) {
       parsed.type = forceType;
     }
 
-    // Defaults : si l'IA a oublié le marché, on déduit b2b par défaut
+    // Defaults pour mandat
     if (parsed.mandat && !parsed.mandat.marche) {
       parsed.mandat.marche = 'b2b';
     }
-    // Idem côté client : déduit du `typologie` si manquant
     if (parsed.client && !parsed.client.marche) {
       const B2C_TYPOLOGIES = ['Particuliers'];
       if (B2C_TYPOLOGIES.includes(parsed.client.typologie)) {
@@ -330,12 +381,20 @@ export async function POST(request) {
         parsed.client.marche = 'b2b';
       }
     }
-    // Anti-erreur IA : sous_typologie uniquement valide pour Foncières
     if (parsed.client && parsed.client.sous_typologie && parsed.client.typologie !== 'Foncières') {
       delete parsed.client.sous_typologie;
     }
 
     const duplicates = await findDuplicates(parsed);
+
+    // Pour task/event/email/note : résoudre le lien évoqué
+    let linkSuggestions = null;
+    for (const intent of ['task', 'event', 'email', 'note']) {
+      if (parsed.type === intent && parsed[intent] && parsed[intent].lien_hint) {
+        linkSuggestions = await resolveLink(parsed[intent].lien_type, parsed[intent].lien_hint);
+        if (linkSuggestions) break;
+      }
+    }
 
     return new Response(JSON.stringify({
       ok: true,
@@ -344,7 +403,12 @@ export async function POST(request) {
       reasoning: parsed.reasoning || '',
       mandat: parsed.mandat || null,
       client: parsed.client || null,
+      task: parsed.task || null,
+      event: parsed.event || null,
+      email: parsed.email || null,
+      note: parsed.note || null,
       duplicates,
+      link_suggestions: linkSuggestions,
       usage,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (err) {
