@@ -2547,6 +2547,27 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
             </div>
           </div>
 
+          {/* ═══ TÂCHES LIÉES AU MANDAT ═══ */}
+          <div id="tasks" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
+            <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
+              <CheckSquare className="w-5 h-5 text-sage-dark" />Tâches liées au mandat
+              {mandatTodos.length > 0 && (
+                <span className="text-sm text-stone-500 font-normal">({mandatTodos.filter(t => t.statut !== 'Terminé').length} en cours)</span>
+              )}
+            </h2>
+            <div className="space-y-2">
+              {mandatTodos.filter(t => t.statut !== 'Terminé').map(t => (
+                <TaskInline key={t.id} task={t} mandats={[mandat]} clients={clients} allProfiles={allProfiles} onUpdate={reload} />
+              ))}
+              <QuickAddTask
+                lienType="mandat"
+                lienId={mandat.id}
+                defaultAssignee={mandat.owner === 'TB' ? 'Thomas Boggiani' : null}
+                onAdd={reload}
+              />
+            </div>
+          </div>
+
           {/* ═══ BLOC IDENTITÉ DU BIEN ═══ */}
             <div id="identite" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
               <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
@@ -2585,27 +2606,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
               <button onClick={() => onOpenMatching?.(mandat.id)} className="text-left transition-all hover:scale-[1.02] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-sage-dark rounded-xl">
                 <KpiBox label="Visites" value={nbVisites} icon={Eye} />
               </button>
-            </div>
-          </div>
-
-          {/* ═══ TÂCHES LIÉES AU MANDAT ═══ */}
-          <div id="tasks" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
-            <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
-              <CheckSquare className="w-5 h-5 text-sage-dark" />Tâches liées au mandat
-              {mandatTodos.length > 0 && (
-                <span className="text-sm text-stone-500 font-normal">({mandatTodos.filter(t => t.statut !== 'Terminé').length} en cours)</span>
-              )}
-            </h2>
-            <div className="space-y-2">
-              {mandatTodos.filter(t => t.statut !== 'Terminé').map(t => (
-                <TaskInline key={t.id} task={t} mandats={[mandat]} clients={clients} allProfiles={allProfiles} onUpdate={reload} />
-              ))}
-              <QuickAddTask
-                lienType="mandat"
-                lienId={mandat.id}
-                defaultAssignee={mandat.owner === 'TB' ? 'Thomas Boggiani' : null}
-                onAdd={reload}
-              />
             </div>
           </div>
 
