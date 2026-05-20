@@ -2525,6 +2525,27 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
 
       <div className="space-y-4">
         <div className="col-span-3 space-y-4">
+          {/* ═══ BLOC IDENTITÉ DU BIEN ═══ */}
+          <div id="identite" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
+            <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
+              <Home className="w-5 h-5 text-sage-dark" />Identité du bien
+            </h2>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <DetailItem label="Adresse" value={mandat.adresse || '—'} />
+                <DetailItem label="Ville" value={mandat.ville || '—'} />
+                <DetailItem label="Marché" value={mandat.marche === 'b2c' ? 'Habitation (B2C)' : 'Investissement (B2B)'} />
+                <DetailItem label="Type" value={mandat.sousType ? `${mandat.type} · ${mandat.sousType}` : (mandat.type || '—')} />
+              </div>
+              <div className="space-y-2">
+                <DetailItem label="N° mandat" value={mandat.mandatNumero || '—'} />
+                <DetailItem label="Type de mandat" value={mandat.mandatType || '—'} />
+                <DetailItem label="Échéance" value={mandat.mandatDateEcheance ? new Date(mandat.mandatDateEcheance).toLocaleDateString('fr-FR') : '—'} />
+                <DetailItem label="Statut" value={mandat.statut || '—'} />
+              </div>
+            </div>
+          </div>
+
           {/* ═══ ANALYSE FINANCIÈRE — REMONTÉE EN PREMIÈRE POSITION ═══ */}
           <div id="finance" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Analyse financière</h2>
