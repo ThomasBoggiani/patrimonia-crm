@@ -2592,6 +2592,75 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
                 </div>
               </div>
             </div>
+          {/* ═══ BLOC TECHNIQUE ═══ */}
+            <div id="technique" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
+              <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
+                🔧 Caractéristiques techniques
+              </h2>
+              <div className="grid grid-cols-3 gap-4">
+                <DetailItem label="Surface totale" value={mandat.surface ? `${mandat.surface} m²` : '—'} />
+                <DetailItem label="Nombre de lots" value={mandat.nbLots || '—'} />
+                <DetailItem label="Année construction" value={mandat.anneeConstruction || '—'} />
+                <DetailItem label="DPE consommation" value={mandat.dpeConsommation ? `${mandat.dpeConsommation} kWh/m²` : '—'} />
+                <DetailItem label="DPE émissions" value={mandat.dpeEmissions ? `${mandat.dpeEmissions} kgCO₂/m²` : '—'} />
+                <DetailItem label="Date DPE" value={mandat.dpeDate ? new Date(mandat.dpeDate).toLocaleDateString('fr-FR') : '—'} />
+                <DetailItem label="Charges annuelles" value={mandat.chargesAnnuelles ? `${parseFloat(mandat.chargesAnnuelles).toLocaleString('fr')} €` : '—'} />
+                <DetailItem label="Taxe foncière" value={mandat.taxeFonciere ? `${parseFloat(mandat.taxeFonciere).toLocaleString('fr')} €` : '—'} />
+                <DetailItem label="Pièces / Chambres" value={mandat.marche === 'b2c' ? `${mandat.nbPieces || '—'} / ${mandat.nbChambres || '—'}` : '—'} />
+              </div>
+            </div>
+
+            {/* ═══ BLOC MANDANT ═══ */}
+            <div id="mandant" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
+              <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
+                <UserIcon className="w-5 h-5 text-sage-dark" />Mandant
+              </h2>
+              {(() => {
+                const mandantClient = mandat.mandantClientId ? clients.find(c => c.id === mandat.mandantClientId) : null;
+                const mandantInfo = mandat.mandantInfo || mandat.mandant_info || {};
+                if (!mandantClient && !Object.values(mandantInfo).some(v => v)) {
+                  return (
+                    <div className="text-center py-6 text-stone-400">
+                      <UserIcon className="w-8 h-8 mx-auto mb-2 text-stone-300" />
+                      <p className="text-sm">Aucun mandant renseigné</p>
+                      <button onClick={() => setOpenModal('mandant')} className="text-xs text-sage-dark hover:underline mt-2">
+                        + Ajouter les informations du mandant
+                      </button>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      {mandantClient && (
+                        <>
+                          <DetailItem label="Nom" value={`${mandantClient.prenom || ''} ${mandantClient.nom || ''}`.trim() || '—'} />
+                          <DetailItem label="Société" value={mandantClient.societe || '—'} />
+                          <DetailItem label="Email" value={mandantClient.email || '—'} />
+                          <DetailItem label="Téléphone" value={mandantClient.tel || '—'} />
+                        </>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      {Object.entries(mandantInfo).filter(([k, v]) => v).map(([k, v]) => (
+                        <DetailItem key={k} label={k.charAt(0).toUpperCase() + k.slice(1)} value={String(v)} />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* ═══ DESCRIPTION ═══ */}
+            {mandat.description && (
+            <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
+              <h2 className="font-display text-xl font-semibold text-stone-900 mb-3">Description</h2>
+              <p className="text-stone-700 text-sm leading-relaxed whitespace-pre-line">{mandat.description}</p>
+            </div>
+          )}
+        </div>
+      </div>
+
           {/* ═══ STATISTIQUES DU DOSSIER ═══ */}
           <div id="stats" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
@@ -2768,75 +2837,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
               })()}
             </div>
 
-          {/* ═══ BLOC TECHNIQUE ═══ */}
-            <div id="technique" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
-              <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
-                🔧 Caractéristiques techniques
-              </h2>
-              <div className="grid grid-cols-3 gap-4">
-                <DetailItem label="Surface totale" value={mandat.surface ? `${mandat.surface} m²` : '—'} />
-                <DetailItem label="Nombre de lots" value={mandat.nbLots || '—'} />
-                <DetailItem label="Année construction" value={mandat.anneeConstruction || '—'} />
-                <DetailItem label="DPE consommation" value={mandat.dpeConsommation ? `${mandat.dpeConsommation} kWh/m²` : '—'} />
-                <DetailItem label="DPE émissions" value={mandat.dpeEmissions ? `${mandat.dpeEmissions} kgCO₂/m²` : '—'} />
-                <DetailItem label="Date DPE" value={mandat.dpeDate ? new Date(mandat.dpeDate).toLocaleDateString('fr-FR') : '—'} />
-                <DetailItem label="Charges annuelles" value={mandat.chargesAnnuelles ? `${parseFloat(mandat.chargesAnnuelles).toLocaleString('fr')} €` : '—'} />
-                <DetailItem label="Taxe foncière" value={mandat.taxeFonciere ? `${parseFloat(mandat.taxeFonciere).toLocaleString('fr')} €` : '—'} />
-                <DetailItem label="Pièces / Chambres" value={mandat.marche === 'b2c' ? `${mandat.nbPieces || '—'} / ${mandat.nbChambres || '—'}` : '—'} />
-              </div>
-            </div>
-
-            {/* ═══ BLOC MANDANT ═══ */}
-            <div id="mandant" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
-              <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
-                <UserIcon className="w-5 h-5 text-sage-dark" />Mandant
-              </h2>
-              {(() => {
-                const mandantClient = mandat.mandantClientId ? clients.find(c => c.id === mandat.mandantClientId) : null;
-                const mandantInfo = mandat.mandantInfo || mandat.mandant_info || {};
-                if (!mandantClient && !Object.values(mandantInfo).some(v => v)) {
-                  return (
-                    <div className="text-center py-6 text-stone-400">
-                      <UserIcon className="w-8 h-8 mx-auto mb-2 text-stone-300" />
-                      <p className="text-sm">Aucun mandant renseigné</p>
-                      <button onClick={() => setOpenModal('mandant')} className="text-xs text-sage-dark hover:underline mt-2">
-                        + Ajouter les informations du mandant
-                      </button>
-                    </div>
-                  );
-                }
-                return (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      {mandantClient && (
-                        <>
-                          <DetailItem label="Nom" value={`${mandantClient.prenom || ''} ${mandantClient.nom || ''}`.trim() || '—'} />
-                          <DetailItem label="Société" value={mandantClient.societe || '—'} />
-                          <DetailItem label="Email" value={mandantClient.email || '—'} />
-                          <DetailItem label="Téléphone" value={mandantClient.tel || '—'} />
-                        </>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      {Object.entries(mandantInfo).filter(([k, v]) => v).map(([k, v]) => (
-                        <DetailItem key={k} label={k.charAt(0).toUpperCase() + k.slice(1)} value={String(v)} />
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* ═══ DESCRIPTION ═══ */}
-            {mandat.description && (
-            <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
-              <h2 className="font-display text-xl font-semibold text-stone-900 mb-3">Description</h2>
-              <p className="text-stone-700 text-sm leading-relaxed whitespace-pre-line">{mandat.description}</p>
-            </div>
-          )}
-        </div>
-      </div>
-
+          
       {/* ═══ MODALS ═══ */}
       {openModal === 'visite' && (
         <VisiteModal mandat={mandat} onClose={() => setOpenModal(null)} onUpdate={reload} />
