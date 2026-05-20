@@ -2,6 +2,7 @@
 // app/api/mandat-assistant/route.js
 // Assistant IA unifié par mandat, avec function calling et historique
 // MOTEUR : OpenAI GPT-4o
+// VERSION : avec logs debug
 // ═══════════════════════════════════════════════════════════════════
 
 import OpenAI from 'openai';
@@ -36,16 +37,20 @@ CONTEXTE MÉTIER :
 
 PRINCIPES :
 - La FICHE MANDAT est la source unique de vérité — les modifications utilisateur ont TOUJOURS priorité sur tes propositions
-- Tu ne dois JAMAIS écraser une valeur utilisateur sans confirmation explicite
-- Pour les modifications de champs, propose d'abord et attend validation, sauf si l'utilisateur a clairement demandé l'action
+- Pour les modifications de champs, AGIS DIRECTEMENT en appelant l'outil update_mandat_field, sauf si l'utilisateur demande explicitement de "proposer" ou "valider d'abord"
 - Tu réponds en français, ton court et professionnel, sans jargon inutile
-- Tu utilises les outils à ta disposition quand c'est pertinent (pas systématiquement)
+- Tu utilises tes outils dès que c'est pertinent
+
+OUTILS DISPONIBLES :
+- update_mandat_field(field, value) : modifie un champ du mandat (description, prix, surface, etc.)
+- read_mandat_documents() : liste les documents associés
+- generate_commercial_arguments() : génère 4 arguments commerciaux
 
 ARBORESCENCE DES TYPES DE BIENS :
 - B2B : "Immeubles" (Habitation/Mixte/Commercial), "Hôtels" (Hébergements hôteliers/Hôtels classiques/Sociaux), "Terrains", "Parking", "Locaux commerciaux" (Bureaux/Boutiques/Retails Park)
 - B2C : "Résidentiel" (Appartements/Maison/Hôtels particuliers)
 
-Tu es proactif mais respectueux du travail déjà fait par l'utilisateur. Si tu détectes une incohérence dans la fiche, signale-la sans la corriger.`;
+Tu es proactif. Quand on te demande de modifier quelque chose, tu appelles l'outil immédiatement.`;
 
 // ─────────────────────────────────────────────────────────
 // OUTILS de l'assistant (function calling)
@@ -55,7 +60,7 @@ const TOOLS = [
     type: 'function',
     function: {
       name: 'update_mandat_field',
-      description: 'Met à jour un champ du mandat dans la base de données. À utiliser uniquement quand l\'utilisateur demande explicitement une modification.',
+      description: 'Met à jour un champ du mandat dans la base de données. À utiliser dès que l\'utilisateur demande une modification.',
       parameters: {
         type: 'object',
         properties: {
@@ -100,7 +105,6 @@ const TOOLS = [
 // ─────────────────────────────────────────────────────────
 
 async function tool_update_mandat_field({ mandatId, field, value }) {
-  // Liste blanche des champs autorisés (sécurité)
   const ALLOWED_FIELDS = [
     'nom', 'adresse', 'ville', 'prix', 'prix_net_vendeur', 'prix_m2', 'surface',
     'nb_pieces', 'nb_chambres', 'etage', 'annee_construction', 'nb_lots',
@@ -116,15 +120,18 @@ async function tool_update_mandat_field({ mandatId, field, value }) {
     return { ok: false, error: `Champ '${field}' non autorisé à la modification automatique` };
   }
 
-  const { error } = await supabaseAdmin
+  const { error, data } = await supabaseAdmin
     .from('mandats')
     .update({ [field]: value })
-    .eq('id', mandatId);
+    .eq('id', mandatId)
+    .select();
 
   if (error) {
+    console.error('[tool_update_mandat_field] erreur Supabase:', error);
     return { ok: false, error: error.message };
   }
-  return { ok: true, field, value, message: `Champ '${field}' mis à jour avec succès` };
+  console.log('[tool_update_mandat_field] OK - rows updated:', data?.length || 0);
+  return { ok: true, field, value, rows_updated: data?.length || 0, message: `Champ '${field}' mis à jour avec succès` };
 }
 
 async function tool_read_mandat_documents({ mandatId }) {
@@ -139,7 +146,6 @@ async function tool_read_mandat_documents({ mandatId }) {
 }
 
 async function tool_generate_commercial_arguments({ mandatId }) {
-  // On récupère le mandat à jour
   const { data: mandat, error } = await supabaseAdmin
     .from('mandats')
     .select('*')
@@ -148,7 +154,6 @@ async function tool_generate_commercial_arguments({ mandatId }) {
 
   if (error || !mandat) return { ok: false, error: 'Mandat introuvable' };
 
-  // Génération via GPT-4o avec un prompt spécifique
   const prompt = `Génère 4 arguments commerciaux courts et percutants pour ce mandat immobilier. Format : tableau de 4 strings, sans numérotation.
 
 Mandat :
@@ -187,8 +192,11 @@ async function executeToolCall(toolCall, mandatId) {
   try {
     args = JSON.parse(toolCall.function.arguments || '{}');
   } catch (e) {
+    console.error('[executeToolCall] JSON parse error:', e);
     return { ok: false, error: 'Arguments JSON invalides' };
   }
+
+  console.log('[executeToolCall] Exécution:', name, 'avec args:', JSON.stringify(args));
 
   if (name === 'update_mandat_field') {
     return await tool_update_mandat_field({ mandatId, ...args });
@@ -203,7 +211,7 @@ async function executeToolCall(toolCall, mandatId) {
 }
 
 // ─────────────────────────────────────────────────────────
-// Récupère le contexte initial d'un mandat (résumé compact)
+// Récupère le contexte initial d'un mandat
 // ─────────────────────────────────────────────────────────
 async function getMandatContext(mandatId) {
   const { data: mandat } = await supabaseAdmin
@@ -214,7 +222,6 @@ async function getMandatContext(mandatId) {
 
   if (!mandat) return null;
 
-  // Construire un résumé textuel compact
   const lines = [
     `Mandat : ${mandat.nom || 'Sans nom'}`,
     `Adresse : ${mandat.adresse || 'N/A'}, ${mandat.ville || 'N/A'}`,
@@ -226,12 +233,13 @@ async function getMandatContext(mandatId) {
     `Loyers projetés : ${mandat.loyers_projetes ? mandat.loyers_projetes.toLocaleString('fr') + ' €/an' : 'N/A'}`,
     `Statut : ${mandat.statut || 'N/A'}`,
     `Commercialisation : ${mandat.commercialisation || 'N/A'}`,
+    `Description actuelle : ${mandat.description ? mandat.description.slice(0, 200) + (mandat.description.length > 200 ? '...' : '') : 'aucune'}`,
   ];
   return lines.join('\n');
 }
 
 // ─────────────────────────────────────────────────────────
-// Charge le chat existant pour un mandat / utilisateur, ou en crée un
+// Charge ou crée le chat
 // ─────────────────────────────────────────────────────────
 async function loadOrCreateChat(mandatId, userId) {
   const { data } = await supabaseAdmin
@@ -245,7 +253,6 @@ async function loadOrCreateChat(mandatId, userId) {
 
   if (data) return { id: data.id, messages: data.messages || [] };
 
-  // Nouveau chat
   const { data: created, error } = await supabaseAdmin
     .from('mandat_chats')
     .insert({ mandat_id: mandatId, user_id: userId, messages: [] })
@@ -281,15 +288,12 @@ export async function POST(request) {
       return new Response(JSON.stringify({ ok: false, error: 'mandat_id requis' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Action "load_history" : récupère juste l'historique sans appeler le LLM
     if (action === 'load_history') {
       const chat = await loadOrCreateChat(mandat_id, user.id);
-      // On ne renvoie que les messages user/assistant visibles, pas les tool
       const visible = (chat.messages || []).filter(m => m.role === 'user' || (m.role === 'assistant' && m.content && !m.tool_calls));
       return new Response(JSON.stringify({ ok: true, messages: visible }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Action "reset" : efface l'historique
     if (action === 'reset') {
       const chat = await loadOrCreateChat(mandat_id, user.id);
       await saveChat(chat.id, []);
@@ -300,26 +304,28 @@ export async function POST(request) {
       return new Response(JSON.stringify({ ok: false, error: 'message requis' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Charge le chat
     const chat = await loadOrCreateChat(mandat_id, user.id);
     const history = chat.messages || [];
 
-    // Récupère le contexte mandat (à chaque appel pour avoir les valeurs à jour)
     const mandatContext = await getMandatContext(mandat_id);
 
-    // Construire les messages pour OpenAI
     const messagesForLLM = [
       { role: 'system', content: SYSTEM_PROMPT + '\n\n═══ CONTEXTE DU MANDAT (à jour) ═══\n' + (mandatContext || 'Mandat introuvable') },
       ...history,
       { role: 'user', content: message },
     ];
 
-    // Boucle d'appel avec function calling
-    // On limite à 5 itérations max pour éviter les boucles infinies
+    console.log('[mandat-assistant] === Nouvel appel ===');
+    console.log('[mandat-assistant] mandat_id:', mandat_id);
+    console.log('[mandat-assistant] message user:', message);
+    console.log('[mandat-assistant] historique length:', history.length);
+
     let finalResponse = null;
     let updatedHistory = [...history, { role: 'user', content: message }];
 
     for (let iter = 0; iter < 5; iter++) {
+      console.log('[mandat-assistant] === Iteration', iter, '===');
+
       const response = await openai.chat.completions.create({
         model: 'gpt-4o',
         max_tokens: 1500,
@@ -330,15 +336,18 @@ export async function POST(request) {
       const choice = response.choices[0];
       const assistantMsg = choice.message;
 
-      // Si pas de tool calls → c'est la réponse finale
+      console.log('[mandat-assistant] finish_reason:', choice.finish_reason);
+      console.log('[mandat-assistant] tool_calls présents:', !!assistantMsg.tool_calls);
+      console.log('[mandat-assistant] content brut:', (assistantMsg.content || '').slice(0, 200));
+
       if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
         finalResponse = assistantMsg.content;
         updatedHistory.push({ role: 'assistant', content: assistantMsg.content });
         break;
       }
 
-      // Sinon, exécuter chaque tool call et boucler
       console.log('[mandat-assistant] Tool calls demandés:', JSON.stringify(assistantMsg.tool_calls, null, 2));
+
       messagesForLLM.push(assistantMsg);
       updatedHistory.push({
         role: 'assistant',
@@ -347,7 +356,6 @@ export async function POST(request) {
       });
 
       for (const toolCall of assistantMsg.tool_calls) {
-        console.log('[mandat-assistant] Exécution outil:', toolCall.function.name, 'avec args:', toolCall.function.arguments);
         const toolResult = await executeToolCall(toolCall, mandat_id);
         console.log('[mandat-assistant] Résultat outil:', JSON.stringify(toolResult, null, 2));
         const toolMsg = {
@@ -358,10 +366,10 @@ export async function POST(request) {
         messagesForLLM.push(toolMsg);
         updatedHistory.push(toolMsg);
       }
+    }
 
     if (!finalResponse) finalResponse = 'Désolé, je n\'ai pas pu finaliser la réponse.';
 
-    // Sauvegarder l'historique mis à jour
     await saveChat(chat.id, updatedHistory);
 
     return new Response(JSON.stringify({
