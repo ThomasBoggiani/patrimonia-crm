@@ -261,6 +261,29 @@ export default function DocumentsInline({ mandat, onUpdate }) {
     }
   }
 
+  async function handleLinkDropbox() {
+    const currentUrl = mandat.dropboxFolderUrl || mandat.dropbox_folder_url || '';
+    const newUrl = prompt(
+      currentUrl ? 'Modifier le lien Dropbox du dossier :' : 'Collez le lien Dropbox du dossier :',
+      currentUrl
+    );
+    if (newUrl === null) return; // Annulé
+    const trimmed = newUrl.trim();
+    if (trimmed && !trimmed.startsWith('https://')) {
+      alert('Le lien doit commencer par https://');
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from('mandats')
+        .update({ dropbox_folder_url: trimmed || null })
+        .eq('id', mandat.id);
+      if (error) throw error;
+      if (typeof onUpdate === 'function') onUpdate();
+    } catch (e) {
+      alert('Erreur sauvegarde : ' + e.message);
+    }
+  }
   async function handleDelete(docId) {
     if (!confirm('Supprimer ce document définitivement ?')) return;
     try {
@@ -310,9 +333,19 @@ export default function DocumentsInline({ mandat, onUpdate }) {
           <Link2 className="w-4 h-4" /> Lien
         </button>
 
-        <button disabled className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-sm cursor-not-allowed opacity-60" title="Bientôt disponible">
-          📁 Lier un dossier Dropbox
-        </button>
+        {mandat.dropboxFolderUrl || mandat.dropbox_folder_url ? (
+          <div className="flex items-center gap-1 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+            <a href={mandat.dropboxFolderUrl || mandat.dropbox_folder_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 hover:underline">
+              📁 Dossier Dropbox lié
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+            <button onClick={handleLinkDropbox} className="ml-2 text-xs text-amber-600 hover:text-amber-800 underline" title="Modifier le lien">Modifier</button>
+          </div>
+        ) : (
+          <button onClick={handleLinkDropbox} className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-sm hover:bg-amber-100" title="Lier un dossier Dropbox">
+            📁 Lier un dossier Dropbox
+          </button>
+        )}
       </div>
 
       {/* Formulaire de lien */}
