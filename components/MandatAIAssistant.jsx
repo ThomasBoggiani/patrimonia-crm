@@ -1,11 +1,11 @@
 // ═══════════════════════════════════════════════════════════════════
-// components/MandatAIAssistant.jsx — v3.0
+// components/MandatAIAssistant.jsx — v3.1
 // Assistant IA unifié avec function calling (GPT-4o)
-// Utilise /api/mandat-assistant (nouvel endpoint)
+// Notif visuelle des champs modifiés + auto-refresh
 // ═══════════════════════════════════════════════════════════════════
 
 import { useState, useRef, useEffect } from 'react';
-import { Sparkles, X, Send, Copy, Check, FileText, Mail, Target, Loader2, RefreshCw } from 'lucide-react';
+import { Sparkles, X, Send, Copy, Check, FileText, Mail, Target, Loader2, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 const QUICK_ACTIONS = [
@@ -13,6 +13,20 @@ const QUICK_ACTIONS = [
   { id: 'argumentaire',  label: 'Arguments',     icon: Target,   prompt: 'Génère 4 arguments commerciaux pour valoriser ce mandat auprès des acquéreurs (utilise l\'outil dédié).' },
   { id: 'email_mandant', label: 'Email mandant', icon: Mail,     prompt: 'Rédige un email de point d\'étape au mandant, ton professionnel, court.' },
 ];
+
+// Labels lisibles pour les champs modifiés
+const FIELD_LABELS = {
+  nom: 'Nom', adresse: 'Adresse', ville: 'Ville', prix: 'Prix', prix_net_vendeur: 'Prix net vendeur',
+  prix_m2: 'Prix au m²', surface: 'Surface', nb_pieces: 'Nb pièces', nb_chambres: 'Nb chambres',
+  etage: 'Étage', annee_construction: 'Année construction', nb_lots: 'Nb lots',
+  loyers_annuels: 'Loyers actuels', loyers_projetes: 'Loyers projetés', rendement: 'Rendement',
+  rendement_optimise: 'Rendement optimisé', charges_annuelles: 'Charges', taxe_fonciere: 'Taxe foncière',
+  dpe_consommation: 'DPE conso', dpe_emissions: 'DPE émissions', dpe_date: 'DPE date',
+  honoraires_taux: 'Honoraires (%)', honoraires_montant: 'Honoraires (€)', honoraires_charge: 'Honoraires à charge',
+  mandat_numero: 'N° mandat', mandat_type: 'Type mandat', mandat_date_echeance: 'Échéance mandat',
+  description: 'Description', arguments_commerciaux: 'Arguments commerciaux',
+  commercialisation: 'Commercialisation', statut: 'Statut', type: 'Famille', sous_type: 'Sous-type', marche: 'Marché',
+};
 
 export default function MandatAIAssistant({ mandat, onMandatUpdate }) {
   const [open, setOpen] = useState(false);
@@ -91,10 +105,15 @@ export default function MandatAIAssistant({ mandat, onMandatUpdate }) {
           content: `⚠️ Erreur : ${data.error || 'inconnue'}`,
         }]);
       } else {
-        setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
-        // Si l'IA a peut-être modifié le mandat, on déclenche un refresh
-        if (data.response && (data.response.includes('mis à jour') || data.response.includes('modifié'))) {
-          if (typeof onMandatUpdate === 'function') onMandatUpdate();
+        // Ajout de la réponse + éventuellement une notif visuelle de modif
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: data.response,
+          modified_fields: data.modified_fields || [],
+        }]);
+        // Auto-refresh de la fiche si l'IA a modifié quelque chose
+        if (data.mandat_modified && typeof onMandatUpdate === 'function') {
+          onMandatUpdate();
         }
       }
     } catch (err) {
@@ -253,6 +272,16 @@ export default function MandatAIAssistant({ mandat, onMandatUpdate }) {
                   }`}
                 >
                   <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
+                  {/* Notif visuelle des champs modifiés */}
+                  {msg.role === 'assistant' && msg.modified_fields && msg.modified_fields.length > 0 && (
+                    <div className="mt-2 px-2 py-1.5 bg-emerald-50 border border-emerald-200 rounded-md text-xs text-emerald-800 flex items-start gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-emerald-600" />
+                      <div>
+                        <span className="font-medium">Fiche mise à jour :</span>{' '}
+                        {msg.modified_fields.map(f => FIELD_LABELS[f] || f).join(', ')}
+                      </div>
+                    </div>
+                  )}
                   {msg.role === 'assistant' && (
                     <button
                       onClick={() => handleCopy(i)}
