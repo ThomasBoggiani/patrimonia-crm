@@ -5,7 +5,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { useState, useRef, useEffect } from 'react';
-import { Sparkles, X, Send, Copy, Check, FileText, Mail, Target, Loader2, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { Sparkles, X, Send, Copy, Check, FileText, Mail, Target, Loader2, RefreshCw, CheckCircle2, Mic, MicOff } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 const QUICK_ACTIONS = [
@@ -34,6 +34,10 @@ export default function MandatAIAssistant({ mandat, onMandatUpdate }) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
   const messagesEndRef = useRef(null);
 
   // Auto-scroll
@@ -175,6 +179,66 @@ export default function MandatAIAssistant({ mandat, onMandatUpdate }) {
     setMessages([]);
   }
 
+  async function startRecording() {
+    if (recording || transcribing) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        // Arrête tous les tracks pour libérer le micro
+        stream.getTracks().forEach(t => t.stop());
+
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        if (audioBlob.size < 1000) return; // trop court
+
+        setTranscribing(true);
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const token = session?.access_token;
+          if (!token) {
+            alert('Session expirée');
+            return;
+          }
+
+          const formData = new FormData();
+          formData.append('token', token);
+          formData.append('audio', audioBlob, 'recording.webm');
+
+          const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
+          const data = await res.json();
+
+          if (data.ok && data.text) {
+            setInput(prev => prev ? prev + ' ' + data.text : data.text);
+          } else {
+            alert('Erreur transcription : ' + (data.error || 'inconnue'));
+          }
+        } catch (e) {
+          alert('Erreur : ' + e.message);
+        } finally {
+          setTranscribing(false);
+        }
+      };
+
+      mediaRecorder.start();
+      setRecording(true);
+    } catch (e) {
+      alert('Impossible d\'accéder au micro : ' + e.message);
+    }
+  }
+
+  function stopRecording() {
+    if (mediaRecorderRef.current && recording) {
+      mediaRecorderRef.current.stop();
+      setRecording(false);
+    }
+  }
   function handleRefresh() {
     if (typeof onMandatUpdate === 'function') onMandatUpdate();
   }
@@ -334,9 +398,7 @@ export default function MandatAIAssistant({ mandat, onMandatUpdate }) {
             </div>
           </div>
 
-          {/* Zone input */}
-          <div className="p-4 border-t border-stone-200 bg-white">
-            <div className="flex gap-2">
+         <div className="flex gap-2">
               <input
                 type="text"
                 value={input}
@@ -347,21 +409,25 @@ export default function MandatAIAssistant({ mandat, onMandatUpdate }) {
                     handleSend();
                   }
                 }}
-                disabled={loading}
-                placeholder="Pose ta question..."
+                disabled={loading || transcribing}
+                placeholder={transcribing ? "Transcription en cours..." : (recording ? "🎤 Enregistrement..." : "Pose ta question ou clique sur le micro")}
                 className="flex-1 px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-400 disabled:opacity-50"
               />
               <button
+                onClick={recording ? stopRecording : startRecording}
+                disabled={loading || transcribing}
+                className={`flex items-center justify-center w-10 h-10 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed ${
+                  recording ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+                }`}
+                title={recording ? 'Arrêter l\'enregistrement' : 'Démarrer la dictée vocale'}
+              >
+                {transcribing ? <Loader2 className="w-4 h-4 animate-spin" /> : (recording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />)}
+              </button>
+              <button
                 onClick={handleSend}
-                disabled={loading || !input.trim()}
+                disabled={loading || recording || transcribing || !input.trim()}
                 className="flex items-center justify-center w-10 h-10 bg-stone-900 text-white rounded-lg hover:bg-stone-800 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Send className="w-4 h-4" />
               </button>
             </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
