@@ -1844,8 +1844,8 @@ async function handleFolderImport(event) {
               {data.marche === 'b2b' ? (
                 <CascadeSelect
                   tree={TYPES_ACTIF_B2B_TREE}
-                  famille={data.type || ''}
-                  sousType={data.sousType || ''}
+                  familleValue={data.type || ''}
+                  sousTypeValue={data.sousType || ''}
                   onChange={({ famille, sousType }) => setData(d => ({ ...d, type: famille, sousType: sousType }))}
                   labelFamille="Famille d'actif"
                   labelSousType="Sous-type"
