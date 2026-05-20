@@ -269,27 +269,23 @@ export function TaskInline({ task, mandats = [], clients = [], allProfiles = [],
   }
 
   async function deleteTask() {
-    if (!confirm('Supprimer cette tache ?')) {
-      console.log('[deleteTask] Annulé par utilisateur');
-      return;
-    }
-    console.log('[deleteTask] Tentative suppression, id =', task.id);
+    if (!confirm('Supprimer cette tache ?')) return;
     const { error, data } = await supabase
       .from('todos')
       .delete()
       .eq('id', task.id)
       .select();
     if (error) {
-      console.error('[deleteTask] Erreur:', error);
       alert('Erreur suppression : ' + error.message);
       return;
     }
-    console.log('[deleteTask] OK, rows deleted:', data?.length || 0);
     if (data?.length === 0) {
-      alert('Tâche non trouvée ou non supprimable. Vérifie les permissions.');
+      alert('Tâche non trouvée.');
       return;
     }
     if (onUpdate) onUpdate();
+    // Force le reload après suppression pour rafraîchir la liste des todos
+    setTimeout(() => window.location.reload(), 100);
   }
 
   if (editing) {
