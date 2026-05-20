@@ -573,11 +573,15 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
     return d.toDateString() === today.toDateString();
   };
   
-  const myTodayTasks = todos.filter(t => 
-    (t.assignedToUserId === user?.id || t.assigned_to_user_id === user?.id)
-    && t.statut !== 'Terminé' 
-    && isToday(t.echeance)
-  );
+  const myFullNameForToday = profile ? `${profile.prenom || ''} ${profile.nom || ''}`.trim() : '';
+  const myTodayTasks = todos.filter(t => {
+    if (t.statut === 'Terminé' || t.statut === 'Termine') return false;
+    if (!isToday(t.echeance)) return false;
+    if (t.assignedToUserId === user?.id || t.assigned_to_user_id === user?.id) return true;
+    if (myFullNameForToday && t.assignee === myFullNameForToday) return true;
+    if (!t.assignedToUserId && !t.assigned_to_user_id && !t.assignee) return true;
+    return false;
+  });
 
   // Affaires en cours = à partir de la signature de l'offre (Offre, Promesse, Acte)
   const affairesEnCours = mandats.filter(m => 
@@ -590,10 +594,18 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
     .reduce((sum, m) => sum + (parseFloat(m.honorairesMontant) || 0), 0);
 
   // ─── Tâches par priorité ───
-  const myTasks = todos.filter(t => 
-    (t.assignedToUserId === user?.id || t.assigned_to_user_id === user?.id)
-    && t.statut !== 'Terminé'
-  );
+  // Mes tâches = assignées à moi (user_id OU nom complet) + tâches sans assignée
+  const myFullName = profile ? `${profile.prenom || ''} ${profile.nom || ''}`.trim() : '';
+  const myTasks = todos.filter(t => {
+    if (t.statut === 'Terminé' || t.statut === 'Termine') return false;
+    // Tâches assignées à moi par user_id
+    if (t.assignedToUserId === user?.id || t.assigned_to_user_id === user?.id) return true;
+    // Tâches assignées à moi par nom complet (legacy)
+    if (myFullName && t.assignee === myFullName) return true;
+    // Tâches sans aucune assignation (m'incluent par défaut)
+    if (!t.assignedToUserId && !t.assigned_to_user_id && !t.assignee) return true;
+    return false;
+  });
 
   const tasksRetard = myTasks.filter(t => {
     if (!t.echeance) return false;
