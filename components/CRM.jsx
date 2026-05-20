@@ -2896,10 +2896,6 @@ function ClientDetail({ client, onBack, onEdit, mandats, deals, interactions, re
           <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
             <Edit2 className="w-4 h-4" /> Modifier
           </button>
-          <button onClick={() => setShowAvisValeur(true)} className="flex items-center gap-2 px-3 py-2 bg-sage-50 border border-sage-light text-sage-darker rounded-lg text-sm hover:bg-sage-100" title="Saisir / éditer l'avis de valeur">
-            📊 Avis de valeur
-            {(mandat.avisValeur || mandat.avis_valeur) && <span className="ml-1 w-1.5 h-1.5 bg-sage-dark rounded-full"></span>}
-          </button>
         </div>
       </div>
 
