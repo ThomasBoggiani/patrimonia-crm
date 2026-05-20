@@ -2458,8 +2458,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
       <div className="sticky top-0 z-30 bg-cream-50/95 backdrop-blur-sm border-b border-cream-dark -mx-8 px-8 py-2.5">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] uppercase tracking-wider text-sage-dark font-semibold pr-2 border-r border-cream-dark mr-1">📌 Données</span>
-          <button onClick={() => document.getElementById('finance')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">💰 Finance</button>
-          <button onClick={() => document.getElementById('tasks')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">⏰ Tâches</button>
+          
           <button onClick={() => document.getElementById('identite')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🏠 Identité</button>
           <button onClick={() => document.getElementById('technique')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🔧 Technique</button>
           <button onClick={() => document.getElementById('stats')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📊 Stats</button>
