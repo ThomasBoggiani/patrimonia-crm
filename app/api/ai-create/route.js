@@ -1,9 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════
 // app/api/ai-create/route.js
 // API unifiée : Fichiers + Texte + Audio → Mandat / Client / Les 2
+// MOTEUR : OpenAI GPT-4o (migré depuis Claude Haiku)
 // ═══════════════════════════════════════════════════════════════════
 
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 
@@ -15,7 +16,7 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 async function verifyToken(token) {
   if (!token) return null;
@@ -24,8 +25,7 @@ async function verifyToken(token) {
   return user;
 }
 
-const SYSTEM_PROMPT = `Tu es un expert immobilier patrimonial et acquisition off-market.
-Tu reçois du contenu (texte, document, transcription vocale) et tu dois :
+const SYSTEM_PROMPT = `Tu es un expert immobilier patrimonial et acquisition off-market. Tu reçois du contenu (texte, document, transcription vocale) et tu dois :
 
 1. DÉTECTER le type de contenu :
    - "mandat" : un bien immobilier à vendre
@@ -46,7 +46,7 @@ Pour chaque mandat, tu dois identifier :
 
 ═══ MARCHÉ B2B (investissement professionnel) ═══
 
-Famille "Immeubles" → sous_type parmi : "Immeuble d'habitation", "Mixte", "Commercial"
+Famille "Immeubles" → sous_type parmi : "Habitation", "Mixte", "Commercial"
 Famille "Hôtels" → sous_type parmi : "Hébergements hôteliers", "Hôtels classiques", "Sociaux"
 Famille "Terrains" → pas de sous_type
 Famille "Parking" → pas de sous_type
@@ -54,15 +54,14 @@ Famille "Locaux commerciaux" → sous_type parmi : "Bureaux", "Boutiques", "Reta
 
 ═══ MARCHÉ B2C (habitation pour particulier) ═══
 
-Type parmi : "Appartement", "Maison", "Hôtel particulier"
-(Pas de sous_type pour le B2C)
+Famille "Résidentiel" → sous_type parmi : "Appartements", "Maison", "Hôtels particuliers"
 
 ═══ COMMENT CHOISIR ═══
 
-- Si on parle d'un **immeuble entier** d'appartements → b2b, type="Immeubles", sous_type="Immeuble d'habitation"
-- Si on parle d'un **appartement T3** vendu individuellement → b2c, type="Appartement"
-- Si on parle d'une **maison** vendue à un particulier → b2c, type="Maison"
-- Si on parle d'un **hôtel particulier** comme résidence → b2c, type="Hôtel particulier"
+- Si on parle d'un **immeuble entier** d'appartements → b2b, type="Immeubles", sous_type="Habitation"
+- Si on parle d'un **appartement T3** vendu individuellement → b2c, type="Résidentiel", sous_type="Appartements"
+- Si on parle d'une **maison** vendue à un particulier → b2c, type="Résidentiel", sous_type="Maison"
+- Si on parle d'un **hôtel particulier** comme résidence → b2c, type="Résidentiel", sous_type="Hôtels particuliers"
 - Si on parle d'un **immeuble mixte** (commerces RDC + appartements) → b2b, type="Immeubles", sous_type="Mixte"
 - Si on parle d'un **hôtel** au sens commercial (hôtellerie) → b2b, type="Hôtels", sous_type="Hôtels classiques"
 - Si on parle de **bureaux** d'entreprise → b2b, type="Locaux commerciaux", sous_type="Bureaux"
@@ -124,7 +123,7 @@ FORMAT DE RÉPONSE (JSON STRICT, pas de markdown)
     "budget_max": 0,
     "rendement_min": 0,
     "zones": ["Paris 7e", "Paris 8e"],
-    "typologies_recherchees": ["Immeubles", "Immeuble d'habitation", "Mixte"],
+    "typologies_recherchees": ["Immeubles", "Habitation", "Mixte"],
     "origine": "Apporteur|Réseau|Site web|Email|...",
     "maturite": "Chaud|Moyen|Froid"
   }
@@ -152,7 +151,7 @@ Le tableau "typologies_recherchees" doit contenir les FAMILLES recherchées ET l
 
 Exemples :
 - Client cherche des immeubles mixtes et résidentiels :
-  → ["Immeubles", "Immeuble d'habitation", "Mixte"]
+  → ["Immeubles", "Habitation", "Mixte"]
 - Client cherche tous types d'immeubles (pas de précision) :
   → ["Immeubles"]
 - Client cherche bureaux + boutiques :
@@ -164,18 +163,18 @@ RÈGLE : si un sous-type est mentionné, AJOUTE AUSSI sa famille parente.
 
 ═══ CLIENT B2C : typologies_recherchees ═══
 
-Le tableau "typologies_recherchees" doit contenir les TYPES recherchés + les NOMBRES DE PIÈCES, à PLAT.
+Le tableau "typologies_recherchees" doit contenir les SOUS-TYPES recherchés (Appartements/Maison/Hôtels particuliers) + les NOMBRES DE PIÈCES, à PLAT.
 
-Types possibles : "Appartement", "Maison", "Hôtel particulier"
+Sous-types possibles : "Appartements", "Maison", "Hôtels particuliers"
 Nombres de pièces possibles : "Studio / T1", "T2", "T3", "T4", "T5", "T6+"
 
 Exemples :
 - Client cherche un T3 ou T4 à Paris :
-  → ["Appartement", "T3", "T4"]
+  → ["Appartements", "T3", "T4"]
 - Client cherche une maison ou un appartement T5 :
-  → ["Maison", "Appartement", "T5"]
+  → ["Maison", "Appartements", "T5"]
 - Client cherche juste "un bien à habiter" sans précision :
-  → ["Appartement"]
+  → ["Appartements"]
 
 ═══════════════════════════════════════════════════════════════════
 
@@ -186,7 +185,7 @@ RÈGLES :
 - "sous_type" UNIQUEMENT si pertinent (selon l'arborescence ci-dessus).
 - Pour client : "marche" et "typologie" sont OBLIGATOIRES si on identifie un acheteur.
 - Pour client.sous_typologie : UNIQUEMENT si typologie="Foncières" → "Privées" ou "Publiques". JAMAIS pour les autres typologies.
-- Pour client.typologies_recherchees : respecter STRICTEMENT le vocabulaire ci-dessus (familles + sous-types B2B, ou types + pièces B2C). Pas de mélange B2B/B2C dans le même client.
+- Pour client.typologies_recherchees : respecter STRICTEMENT le vocabulaire ci-dessus (familles + sous-types B2B, ou sous-types + pièces B2C). Pas de mélange B2B/B2C dans le même client.
 - Si type='mandat', n'inclus PAS la clé "client" (et vice-versa).
 - Si type='both', inclus les 2.
 - Si type='unknown', n'inclus ni "mandat" ni "client".
@@ -194,14 +193,28 @@ RÈGLES :
 - TÉLÉPHONE CLIENT : si la source mentionne plusieurs numéros (fixe + mobile, ou pro + perso), TOUJOURS prendre le mobile/portable en priorité dans le champ "tel". Ignore le fixe. Un numéro mobile français commence par 06, 07, +336, +337.
 - Pas de préambule, juste le JSON.`;
 
-async function callClaude(userContent) {
-  const response = await anthropic.messages.create({
-    model: 'claude-haiku-4-5',
+async function callGPT(userContent) {
+  // userContent est au format Claude (parts), on le convertit pour OpenAI
+  const openaiContent = userContent.map(part => {
+    if (part.type === 'text') return { type: 'text', text: part.text };
+    if (part.type === 'image') {
+      const { media_type, data } = part.source;
+      return { type: 'image_url', image_url: { url: `data:${media_type};base64,${data}` } };
+    }
+    return null;
+  }).filter(Boolean);
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o',
     max_tokens: 2500,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userContent }],
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: openaiContent },
+    ],
   });
-  const text = response.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+
+  const text = response.choices[0]?.message?.content || '';
   try {
     const cleaned = text.replace(/^```json\s*/i, '').replace(/\s*```$/, '').trim();
     return { parsed: JSON.parse(cleaned), usage: response.usage };
@@ -298,7 +311,7 @@ export async function POST(request) {
       return new Response(JSON.stringify({ ok: false, error: 'Aucun contenu à analyser' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
 
-    const { parsed, usage } = await callClaude(userContent);
+    const { parsed, usage } = await callGPT(userContent);
 
     if (forceType && ['mandat', 'client', 'both'].includes(forceType)) {
       parsed.type = forceType;
