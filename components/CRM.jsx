@@ -2488,7 +2488,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
       <div className="space-y-4">
         <div className="col-span-3 space-y-4">
           {/* ═══ ANALYSE FINANCIÈRE — REMONTÉE EN PREMIÈRE POSITION ═══ */}
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
+          <div id="finance" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Analyse financière</h2>
             <div className="grid grid-cols-4 gap-4">
               <div className="col-span-1">
@@ -2536,7 +2536,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           </div>
 
           {/* ═══ STATISTIQUES DU DOSSIER ═══ */}
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
+          <div id="stats" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-sage-dark" />Statistiques du dossier
             </h2>
@@ -2557,7 +2557,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           </div>
 
           {/* ═══ TÂCHES LIÉES AU MANDAT ═══ */}
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
+          <div id="tasks" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
               <CheckSquare className="w-5 h-5 text-sage-dark" />Tâches liées au mandat
               {mandatTodos.length > 0 && (
@@ -2598,7 +2598,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           )}
 
           {/* ═══ ÉTAT LOCATIF ═══ */}
-          <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
+          <div id="locatif" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
               <Building2 className="w-5 h-5 text-sage-dark" />État locatif
             </h2>
