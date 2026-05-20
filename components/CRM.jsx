@@ -2463,6 +2463,10 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           <a href="#locatif" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🏢 Locatif</a>
           <a href="#technique" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🔧 Technique</a>
           <a href="#mandant" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">👤 Mandant</a>
+          <button onClick={() => setOpenModal('visite')} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors flex items-center gap-1">
+            👁️ Visite
+            {(mandat.visiteInfo || mandat.visite_info) && Object.values(mandat.visiteInfo || mandat.visite_info).some(v => v) && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>}
+          </button>
           <a href="#photos" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📷 Médias</a>
           <a href="#documents" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📂 Documents</a>
           <a href="#stats" className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📊 Stats</a>
