@@ -36,11 +36,12 @@ PRINCIPES :
 - Pour les modifications de champs, AGIS DIRECTEMENT en appelant l'outil update_mandat_field, sauf si l'utilisateur demande explicitement de "proposer" ou "valider d'abord"
 - Tu réponds en français, ton court et professionnel, sans jargon inutile
 - Tu utilises tes outils dès que c'est pertinent
+- IMPORTANT : utilise toujours la date du jour fournie dans le contexte. Quand on te dit "demain", "dans une semaine", etc., tu calcules à partir de la date du jour donnée. Jamais d'invention de dates.
 
 OUTILS DISPONIBLES :
 - update_mandat_field(field, value) : modifie un champ du mandat (description, prix, surface, etc.)
 - read_mandat_documents() : liste les documents associés
-- - generate_commercial_arguments() : génère 4 arguments commerciaux
+- generate_commercial_arguments() : génère 4 arguments commerciaux
 - add_task(titre, echeance, priorite) : crée une tâche liée au mandat
 
 ARBORESCENCE DES TYPES DE BIENS :
@@ -96,7 +97,7 @@ const TOOLS = [
     type: 'function',
     function: {
       name: 'add_task',
-      description: 'Crée une tâche liée au mandat. À utiliser quand l\'utilisateur demande explicitement de créer une tâche, un rappel, ou un suivi.',
+      description: 'Crée une tâche liée au mandat. À utiliser quand l\'utilisateur demande explicitement de créer une tâche, un rappel, ou un suivi. Pour la date d\'échéance, utilise toujours la date du jour fournie dans le contexte pour calculer "demain", "dans une semaine", etc.',
       parameters: {
         type: 'object',
         properties: {
@@ -106,7 +107,7 @@ const TOOLS = [
           },
           echeance: {
             type: 'string',
-            description: 'Date d\'échéance au format YYYY-MM-DD (optionnel)',
+            description: 'Date d\'échéance au format YYYY-MM-DD. Calcule cette date à partir de la date du jour donnée dans le contexte.',
           },
           priorite: {
             type: 'string',
@@ -228,9 +229,11 @@ async function tool_add_task({ mandatId, titre, echeance, priorite }) {
     ok: true,
     task_id: data.id,
     titre: data.titre,
+    echeance: data.echeance,
     message: `Tâche '${data.titre}' créée avec succès`,
   };
 }
+
 async function executeToolCall(toolCall, mandatId) {
   const name = toolCall.function.name;
   let args = {};
@@ -264,7 +267,21 @@ async function getMandatContext(mandatId) {
 
   if (!mandat) return null;
 
+  // Date du jour pour éviter que l'IA hallucine des dates
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const tomorrow = new Date(now.getTime() + 86400000).toISOString().slice(0, 10);
+  const nextWeek = new Date(now.getTime() + 7 * 86400000).toISOString().slice(0, 10);
+  const dayNames = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+  const todayLabel = dayNames[now.getDay()] + ' ' + now.toLocaleDateString('fr-FR');
+
   const lines = [
+    `═══ DATE ET HEURE ACTUELLES ═══`,
+    `Date du jour : ${today} (${todayLabel})`,
+    `Demain : ${tomorrow}`,
+    `Dans 1 semaine : ${nextWeek}`,
+    ``,
+    `═══ DONNÉES DU MANDAT ═══`,
     `Mandat : ${mandat.nom || 'Sans nom'}`,
     `Adresse : ${mandat.adresse || 'N/A'}, ${mandat.ville || 'N/A'}`,
     `Type : ${mandat.type || ''} ${mandat.sous_type ? '· ' + mandat.sous_type : ''}`,
@@ -346,7 +363,7 @@ export async function POST(request) {
     const mandatContext = await getMandatContext(mandat_id);
 
     const messagesForLLM = [
-      { role: 'system', content: SYSTEM_PROMPT + '\n\n═══ CONTEXTE DU MANDAT (à jour) ═══\n' + (mandatContext || 'Mandat introuvable') },
+      { role: 'system', content: SYSTEM_PROMPT + '\n\n' + (mandatContext || 'Mandat introuvable') },
       ...history,
       { role: 'user', content: message },
     ];
@@ -382,7 +399,6 @@ export async function POST(request) {
 
       for (const toolCall of assistantMsg.tool_calls) {
         const toolResult = await executeToolCall(toolCall, mandat_id);
-        // Tracker les modifications de champs
         if (toolCall.function.name === 'update_mandat_field' && toolResult.ok) {
           mandatModified = true;
           modifiedFields.push(toolResult.field);
