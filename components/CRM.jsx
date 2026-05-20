@@ -1076,10 +1076,10 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
                         else mMarche = 'b2b';
                       }
 
-                      // Affichage : si sous-type existe, on n'affiche QUE le sous-type (sans la famille parent)
-                      const typeLabel = cleanSousType || cleanType;
-                      const tooltipFullPath = cleanSousType ? `${cleanType} \u2192 ${cleanSousType}` : cleanType;
-                      const filterValue = cleanSousType || cleanType;
+                      // Affichage : on n'affiche QUE le sous-type. Si pas de sous-type → tiret.
+                        const typeLabel = cleanSousType || '—';
+                        const tooltipFullPath = cleanSousType ? `${cleanType} \u2192 ${cleanSousType}` : (cleanType || 'Type non d\u00e9fini');
+                        const filterValue = cleanSousType || cleanType;
                       const badgeClass = mMarche === 'b2c'
                         ? 'bg-blue-50 text-blue-800 hover:bg-blue-100'
                         : 'bg-sage-50 text-sage-darker hover:bg-sage-100';
