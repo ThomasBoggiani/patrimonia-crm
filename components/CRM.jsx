@@ -725,6 +725,24 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
           </div>
         )}
 
+        {tasksRetard.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-2 h-2 rounded-full bg-red-500" />
+              <h3 className="text-sm font-semibold text-red-700">En retard ({tasksRetard.length})</h3>
+            </div>
+            <div className="space-y-1.5">
+              {tasksRetard.slice(0, 10).map(t => (
+                <TaskRow key={t.id} task={t} mandats={mandats} variant="late" />
+              ))}
+              {tasksRetard.length > 10 && (
+                <div className="text-xs text-stone-500 italic px-2.5 pt-1">
+                  + {tasksRetard.length - 10} autres tâches en retard...
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         {tasksAujourdhui.length > 0 && (
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-2">
