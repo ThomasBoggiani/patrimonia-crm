@@ -10,7 +10,7 @@ import {
   X, Save, ChevronDown, ChevronRight, Plus, Trash2, Loader2,
   TrendingUp, Sparkles, AlertTriangle, Cloud,
   Building2, BarChart3, Target, Lightbulb, Tag, MessageCircle,
-  MapPin, Key, Repeat, Calculator
+  MapPin, Key, Repeat, Calculator, FileDown
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -124,6 +124,7 @@ function ensureSchema(data) {
 export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
   const [data, setData] = useState(ensureSchema(mandat?.avisValeur || mandat?.avis_valeur));
   const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   // 4 dépliées par défaut : SWOT, méthodes, reconversion, préconisation
   // 4 repliées : localisation, locatif, caractéristiques, comparables
@@ -187,6 +188,52 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
       alert('Erreur : ' + e.message);
     }
     setSaving(false);
+  }
+  async function handleGenerate() {
+    setGenerating(true);
+    try {
+      const { error: saveErr } = await supabase
+        .from('mandats')
+        .update({ avis_valeur: data })
+        .eq('id', mandat.id);
+      
+      if (saveErr) {
+        alert('Erreur de sauvegarde avant generation : ' + saveErr.message);
+        setGenerating(false);
+        return;
+      }
+
+      const response = await fetch('/api/avis-valeur/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mandatId: mandat.id }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        alert('Erreur generation PPTX : ' + (errData.error || response.statusText) + 
+              (errData.details ? '\n' + errData.details : ''));
+        setGenerating(false);
+        return;
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const cd = response.headers.get('Content-Disposition') || '';
+      const match = cd.match(/filename="([^"]+)"/);
+      link.download = match ? match[1] : `Avis_de_valeur_${mandat.id}.pptx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      onSaved?.(data);
+    } catch (e) {
+      alert('Erreur : ' + e.message);
+    }
+    setGenerating(false);
   }
 
   const fieldClass = "w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900";
@@ -718,11 +765,18 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
             >
               Annuler
             </button>
-            <button onClick={handleSave} disabled={saving}
+            <button onClick={handleSave} disabled={saving || generating}
               className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink disabled:opacity-50"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               {saving ? 'Sauvegarde...' : 'Enregistrer'}
+            </button>
+            <button onClick={handleGenerate} disabled={saving || generating}
+              className="flex items-center gap-2 px-4 py-2 bg-sage-dark text-white rounded-lg text-sm hover:bg-sage-darker disabled:opacity-50"
+              title="Sauvegarde + generation du PPTX"
+            >
+              {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+              {generating ? 'Generation...' : 'Generer PPTX'}
             </button>
           </div>
         </div>
