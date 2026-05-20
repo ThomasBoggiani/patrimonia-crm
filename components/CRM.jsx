@@ -43,7 +43,8 @@ import ContactsImportModal from './ContactsImportModal';
 import PdfExportButtons from '@/components/PdfExportButtons';
 import { VisiteModal, MandantModal } from './MandatModals';
 import CascadeSelect from './CascadeSelect';
-import MediasModal from './MediasModal';
+import MediasModal from './MediasModal'; 
+import MediasInline from './MediasInline';
 import ReferencesView from './ReferencesView';
 import AvisDeValeurEditor from './AvisDeValeurEditor';
 import {   formatPrix,   formatPrixCompact,   toCamel,   toSnake,   isManager,   getDPEClass,   getDPEColor,   STATUTS_MANDAT,   STATUTS_DEAL,   TYPES_ACTIF,   TYPES_ACTIF_B2B_TREE,   TYPES_HABITATION_B2C,   TYPOLOGIES_CLIENT,   ZONES,   NB_PIECES,   PORTAILS,   STATUTS_PORTAIL,   getSousTypesForFamille,   familleHasSousTypes,   getMarcheFromTypologieClient,   getSousTypologiesForClient,   clientHasSousTypologie,   groupTypologiesRecherchees,   getCoverPhoto,   getPhotos, } from '@/lib/crm-constants';
@@ -2661,7 +2662,14 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
         </div>
       </div>
 
-          {/* ═══ STATISTIQUES DU DOSSIER ═══ */}
+      {/* ═══ BLOC PHOTOS & MÉDIAS ═══ */}
+            <div id="photos" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
+              <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
+                <ImageIcon className="w-5 h-5 text-sage-dark" />Photos & Médias
+              </h2>
+              <MediasInline mandat={mandat} onUpdate={reload} />
+            </div>    
+      {/* ═══ STATISTIQUES DU DOSSIER ═══ */}
           <div id="stats" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-sage-dark" />Statistiques du dossier
