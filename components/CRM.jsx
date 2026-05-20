@@ -10,7 +10,8 @@ import {
   Circle, CheckCircle2, Eye, Copy, Sparkles,
   FileUp, Loader2, AlertTriangle, Info, Wand2, Mic,
   User as UserIcon, LogOut, Shield, Menu,
-  Image as ImageIcon, Camera, Plug, FolderOpen, Trophy, TrendingUp, Inbox, Video
+  Image as ImageIcon, Camera, Plug, FolderOpen, Trophy, TrendingUp, Inbox, Video,
+  Bed, Trees, ParkingSquare, Store
 } from 'lucide-react';
 import { ArrowLeft, Edit, Briefcase } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -80,6 +81,20 @@ import {
 
 // ═══ Helpers et constantes : voir lib/crm-constants.js ═══
 
+// ─────────────────────────────────────────────────────────
+// Helper : icône Lucide pour une famille
+// ─────────────────────────────────────────────────────────
+function getFamilleIcon(famille) {
+  switch (famille) {
+    case 'Immeubles': return Building2;
+    case 'Hôtels': return Bed;
+    case 'Résidentiel': return Home;
+    case 'Terrains': return Trees;
+    case 'Parking': return ParkingSquare;
+    case 'Locaux commerciaux': return Store;
+    default: return null;
+  }
+}
 // === COMPOSANT PRINCIPAL ===
 // Helper : déclenche le matching auto batch en fire-and-forget après save d'un mandat ou client
 async function triggerMatchingBatch({ mandatId, clientId }) {
@@ -1083,13 +1098,15 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
                       const badgeClass = mMarche === 'b2c'
                         ? 'bg-blue-50 text-blue-800 hover:bg-blue-100'
                         : 'bg-sage-50 text-sage-darker hover:bg-sage-100';
+                      const FamilleIcon = getFamilleIcon(cleanType);
                       return (
                         <button
                           onClick={(e) => { e.stopPropagation(); setFilterType(filterValue); }}
-                          className={`text-xs px-2 py-0.5 rounded-full transition-colors ${badgeClass}`}
+                          className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full transition-colors ${badgeClass}`}
                           title={`Filtrer par ${tooltipFullPath}`}
                         >
-                          {typeLabel}
+                          {FamilleIcon && <FamilleIcon className="w-3 h-3 flex-shrink-0" />}
+                          <span>{typeLabel}</span>
                         </button>
                       );
                     })()}
