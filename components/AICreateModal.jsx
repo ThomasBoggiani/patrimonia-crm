@@ -375,7 +375,7 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
 
   const detectedType = forcedType || result?.type || 'unknown';
   const TypeIcon = TYPE_LABELS[detectedType]?.icon || AlertCircle;
-  const isImplemented = ['mandat', 'client', 'both', 'task'].includes(detectedType);
+  const isImplemented = ['mandat', 'client', 'both', 'task', 'event'].includes(detectedType);
 
   return (
     <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-6" onClick={onClose}>
@@ -532,9 +532,9 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
             )}
             {detectedType === 'event' && result.event && (
               <>
-                <PreviewBlock title="📅 RDV à créer" data={result.event} />
-                <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
-                  ⚠️ Création RDV Outlook arrive prochainement. Pour l'instant : copie le résumé manuellement dans ton agenda.
+                <PreviewBlock title="📅 RDV à créer dans Outlook" data={result.event} />
+                <div className="mb-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900">
+                  💡 Le RDV sera créé dans ton calendrier Outlook avec les participants en invitation.
                 </div>
               </>
             )}
