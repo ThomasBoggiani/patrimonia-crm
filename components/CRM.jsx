@@ -2454,38 +2454,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
         </div>
       </div>
 
-      {/* ═══ BARRE D'ACTIONS COMPACTE (1 ligne) ═══ */}
-      <div className="mb-6 pb-4 border-b border-stone-200 flex items-center gap-2 flex-wrap">
-        <PdfExportButtons mandatId={mandat.id} mandatNom={mandat.nom} isOffMarket={mandat.is_off_market} />
-        <button onClick={() => setOpenModal('medias')} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
-          <ImageIcon className="w-3.5 h-3.5" /> Photos {getPhotos(mandat).length > 0 && <span className="text-[10px] bg-sage-100 text-sage-dark px-1.5 py-0.5 rounded-full">{getPhotos(mandat).length}</span>}
-        </button>
-        <button onClick={() => setOpenModal('visite')} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
-          <Eye className="w-3.5 h-3.5" /> Visite {(mandat.visiteInfo || mandat.visite_info) && Object.values(mandat.visiteInfo || mandat.visite_info).some(v => v) && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
-        </button>
-        <button onClick={() => setOpenModal('mandant')} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
-          <UserIcon className="w-3.5 h-3.5" /> Mandant {(mandat.mandantInfo || mandat.mandant_info) && Object.values(mandat.mandantInfo || mandat.mandant_info).some(v => v) && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
-        </button>
-        <button onClick={() => setOpenModal('documents')} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50">
-          <FolderOpen className="w-3.5 h-3.5" /> Documents
-        </button>
-        <button onClick={() => onOpenEmailDrafts?.(mandat.id)} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-sage-50 border border-sage-light text-sage-darker rounded-lg hover:bg-sage-100">
-          <Mail className="w-3.5 h-3.5" /> Préparer mails clients
-        </button>
-        <button onClick={() => setShowAvisValeur(true)} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50" title="Saisir / éditer l'avis de valeur">
-          📊 Avis de valeur {(mandat.avisValeur || mandat.avis_valeur) && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
-        </button>
-
-        <div className="flex-1" />
-
-        <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-xs font-medium ${commColor}`}>
-          <div className={`w-1.5 h-1.5 rounded-full ${isPublished ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400'}`} title={isPublished ? 'Publié' : 'Non publié'} />
-          <span>{mandat.commercialisation}</span>
-        </div>
-
-        <OwnerSelector mandat={mandat} reload={reload} />
-      </div>
-
       {/* ═══ STICKY BAR 1 : NAVIGATION DES DONNÉES ═══ */}
       <div className="sticky top-0 z-30 bg-cream-50/95 backdrop-blur-sm border-b border-cream-dark -mx-8 px-8 py-2.5">
         <div className="flex items-center gap-2 flex-wrap">
@@ -2520,6 +2488,12 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           <button onClick={() => onOpenEmailDrafts?.(mandat.id)} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Préparer mails personnalisés aux acquéreurs">
             📧 Préparer mails clients
           </button>
+          <div className="flex-1" />
+          <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-xs font-medium ${commColor}`}>
+            <div className={`w-1.5 h-1.5 rounded-full ${isPublished ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400'}`} title={isPublished ? 'Publié' : 'Non publié'} />
+            <span>{mandat.commercialisation}</span>
+          </div>
+          <OwnerSelector mandat={mandat} reload={reload} />
         </div>
       </div>
 
