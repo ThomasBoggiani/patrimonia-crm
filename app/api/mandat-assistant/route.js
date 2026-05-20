@@ -338,6 +338,7 @@ export async function POST(request) {
       }
 
       // Sinon, exécuter chaque tool call et boucler
+      console.log('[mandat-assistant] Tool calls demandés:', JSON.stringify(assistantMsg.tool_calls, null, 2));
       messagesForLLM.push(assistantMsg);
       updatedHistory.push({
         role: 'assistant',
@@ -346,7 +347,9 @@ export async function POST(request) {
       });
 
       for (const toolCall of assistantMsg.tool_calls) {
+        console.log('[mandat-assistant] Exécution outil:', toolCall.function.name, 'avec args:', toolCall.function.arguments);
         const toolResult = await executeToolCall(toolCall, mandat_id);
+        console.log('[mandat-assistant] Résultat outil:', JSON.stringify(toolResult, null, 2));
         const toolMsg = {
           role: 'tool',
           tool_call_id: toolCall.id,
@@ -355,7 +358,6 @@ export async function POST(request) {
         messagesForLLM.push(toolMsg);
         updatedHistory.push(toolMsg);
       }
-    }
 
     if (!finalResponse) finalResponse = 'Désolé, je n\'ai pas pu finaliser la réponse.';
 
