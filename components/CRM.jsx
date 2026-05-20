@@ -1962,11 +1962,25 @@ async function handleFolderImport(event) {
           <div className={sectionClass}>
             <h3 className={sectionTitleClass}>🔧 Caractéristiques techniques</h3>
             <div className="space-y-3">
-              <div className="grid grid-cols-3 gap-3">
-                <Field label="Pièces"><input type="number" value={data.nbPieces || 0} onChange={e => update('nbPieces', +e.target.value)} className={fieldClass('nbPieces')} /></Field>
-                <Field label="Chambres"><input type="number" value={data.nbChambres || 0} onChange={e => update('nbChambres', +e.target.value)} className={fieldClass('nbChambres')} /></Field>
-                <Field label="Étage"><input type="number" value={data.etage || 0} onChange={e => update('etage', +e.target.value)} className={fieldClass('etage')} /></Field>
-              </div>
+              {/* Champs B2C uniquement : pièces, chambres, étage */}
+                {data.marche === 'b2c' && (
+                  <div className="grid grid-cols-3 gap-3">
+                    <Field label="Pièces"><input type="number" value={data.nbPieces || 0} onChange={e => update('nbPieces', +e.target.value)} className={fieldClass('nbPieces')} /></Field>
+                    <Field label="Chambres"><input type="number" value={data.nbChambres || 0} onChange={e => update('nbChambres', +e.target.value)} className={fieldClass('nbChambres')} /></Field>
+                    <Field label="Étage"><input type="number" value={data.etage || 0} onChange={e => update('etage', +e.target.value)} className={fieldClass('etage')} /></Field>
+                  </div>
+                )}
+                {/* Champs B2B uniquement : nombre de lots */}
+                {data.marche === 'b2b' && (
+                  <div className="grid grid-cols-3 gap-3">
+                    <Field label="Nombre de lots total">
+                      <input type="number" value={data.nbLots || 0} onChange={e => update('nbLots', +e.target.value)} className={fieldClass('nbLots')} placeholder="ex: 12" />
+                    </Field>
+                    <div className="col-span-2 flex items-end">
+                      <p className="text-[11px] text-stone-500 italic pb-2">💡 Détaille chaque lot dans la section "État locatif" ci-dessus.</p>
+                    </div>
+                  </div>
+                )}
               <div className="grid grid-cols-3 gap-3">
                 <Field label="Année construction"><input type="number" value={data.anneeConstruction || 0} onChange={e => update('anneeConstruction', +e.target.value)} className={fieldClass('anneeConstruction')} /></Field>
                 <Field label="Charges/an (€)"><input type="number" value={data.chargesAnnuelles || 0} onChange={e => update('chargesAnnuelles', +e.target.value)} className={fieldClass('chargesAnnuelles')} /></Field>
@@ -2895,6 +2909,10 @@ function ClientDetail({ client, onBack, onEdit, mandats, deals, interactions, re
           <OwnerSelector client={client} entity="client" reload={reload} />
           <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
             <Edit2 className="w-4 h-4" /> Modifier
+          </button>
+          <button onClick={() => setShowAvisValeur(true)} className="flex items-center gap-2 px-3 py-2 bg-sage-50 border border-sage-light text-sage-darker rounded-lg text-sm hover:bg-sage-100" title="Saisir / éditer l'avis de valeur">
+            📊 Avis de valeur
+            {(mandat.avisValeur || mandat.avis_valeur) && <span className="ml-1 w-1.5 h-1.5 bg-sage-dark rounded-full"></span>}
           </button>
         </div>
       </div>
