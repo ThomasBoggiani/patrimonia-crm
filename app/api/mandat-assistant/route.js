@@ -40,7 +40,8 @@ PRINCIPES :
 OUTILS DISPONIBLES :
 - update_mandat_field(field, value) : modifie un champ du mandat (description, prix, surface, etc.)
 - read_mandat_documents() : liste les documents associés
-- generate_commercial_arguments() : génère 4 arguments commerciaux
+- - generate_commercial_arguments() : génère 4 arguments commerciaux
+- add_task(titre, echeance, priorite) : crée une tâche liée au mandat
 
 ARBORESCENCE DES TYPES DE BIENS :
 - B2B : "Immeubles" (Habitation/Mixte/Commercial), "Hôtels" (Hébergements hôteliers/Hôtels classiques/Sociaux), "Terrains", "Parking", "Locaux commerciaux" (Bureaux/Boutiques/Retails Park)
@@ -88,6 +89,32 @@ const TOOLS = [
       parameters: {
         type: 'object',
         properties: {},
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'add_task',
+      description: 'Crée une tâche liée au mandat. À utiliser quand l\'utilisateur demande explicitement de créer une tâche, un rappel, ou un suivi.',
+      parameters: {
+        type: 'object',
+        properties: {
+          titre: {
+            type: 'string',
+            description: 'Le titre court de la tâche (ex: "Appeler le mandant", "Récupérer les diagnostics DPE")',
+          },
+          echeance: {
+            type: 'string',
+            description: 'Date d\'échéance au format YYYY-MM-DD (optionnel)',
+          },
+          priorite: {
+            type: 'string',
+            enum: ['Haute', 'Normale', 'Basse'],
+            description: 'Priorité de la tâche (défaut: Normale)',
+          },
+        },
+        required: ['titre'],
       },
     },
   },
@@ -170,6 +197,40 @@ Réponse JSON strict : { "arguments": ["...", "...", "...", "..."] }`;
   }
 }
 
+async function tool_add_task({ mandatId, titre, echeance, priorite }) {
+  if (!titre || !titre.trim()) {
+    return { ok: false, error: 'Titre de tâche requis' };
+  }
+
+  const taskData = {
+    titre: titre.trim(),
+    lien_type: 'mandat',
+    lien_id: mandatId,
+    statut: 'À faire',
+    priorite: priorite || 'Normale',
+  };
+
+  if (echeance) {
+    taskData.echeance = echeance;
+  }
+
+  const { error, data } = await supabaseAdmin
+    .from('todos')
+    .insert(taskData)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[tool_add_task] erreur:', error);
+    return { ok: false, error: error.message };
+  }
+  return {
+    ok: true,
+    task_id: data.id,
+    titre: data.titre,
+    message: `Tâche '${data.titre}' créée avec succès`,
+  };
+}
 async function executeToolCall(toolCall, mandatId) {
   const name = toolCall.function.name;
   let args = {};
@@ -187,6 +248,9 @@ async function executeToolCall(toolCall, mandatId) {
   }
   if (name === 'generate_commercial_arguments') {
     return await tool_generate_commercial_arguments({ mandatId });
+  }
+  if (name === 'add_task') {
+    return await tool_add_task({ mandatId, ...args });
   }
   return { ok: false, error: `Outil inconnu : ${name}` };
 }
