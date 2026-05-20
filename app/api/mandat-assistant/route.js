@@ -387,6 +387,10 @@ export async function POST(request) {
           mandatModified = true;
           modifiedFields.push(toolResult.field);
         }
+        if (toolCall.function.name === 'add_task' && toolResult.ok) {
+          mandatModified = true;
+          modifiedFields.push('tâche créée');
+        }
         const toolMsg = {
           role: 'tool',
           tool_call_id: toolCall.id,
