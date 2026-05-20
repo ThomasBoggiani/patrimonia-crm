@@ -198,8 +198,8 @@ export async function POST(req) {
     }
 
     const { data: templateBlob, error: tErr } = await supabaseAdmin.storage
-      .from('templates')
-      .download('avis_valeur_generique.pptx');
+      .from('avis_valeur_generique.pptx')
+      .download('templates.pptx');
 
     if (tErr || !templateBlob) {
       return NextResponse.json({ 
