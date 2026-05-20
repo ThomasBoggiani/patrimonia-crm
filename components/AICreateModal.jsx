@@ -262,9 +262,52 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
         }
       }
 
-      // ─── EVENT (placeholder) ───
+      // ─── EVENT (RDV Outlook via Microsoft Graph) ───
       if (result.type === 'event' && result.event) {
-        alert('La création de RDV Outlook arrivera dans la prochaine session.\n\nPour l\'instant : copie le résumé dans ton agenda manuellement.');
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const token = session?.access_token;
+          if (!token) throw new Error('Session expirée');
+
+          // Convertir les participants (noms) en emails si possible
+          // Pour l'instant on prend ce que l'IA donne (peut être noms ou emails)
+          const participantsList = Array.isArray(result.event.participants)
+            ? result.event.participants.filter(p => p && p.includes('@'))
+            : [];
+
+          const eventBody = {
+            titre: result.event.titre || 'Nouveau RDV',
+            description: result.event.description || '',
+            debut: result.event.date_debut,
+            fin: result.event.date_fin,
+            lieu: result.event.lieu || '',
+            participants: participantsList,
+            allDay: false,
+          };
+
+          const res = await fetch('/api/microsoft/events', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(eventBody),
+          });
+
+          const data = await res.json();
+          if (!res.ok) {
+            if (data.code === 'NOT_CONNECTED') {
+              alert('Microsoft Outlook n\'est pas connecté.\n\nVa dans Paramètres → Intégrations pour le connecter, puis recommence.');
+            } else {
+              alert('Erreur création RDV Outlook : ' + (data.error || 'inconnue'));
+            }
+          } else {
+            created.event = data.event;
+            // On ne fait pas de dispatch global, l'agenda se rechargera au prochain affichage
+          }
+        } catch (e) {
+          alert('Erreur RDV : ' + e.message);
+        }
       }
 
       // ─── EMAIL (placeholder) ───
