@@ -1,209 +1,249 @@
-# 🔧 Patch AvisDeValeurEditor.jsx — Lot C : bouton "📄 Générer PPTX"
+// ═══════════════════════════════════════════════════════════════════
+// app/api/avis-valeur/generate/route.js
+// Génère un PPTX à partir du template stocké dans Supabase Storage,
+// en remplaçant les placeholders par les données du mandat + avis_valeur.
+// ═══════════════════════════════════════════════════════════════════
 
-## Objectif
-Ajouter dans la modal Avis de valeur un bouton qui appelle l'API `/api/avis-valeur/generate` et déclenche le téléchargement du PPTX.
+import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+import PizZip from 'pizzip';
+import Docxtemplater from 'docxtemplater';
 
-⚠️ **3 modifications** dans `components/AvisDeValeurEditor.jsx`.
+// Service role pour accéder au bucket privé "templates"
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  { auth: { autoRefreshToken: false, persistSession: false } }
+);
 
----
+// ─── Helpers de formatage ─────────────────────────────────────────────
+const fmtPrix = (n) => {
+  const num = parseFloat(n);
+  if (!num || num === 0) return '';
+  return num.toLocaleString('fr-FR') + ' €';
+};
 
-## 🔹 Modification 1 : Ajouter import et state
+const fmtPrixFAI = (n) => {
+  const num = parseFloat(n);
+  if (!num || num === 0) return '';
+  return num.toLocaleString('fr-FR') + ' € FAI';
+};
 
-**Cherche au tout début du fichier** :
-```jsx
-import {
-  X, Save, ChevronDown, ChevronRight, Plus, Trash2, Loader2,
-  TrendingUp, Sparkles, AlertTriangle, Cloud,
-  Building2, BarChart3, Target, Lightbulb, Tag, MessageCircle,
-  MapPin, Key, Repeat, Calculator
-} from 'lucide-react';
-```
+const fmtPrixM2 = (prix, surface) => {
+  const p = parseFloat(prix);
+  const s = parseFloat(surface);
+  if (!p || !s || s === 0) return '';
+  return Math.round(p / s).toLocaleString('fr-FR');
+};
 
-**Remplace par** (ajoute `FileDown` à la liste) :
-```jsx
-import {
-  X, Save, ChevronDown, ChevronRight, Plus, Trash2, Loader2,
-  TrendingUp, Sparkles, AlertTriangle, Cloud,
-  Building2, BarChart3, Target, Lightbulb, Tag, MessageCircle,
-  MapPin, Key, Repeat, Calculator, FileDown
-} from 'lucide-react';
-```
+const fmtNumber = (n) => {
+  const num = parseFloat(n);
+  if (!num || num === 0) return '';
+  return num.toLocaleString('fr-FR');
+};
 
----
-
-## 🔹 Modification 2 : Ajouter state de génération
-
-**Cherche** :
-```jsx
-  const [data, setData] = useState(ensureSchema(mandat?.avisValeur || mandat?.avis_valeur));
-  const [saving, setSaving] = useState(false);
-```
-
-**Remplace par** :
-```jsx
-  const [data, setData] = useState(ensureSchema(mandat?.avisValeur || mandat?.avis_valeur));
-  const [saving, setSaving] = useState(false);
-  const [generating, setGenerating] = useState(false);
-```
-
----
-
-## 🔹 Modification 3 : Ajouter la fonction handleGenerate
-
-**Cherche** la fonction `handleSave` :
-```jsx
-  async function handleSave() {
-    setSaving(true);
-    try {
-      const { error } = await supabase
-        .from('mandats')
-        .update({ avis_valeur: data })
-        .eq('id', mandat.id);
-      if (error) {
-        alert('Erreur sauvegarde : ' + error.message);
-      } else {
-        onSaved?.(data);
-        onClose();
-      }
-    } catch (e) {
-      alert('Erreur : ' + e.message);
-    }
-    setSaving(false);
+const fmtDate = (iso) => {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    const months = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+    return `${months[d.getMonth()]} ${d.getFullYear()}`;
+  } catch {
+    return iso;
   }
-```
+};
 
-**Ajoute JUSTE APRÈS** cette fonction (avant la déclaration `const fieldClass`) :
-
-```jsx
-  async function handleGenerate() {
-    // D'abord on sauve l'état actuel
-    setGenerating(true);
-    try {
-      // 1. Sauver les modifications actuelles avant de générer
-      const { error: saveErr } = await supabase
-        .from('mandats')
-        .update({ avis_valeur: data })
-        .eq('id', mandat.id);
-      
-      if (saveErr) {
-        alert('Erreur de sauvegarde avant génération : ' + saveErr.message);
-        setGenerating(false);
-        return;
-      }
-
-      // 2. Appeler l'API de génération
-      const response = await fetch('/api/avis-valeur/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mandatId: mandat.id }),
-      });
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        alert('Erreur génération PPTX : ' + (errData.error || response.statusText) + 
-              (errData.details ? '\n' + errData.details : ''));
-        setGenerating(false);
-        return;
-      }
-
-      // 3. Télécharger le blob
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      // Récupérer le nom de fichier depuis l'en-tête
-      const cd = response.headers.get('Content-Disposition') || '';
-      const match = cd.match(/filename="([^"]+)"/);
-      link.download = match ? match[1] : `Avis_de_valeur_${mandat.id}.pptx`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
-      onSaved?.(data);
-    } catch (e) {
-      alert('Erreur : ' + e.message);
+function deduireQuartier(adresse) {
+  if (!adresse) return '';
+  const m = adresse.match(/\b(\d{5})\b/);
+  if (m) {
+    const cp = m[1];
+    if (cp.startsWith('75')) {
+      const arr = parseInt(cp.slice(3, 5), 10);
+      return `Paris ${arr}e`;
     }
-    setGenerating(false);
   }
-```
+  return adresse;
+}
 
----
+function buildContext(mandat, avis) {
+  const a = avis || {};
+  const adresse = mandat?.adresse || '';
+  const surface = parseFloat(mandat?.surface) || 0;
 
-## 🔹 Modification 4 : Ajouter le bouton dans le footer
+  const loc = a.localisation || {};
+  const sit_loc = a.situation_locative || {};
+  const carac = a.caracteristiques || {};
+  const comp = a.comparables || {};
+  const swot = a.swot || {};
+  const m2 = a.methode_m2 || {};
+  const capi = a.methode_capi || {};
+  const reconv = a.reconversion || {};
+  const preco = a.preconisation || {};
 
-**Cherche** le footer de la modal :
-```jsx
-        {/* FOOTER */}
-        <div className="flex items-center justify-between p-4 border-t border-stone-200 bg-white">
-          <div className="text-xs text-stone-500">
-            Document servant à <strong>convaincre le mandant</strong> de confier son bien.
-          </div>
-          <div className="flex gap-2">
-            <button onClick={onClose}
-              className="px-4 py-2 text-sm text-stone-700 hover:bg-cream-100 rounded-lg"
-            >
-              Annuler
-            </button>
-            <button onClick={handleSave} disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink disabled:opacity-50"
-            >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              {saving ? 'Sauvegarde...' : 'Enregistrer'}
-            </button>
-          </div>
-        </div>
-```
+  return {
+    mandat_adresse: adresse,
+    mandat_titre_court: mandat?.nom || adresse,
+    mandat_type_libelle: mandat?.sousType || mandat?.type || 'Bien immobilier',
+    mandat_quartier: deduireQuartier(adresse),
+    mandat_type_long: (mandat?.sousType || mandat?.type || 'bien').toLowerCase(),
+    mandat_statut_occupation: '',
+    mandat_surface_totale: fmtNumber(surface),
 
-**Remplace par** :
-```jsx
-        {/* FOOTER */}
-        <div className="flex items-center justify-between p-4 border-t border-stone-200 bg-white">
-          <div className="text-xs text-stone-500">
-            Document servant à <strong>convaincre le mandant</strong> de confier son bien.
-          </div>
-          <div className="flex gap-2">
-            <button onClick={onClose}
-              className="px-4 py-2 text-sm text-stone-700 hover:bg-cream-100 rounded-lg"
-            >
-              Annuler
-            </button>
-            <button onClick={handleSave} disabled={saving || generating}
-              className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink disabled:opacity-50"
-            >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              {saving ? 'Sauvegarde...' : 'Enregistrer'}
-            </button>
-            <button onClick={handleGenerate} disabled={saving || generating}
-              className="flex items-center gap-2 px-4 py-2 bg-sage-dark text-white rounded-lg text-sm hover:bg-sage-darker disabled:opacity-50"
-              title="Sauvegarde + génération du PPTX"
-            >
-              {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
-              {generating ? 'Génération...' : '📄 Générer PPTX'}
-            </button>
-          </div>
-        </div>
-```
+    loc_transports: loc.transports || '',
+    loc_commentaire: loc.commentaire || '',
 
-→ Le bouton "📄 Générer PPTX" apparaît à droite d'"Enregistrer". Il sauvegarde d'abord, puis appelle l'API.
+    carac_annee: carac.annee_construction || '',
+    carac_architecte: carac.architecte || '',
+    carac_distribution: carac.distribution || '',
+    carac_atouts: Array.isArray(carac.atouts_distinctifs) 
+      ? carac.atouts_distinctifs.map(x => '• ' + x).join('\n') 
+      : '',
+    carac_commentaire: carac.commentaire || '',
 
----
+    locatif_commentaire: sit_loc.commentaire || '',
+    locatif_ca_actuel_ht: fmtPrix(
+      (Array.isArray(mandat?.etat_locatif) ? mandat.etat_locatif : []).reduce(
+        (s, l) => s + (parseFloat(l.loyer) || 0) * 12, 0)
+    ),
+    locatif_ca_potentiel_ht: fmtPrix(
+      (Array.isArray(mandat?.etat_locatif) ? mandat.etat_locatif : []).reduce(
+        (s, l) => {
+          const p = parseFloat(l.loyer_potentiel) || 0;
+          return s + (p > 0 ? p : (parseFloat(l.loyer) || 0)) * 12;
+        }, 0)
+    ),
 
-## ⚠️ Attention github.dev
+    marche_prix_zone_min: fmtNumber(comp.prix_zone_min),
+    marche_prix_zone_max: fmtNumber(comp.prix_zone_max),
+    marche_rdt_zone_min: comp.rendement_zone_min ? `${comp.rendement_zone_min} %` : '',
+    marche_rdt_zone_max: comp.rendement_zone_max ? `${comp.rendement_zone_max} %` : '',
+    marche_commentaire: comp.commentaire || '',
+    transactions_recentes_texte: comp.transactions_recentes || '',
 
-Ce patch ne contient pas de balises `<a` ouvrantes, donc pas de risque de suppression silencieuse.
+    val_basse_prix_m2: fmtNumber(m2.valeur_basse?.prix_m2),
+    val_basse_total: fmtPrix(m2.valeur_basse?.valeur_totale),
+    val_basse_commentaire: m2.valeur_basse?.commentaire || '',
+    val_centrale_prix_m2: fmtNumber(m2.valeur_centrale?.prix_m2),
+    val_centrale_total: fmtPrix(m2.valeur_centrale?.valeur_totale),
+    val_centrale_commentaire: m2.valeur_centrale?.commentaire || '',
+    val_haute_prix_m2: fmtNumber(m2.valeur_haute?.prix_m2),
+    val_haute_total: fmtPrix(m2.valeur_haute?.valeur_totale),
+    val_haute_commentaire: m2.valeur_haute?.commentaire || '',
 
----
+    capi_ca_base: fmtPrix(capi.ca_base),
+    capi_zone_atterrissage: capi.zone_atterrissage || '',
+    capi_hypotheses_table: Array.isArray(capi.hypotheses) 
+      ? capi.hypotheses.map(h => 
+          `${h.rendement_pct} % → ${fmtPrix(h.valeur_acte)} — ${h.lecture || ''}`
+        ).join('\n')
+      : '',
 
-## ✅ Test après déploiement
+    reconv_usages: Array.isArray(reconv.usages)
+      ? reconv.usages.map(u => `${u.titre || ''}\n${u.description || ''}`).join('\n\n')
+      : '',
+    reconv_bilan: reconv.bilan_financier || '',
+    reconv_profils_acquereurs: Array.isArray(reconv.profils_acquereurs)
+      ? reconv.profils_acquereurs.map(p => '• ' + p).join('\n')
+      : '',
 
-1. SQL Supabase : exécute `05_setup_bucket_templates.sql` (bucket créé)
-2. Manuellement dans Supabase → Storage → templates → **Upload** le fichier `template_avis_valeur_generique.pptx` (que je te fournis)
-3. Renomme-le dans le bucket en `avis_valeur_generique.pptx` (sans le préfixe `template_`)
-4. Commit GitHub : `package.json` mis à jour + nouveau fichier `app/api/avis-valeur/generate/route.js` + `components/AvisDeValeurEditor.jsx` patché
-5. Hard refresh sur le CRM
-6. Ouvre un mandat, ouvre la modal Avis de valeur
-7. Remplis quelques champs (au minimum quelques prix dans Préconisation)
-8. Clic **📄 Générer PPTX**
-9. Le PPTX se télécharge automatiquement
-10. Ouvre le PPTX dans PowerPoint/Keynote → les placeholders sont remplacés
+    preco_prix_coup_de_coeur: fmtPrixFAI(preco.prix_coup_de_coeur),
+    preco_prix_coup_de_coeur_m2: fmtPrixM2(preco.prix_coup_de_coeur, surface),
+    preco_prix_marche: fmtPrixFAI(preco.prix_marche),
+    preco_prix_marche_m2: fmtPrixM2(preco.prix_marche, surface),
+    preco_prix_plancher: fmtPrixFAI(preco.prix_plancher),
+    preco_recommandation: preco.recommandation || '',
+    preco_avis_client: preco.avis_client || '',
+    consultant_nom: preco.consultant_nom || '',
+    consultant_email: preco.consultant_email || '',
+    consultant_tel: preco.consultant_tel || '',
+    consultant_titre: 'Directeur commercial',
+    honoraires_pct: preco.honoraires_pct ? `${preco.honoraires_pct}` : '5',
+
+    date_estimation: fmtDate(a.date_estimation),
+    validite_mois: a.validite_mois || '1',
+
+    swot_forces: Array.isArray(swot.forces) ? swot.forces.map(x => '• ' + x).join('\n') : '',
+    swot_opportunites: Array.isArray(swot.opportunites) ? swot.opportunites.map(x => '• ' + x).join('\n') : '',
+    swot_facteurs_limitatifs: Array.isArray(swot.facteurs_limitatifs) ? swot.facteurs_limitatifs.map(x => '• ' + x).join('\n') : '',
+    swot_menaces: Array.isArray(swot.menaces) ? swot.menaces.map(x => '• ' + x).join('\n') : '',
+  };
+}
+
+export async function POST(req) {
+  try {
+    const { mandatId } = await req.json();
+    if (!mandatId) {
+      return NextResponse.json({ error: 'mandatId requis' }, { status: 400 });
+    }
+
+    const { data: mandatData, error: mErr } = await supabaseAdmin
+      .from('mandats')
+      .select('*')
+      .eq('id', mandatId)
+      .single();
+
+    if (mErr || !mandatData) {
+      return NextResponse.json({ 
+        error: 'Mandat introuvable', 
+        details: mErr?.message 
+      }, { status: 404 });
+    }
+
+    const avis = mandatData.avis_valeur;
+    if (!avis) {
+      return NextResponse.json({ 
+        error: 'Aucun avis de valeur saisi pour ce mandat' 
+      }, { status: 400 });
+    }
+
+    const { data: templateBlob, error: tErr } = await supabaseAdmin.storage
+      .from('templates')
+      .download('avis_valeur_generique.pptx');
+
+    if (tErr || !templateBlob) {
+      return NextResponse.json({ 
+        error: 'Template introuvable dans le bucket templates',
+        details: tErr?.message 
+      }, { status: 500 });
+    }
+
+    const templateBuffer = Buffer.from(await templateBlob.arrayBuffer());
+    const zip = new PizZip(templateBuffer);
+
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+      delimiters: { start: '{', end: '}' },
+      nullGetter: () => '',
+    });
+
+    const context = buildContext(mandatData, avis);
+    doc.render(context);
+
+    const outputBuffer = doc.getZip().generate({
+      type: 'nodebuffer',
+      mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    });
+
+    const adresse = (mandatData.adresse || 'avis').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 40);
+    const filename = `Avis_de_valeur_${adresse}.pptx`;
+
+    return new NextResponse(outputBuffer, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Length': outputBuffer.length.toString(),
+      },
+    });
+
+  } catch (e) {
+    console.error('[avis-valeur/generate] Erreur:', e);
+    return NextResponse.json({ 
+      error: 'Erreur lors de la génération du PPTX',
+      details: e?.message || String(e),
+      properties: e?.properties ? JSON.stringify(e.properties).slice(0, 500) : undefined
+    }, { status: 500 });
+  }
+}
