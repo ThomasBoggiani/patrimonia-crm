@@ -1,24 +1,24 @@
 // ═══════════════════════════════════════════════════════════════════
-// components/MandatAIAssistant.jsx — v2.0
-// Sidebar IA avec streaming SSE + historique BDD persistant
+// components/MandatAIAssistant.jsx — v3.0
+// Assistant IA unifié avec function calling (GPT-4o)
+// Utilise /api/mandat-assistant (nouvel endpoint)
 // ═══════════════════════════════════════════════════════════════════
 
 import { useState, useRef, useEffect } from 'react';
-import { Sparkles, X, Send, Copy, Check, FileText, Mail, Target, Loader2 } from 'lucide-react';
+import { Sparkles, X, Send, Copy, Check, FileText, Mail, Target, Loader2, RefreshCw } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 const QUICK_ACTIONS = [
-  { id: 'descriptif',     label: 'Descriptif',      icon: FileText, hint: 'Génère un descriptif marketing pour les portails' },
-  { id: 'email_mandant',  label: 'Email mandant',   icon: Mail,     hint: 'Rédige un email de point d\'étape au vendeur' },
-  { id: 'argumentaire',   label: 'Argumentaire',    icon: Target,   hint: 'Construit un argumentaire de vente avec objections' },
+  { id: 'descriptif',    label: 'Descriptif',    icon: FileText, prompt: 'Génère un descriptif marketing court (3-5 phrases) pour les portails immobiliers.' },
+  { id: 'argumentaire',  label: 'Arguments',     icon: Target,   prompt: 'Génère 4 arguments commerciaux pour valoriser ce mandat auprès des acquéreurs (utilise l\'outil dédié).' },
+  { id: 'email_mandant', label: 'Email mandant', icon: Mail,     prompt: 'Rédige un email de point d\'étape au mandant, ton professionnel, court.' },
 ];
 
-export default function MandatAIAssistant({ mandat }) {
+export default function MandatAIAssistant({ mandat, onMandatUpdate }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [streamingText, setStreamingText] = useState(''); // texte en cours de streaming
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const messagesEndRef = useRef(null);
 
@@ -27,7 +27,7 @@ export default function MandatAIAssistant({ mandat }) {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, streamingText, loading]);
+  }, [messages, loading]);
 
   // Charger l'historique au premier ouverture du panneau
   useEffect(() => {
@@ -39,10 +39,10 @@ export default function MandatAIAssistant({ mandat }) {
         const token = session?.access_token;
         if (!token) return;
 
-        const res = await fetch(`/api/mandats/${mandat.id}/ai`, {
+        const res = await fetch('/api/mandat-assistant', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token, mode: 'load' }),
+          body: JSON.stringify({ token, mandat_id: mandat.id, action: 'load_history' }),
         });
 
         const data = await res.json();
@@ -57,17 +57,12 @@ export default function MandatAIAssistant({ mandat }) {
     })();
   }, [open, historyLoaded, mandat?.id]);
 
-  async function callAI({ action, message }) {
-    if (!mandat?.id) return;
+  async function callAssistant(messageText) {
+    if (!mandat?.id || !messageText.trim() || loading) return;
     setLoading(true);
-    setStreamingText('');
 
-    // Ajouter le message user dans la liste affichée
-    const userVisible = action
-      ? `[Action] ${QUICK_ACTIONS.find(a => a.id === action)?.label || action}`
-      : message;
-
-    setMessages(prev => [...prev, { role: 'user', content: userVisible, action: action || null }]);
+    const userMsg = { role: 'user', content: messageText };
+    setMessages(prev => [...prev, userMsg]);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -82,65 +77,28 @@ export default function MandatAIAssistant({ mandat }) {
         return;
       }
 
-      const res = await fetch(`/api/mandats/${mandat.id}/ai`, {
+      const res = await fetch('/api/mandat-assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, action, message }),
+        body: JSON.stringify({ token, mandat_id: mandat.id, message: messageText }),
       });
 
-      // Vérifier le content-type : si JSON, c'est une erreur
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const data = await res.json();
+      const data = await res.json();
+
+      if (!data.ok) {
         setMessages(prev => [...prev, {
           role: 'assistant',
           content: `⚠️ Erreur : ${data.error || 'inconnue'}`,
         }]);
-        setLoading(false);
-        return;
-      }
-
-      // Stream SSE
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let accumulated = '';
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-
-        // Parser les events SSE (séparés par \n\n)
-        const lines = buffer.split('\n\n');
-        buffer = lines.pop() || ''; // garder le buffer incomplet
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            const event = JSON.parse(line.slice(6));
-            if (event.type === 'delta') {
-              accumulated += event.text;
-              setStreamingText(accumulated);
-            } else if (event.type === 'done') {
-              // Finaliser : transférer le streamingText vers messages
-              setMessages(prev => [...prev, { role: 'assistant', content: accumulated }]);
-              setStreamingText('');
-            } else if (event.type === 'error') {
-              setMessages(prev => [...prev, {
-                role: 'assistant',
-                content: `⚠️ Erreur : ${event.error || 'inconnue'}`,
-              }]);
-              setStreamingText('');
-            }
-          } catch (e) {
-            console.error('[AI] SSE parse error:', e);
-          }
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+        // Si l'IA a peut-être modifié le mandat, on déclenche un refresh
+        if (data.response && (data.response.includes('mis à jour') || data.response.includes('modifié'))) {
+          if (typeof onMandatUpdate === 'function') onMandatUpdate();
         }
       }
     } catch (err) {
-      console.error('[AI] callAI error:', err);
+      console.error('[AI] callAssistant error:', err);
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: `⚠️ Erreur réseau : ${err.message}`,
@@ -154,12 +112,13 @@ export default function MandatAIAssistant({ mandat }) {
     const text = input.trim();
     if (!text || loading) return;
     setInput('');
-    callAI({ message: text });
+    callAssistant(text);
   }
 
   function handleQuickAction(actionId) {
     if (loading) return;
-    callAI({ action: actionId });
+    const action = QUICK_ACTIONS.find(a => a.id === actionId);
+    if (action) callAssistant(action.prompt);
   }
 
   async function handleCopy(idx) {
@@ -184,10 +143,10 @@ export default function MandatAIAssistant({ mandat }) {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
       if (token) {
-        await fetch(`/api/mandats/${mandat.id}/ai`, {
+        await fetch('/api/mandat-assistant', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token, mode: 'clear' }),
+          body: JSON.stringify({ token, mandat_id: mandat.id, action: 'reset' }),
         });
       }
     } catch (e) {
@@ -195,7 +154,10 @@ export default function MandatAIAssistant({ mandat }) {
     }
 
     setMessages([]);
-    setStreamingText('');
+  }
+
+  function handleRefresh() {
+    if (typeof onMandatUpdate === 'function') onMandatUpdate();
   }
 
   return (
@@ -227,8 +189,16 @@ export default function MandatAIAssistant({ mandat }) {
             <div className="flex items-center gap-2 text-white">
               <Sparkles className="w-5 h-5" />
               <h3 className="font-semibold">Assistant IA</h3>
+              <span className="text-xs text-white/70">GPT-4o</span>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={handleRefresh}
+                className="text-white/80 hover:text-white p-1"
+                title="Rafraîchir le mandat"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
               {messages.length > 0 && (
                 <button
                   onClick={handleClear}
@@ -262,10 +232,11 @@ export default function MandatAIAssistant({ mandat }) {
               </div>
             )}
 
-            {historyLoaded && messages.length === 0 && !streamingText && (
+            {historyLoaded && messages.length === 0 && (
               <div className="text-center text-sm text-stone-400 mt-8">
                 <Sparkles className="w-8 h-8 mx-auto mb-3 text-stone-300" />
-                Lance une action rapide ou pose ta question.
+                <p className="mb-1">Je peux modifier la fiche, lire les documents,</p>
+                <p>générer des arguments, ou répondre à tes questions.</p>
               </div>
             )}
 
@@ -302,23 +273,11 @@ export default function MandatAIAssistant({ mandat }) {
               </div>
             ))}
 
-            {/* Texte en cours de streaming */}
-            {streamingText && (
+            {loading && (
               <div className="flex justify-start">
-                <div className="max-w-[85%] rounded-lg px-3.5 py-2.5 text-sm bg-stone-100 text-stone-800">
-                  <div className="whitespace-pre-wrap leading-relaxed">{streamingText}</div>
-                  <div className="mt-2 flex items-center gap-1 text-xs text-stone-400">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    En cours...
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {loading && !streamingText && (
-              <div className="flex justify-start">
-                <div className="bg-stone-100 rounded-lg px-3.5 py-2.5">
+                <div className="bg-stone-100 rounded-lg px-3.5 py-2.5 flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin text-stone-500" />
+                  <span className="text-xs text-stone-500">L'assistant réfléchit...</span>
                 </div>
               </div>
             )}
@@ -336,7 +295,6 @@ export default function MandatAIAssistant({ mandat }) {
                     key={action.id}
                     onClick={() => handleQuickAction(action.id)}
                     disabled={loading}
-                    title={action.hint}
                     className="flex items-center gap-1.5 px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded-lg text-xs hover:bg-stone-100 hover:border-stone-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
                   >
                     <Icon className="w-3.5 h-3.5" />
