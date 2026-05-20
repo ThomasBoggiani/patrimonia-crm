@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════
-// components/MandatAIAssistant.jsx — v3.1
+// components/MandatAIAssistant.jsx — v3.2
 // Assistant IA unifié avec function calling (GPT-4o)
-// Notif visuelle des champs modifiés + auto-refresh
+// + Notif visuelle + auto-refresh + dictée vocale Whisper
 // ═══════════════════════════════════════════════════════════════════
 
 import { useState, useRef, useEffect } from 'react';
@@ -14,7 +14,6 @@ const QUICK_ACTIONS = [
   { id: 'email_mandant', label: 'Email mandant', icon: Mail,     prompt: 'Rédige un email de point d\'étape au mandant, ton professionnel, court.' },
 ];
 
-// Labels lisibles pour les champs modifiés
 const FIELD_LABELS = {
   nom: 'Nom', adresse: 'Adresse', ville: 'Ville', prix: 'Prix', prix_net_vendeur: 'Prix net vendeur',
   prix_m2: 'Prix au m²', surface: 'Surface', nb_pieces: 'Nb pièces', nb_chambres: 'Nb chambres',
@@ -47,7 +46,7 @@ export default function MandatAIAssistant({ mandat, onMandatUpdate }) {
     }
   }, [messages, loading]);
 
-  // Charger l'historique au premier ouverture du panneau
+  // Charger l'historique au premier ouverture
   useEffect(() => {
     if (!open || historyLoaded || !mandat?.id) return;
 
@@ -109,13 +108,11 @@ export default function MandatAIAssistant({ mandat, onMandatUpdate }) {
           content: `⚠️ Erreur : ${data.error || 'inconnue'}`,
         }]);
       } else {
-        // Ajout de la réponse + éventuellement une notif visuelle de modif
         setMessages(prev => [...prev, {
           role: 'assistant',
           content: data.response,
           modified_fields: data.modified_fields || [],
         }]);
-        // Auto-refresh de la fiche si l'IA a modifié quelque chose
         if (data.mandat_modified && typeof onMandatUpdate === 'function') {
           onMandatUpdate();
         }
@@ -192,11 +189,10 @@ export default function MandatAIAssistant({ mandat, onMandatUpdate }) {
       };
 
       mediaRecorder.onstop = async () => {
-        // Arrête tous les tracks pour libérer le micro
         stream.getTracks().forEach(t => t.stop());
 
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        if (audioBlob.size < 1000) return; // trop court
+        if (audioBlob.size < 1000) return;
 
         setTranscribing(true);
         try {
@@ -239,6 +235,7 @@ export default function MandatAIAssistant({ mandat, onMandatUpdate }) {
       setRecording(false);
     }
   }
+
   function handleRefresh() {
     if (typeof onMandatUpdate === 'function') onMandatUpdate();
   }
@@ -300,7 +297,7 @@ export default function MandatAIAssistant({ mandat, onMandatUpdate }) {
             </div>
           </div>
 
-          {/* Sous-header avec nom du mandat */}
+          {/* Sous-header */}
           <div className="px-5 py-3 border-b border-stone-100 bg-stone-50">
             <div className="text-xs text-stone-500 mb-0.5">Contexte</div>
             <div className="text-sm font-medium text-stone-800 truncate">{mandat?.nom || 'Mandat'}</div>
@@ -336,7 +333,6 @@ export default function MandatAIAssistant({ mandat, onMandatUpdate }) {
                   }`}
                 >
                   <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
-                  {/* Notif visuelle des champs modifiés */}
                   {msg.role === 'assistant' && msg.modified_fields && msg.modified_fields.length > 0 && (
                     <div className="mt-2 px-2 py-1.5 bg-emerald-50 border border-emerald-200 rounded-md text-xs text-emerald-800 flex items-start gap-1.5">
                       <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-emerald-600" />
@@ -398,7 +394,9 @@ export default function MandatAIAssistant({ mandat, onMandatUpdate }) {
             </div>
           </div>
 
-         <div className="flex gap-2">
+          {/* Zone input avec micro */}
+          <div className="p-4 border-t border-stone-200 bg-white">
+            <div className="flex gap-2">
               <input
                 type="text"
                 value={input}
@@ -431,3 +429,9 @@ export default function MandatAIAssistant({ mandat, onMandatUpdate }) {
                 <Send className="w-4 h-4" />
               </button>
             </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
