@@ -2485,6 +2485,29 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
 
         <OwnerSelector mandat={mandat} reload={reload} />
       </div>
+
+      {/* ═══ STICKY BAR : DOCUMENTS À GÉNÉRER ═══ */}
+      <div className="sticky top-0 z-20 bg-cream-50/95 backdrop-blur-sm border-b border-cream-dark -mx-8 px-8 py-2.5 mb-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] uppercase tracking-wider text-sage-dark font-semibold pr-2 border-r border-cream-dark mr-1">📤 Générer</span>
+          <button className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Plaquette commerciale (à venir)">
+            📄 Plaquette
+          </button>
+          <button onClick={() => setShowAvisValeur(true)} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Avis de valeur PPTX">
+            📊 Avis de valeur
+          </button>
+          <button className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Rapport de commercialisation (à venir)">
+            📑 Rapport
+          </button>
+          <button className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Fiche interne (à venir)">
+            🗂️ Fiche interne
+          </button>
+          <button onClick={() => onOpenEmailDrafts?.(mandat.id)} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Préparer mails personnalisés aux acquéreurs">
+            📧 Préparer mails clients
+          </button>
+        </div>
+      </div>
+
       <div className="space-y-4">
         <div className="col-span-3 space-y-4">
           {/* ═══ ANALYSE FINANCIÈRE — REMONTÉE EN PREMIÈRE POSITION ═══ */}
