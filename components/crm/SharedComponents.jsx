@@ -283,6 +283,17 @@ export function TaskInline({ task, mandats = [], clients = [], allProfiles = [],
       alert('Tâche non trouvée.');
       return;
     }
+    // Cache la tâche immédiatement dans l'UI sans reload
+    if (onUpdate) onUpdate();
+    // Bonus : on dispatch un event global pour que les listes de todos se rafraichissent
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('todos-changed'));
+    }
+  }
+    if (data?.length === 0) {
+      alert('Tâche non trouvée.');
+      return;
+    }
     if (onUpdate) onUpdate();
     // Force le reload après suppression pour rafraîchir la liste des todos
     setTimeout(() => window.location.reload(), 100);
