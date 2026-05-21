@@ -595,15 +595,11 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
     .reduce((sum, m) => sum + (parseFloat(m.honorairesMontant) || 0), 0);
 
   // ─── Tâches par priorité ───
-  // Mes tâches = assignées à moi (user_id OU nom complet) + tâches sans assignée
   const myFullName = profile ? `${profile.prenom || ''} ${profile.nom || ''}`.trim() : '';
   const myTasks = todos.filter(t => {
     if (t.statut === 'Terminé' || t.statut === 'Termine') return false;
-    // Tâches assignées à moi par user_id
     if (t.assignedToUserId === user?.id || t.assigned_to_user_id === user?.id) return true;
-    // Tâches assignées à moi par nom complet (legacy)
     if (myFullName && t.assignee === myFullName) return true;
-    // Tâches sans aucune assignation (m'incluent par défaut)
     if (!t.assignedToUserId && !t.assigned_to_user_id && !t.assignee) return true;
     return false;
   });
@@ -620,6 +616,7 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
     const d = new Date(t.echeance);
     return d >= tomorrow && d <= endOfWeek;
   });
+
   // ─── RDV du jour depuis Outlook ───
   const [todayEvents, setTodayEvents] = useState([]);
   const [outlookConnectedDash, setOutlookConnectedDash] = useState(null);
@@ -670,10 +667,8 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
 
   const mandatsSansPhotos = mandats.filter(m => {
     if (['Perdu', 'Acte'].includes(m.statut)) return false;
-    // Nouveau : on regarde dans medias (photos uniquement)
     const mediasPhotos = Array.isArray(m.medias) ? m.medias.filter(x => x && x.type === 'photo') : [];
     if (mediasPhotos.length > 0) return false;
-    // Fallback legacy : photos
     const legacyPhotos = m.photos;
     if (Array.isArray(legacyPhotos) && legacyPhotos.length > 0) return false;
     return true;
@@ -693,44 +688,44 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
         <p className="text-stone-500 capitalize">{dateLabel}</p>
       </div>
 
-        {/* ═══ 4 KPIs personnalisés ═══ */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
-          <KpiCard
-            label="Mes mandats"
-            value={myMandats.length}
-            icon={Building2}
-            accent="sage"
-            sublabel={`Sur ${mandats.filter(m => !['Perdu', 'Acte', 'Vendu par autres'].includes(m.statut)).length} actifs au total`}
-            onClick={() => onNavigate?.('mandats', { filterMine: true })}
-          />
-          <KpiCard
-            label="Mes tâches du jour"
-            value={myTodayTasks.length}
-            icon={CheckSquare}
-            accent={myTodayTasks.length > 0 ? "amber" : "stone"}
-            sublabel={tasksRetard.length > 0 ? `+ ${tasksRetard.length} en retard` : 'À jour ✓'}
-            onClick={() => onNavigate?.('todos')}
-          />
-          <KpiCard
-            label="Affaires en cours"
-            value={affairesEnCours.length}
-            icon={Handshake}
-            accent="emerald"
-            sublabel="Offre → Acte"
-            onClick={() => onNavigate?.('deals')}
-          />
-          <KpiCard
-            label="Honoraires prévisionnels"
-            value={formatPrixCompact(honorairesPrevisionnels)}
-            icon={Sparkles}
-            accent="sage"
-            sublabel="Promesse signée"
-            isAmount
-            onClick={() => onNavigate?.('deals')}
-          />
-        </div>
-  
-        {/* ═══ Tâches + RDV en grid 2 colonnes ═══ */}
+      {/* ═══ 4 KPIs personnalisés ═══ */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <KpiCard
+          label="Mes mandats"
+          value={myMandats.length}
+          icon={Building2}
+          accent="sage"
+          sublabel={`Sur ${mandats.filter(m => !['Perdu', 'Acte', 'Vendu par autres'].includes(m.statut)).length} actifs au total`}
+          onClick={() => onNavigate?.('mandats', { filterMine: true })}
+        />
+        <KpiCard
+          label="Mes tâches du jour"
+          value={myTodayTasks.length}
+          icon={CheckSquare}
+          accent={myTodayTasks.length > 0 ? "amber" : "stone"}
+          sublabel={tasksRetard.length > 0 ? `+ ${tasksRetard.length} en retard` : 'À jour ✓'}
+          onClick={() => onNavigate?.('todos')}
+        />
+        <KpiCard
+          label="Affaires en cours"
+          value={affairesEnCours.length}
+          icon={Handshake}
+          accent="emerald"
+          sublabel="Offre → Acte"
+          onClick={() => onNavigate?.('deals')}
+        />
+        <KpiCard
+          label="Honoraires prévisionnels"
+          value={formatPrixCompact(honorairesPrevisionnels)}
+          icon={Sparkles}
+          accent="sage"
+          sublabel="Promesse signée"
+          isAmount
+          onClick={() => onNavigate?.('deals')}
+        />
+      </div>
+
+      {/* ═══ Tâches + RDV en grid 2 colonnes ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         
         {/* Colonne GAUCHE : RDV du jour */}
@@ -798,14 +793,14 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
             <CheckSquare className="w-5 h-5 text-sage-dark" />
             À faire aujourd'hui
           </h2>
-  
+
           {tasksRetard.length === 0 && tasksAujourdhui.length === 0 && tasksSemaine.length === 0 && (
             <div className="text-center py-8 text-stone-400">
               <Check className="w-8 h-8 mx-auto mb-2 text-emerald-400" />
               <p className="text-sm">Aucune tâche en attente — bien joué !</p>
             </div>
           )}
-  
+
           {tasksRetard.length > 0 && (
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-2">
@@ -824,6 +819,7 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
               </div>
             </div>
           )}
+
           {tasksAujourdhui.length > 0 && (
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-2">
@@ -837,7 +833,7 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
               </div>
             </div>
           )}
-  
+
           {tasksSemaine.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-2">
@@ -852,6 +848,8 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
             </div>
           )}
         </div>
+
+      </div>
 
       {/* ═══ Alertes intelligentes ═══ */}
       {(mandatsExpirentBientot.length > 0 || mandatsSansDPE.length > 0 || mandatsSansPhotos.length > 0) && (
@@ -916,7 +914,6 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
     </div>
   );
 }
-
 // === MANDATS ===
 function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, interactions, todos, annonces, allProfiles = [], pendingMandatId, onPendingMandatConsumed, onOpenMatching, onOpenEmailDrafts, initialFilterMine }) {
   const { user, profile } = useAuth();
