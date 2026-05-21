@@ -726,10 +726,10 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
       </div>
 
       {/* ═══ Tâches + RDV en grid 2 colonnes ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         
-        {/* Colonne GAUCHE : RDV du jour */}
-        <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
+        {/* Colonne DROITE : RDV du jour (1/3) */}
+        <div className="lg:col-span-1 lg:order-2 bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
           <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
             <Calendar className="w-5 h-5 text-sage-dark" />
             Mes RDV aujourd'hui
@@ -787,8 +787,8 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
           )}
         </div>
 
-        {/* Colonne DROITE : Tâches */}
-        <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
+        {/* Colonne GAUCHE : Tâches (2/3) */}
+        <div className="lg:col-span-2 lg:order-1 bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
           <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
             <CheckSquare className="w-5 h-5 text-sage-dark" />
             À faire aujourd'hui
