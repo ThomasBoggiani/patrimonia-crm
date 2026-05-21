@@ -51,21 +51,7 @@ export default function MyProfile({ mandats = [], todos = [], clients = [], allP
       )}
 
       {tab === 'signature' && (
-        <div className="bg-white rounded-xl border border-cream-dark p-6">
-          <h2 className="font-display text-xl font-semibold text-ink mb-2">Ma signature email</h2>
-          <p className="text-sm text-ink/60 mb-4">
-            Aperçu et copie de ta signature email avec ton lien questionnaire personnel.
-          </p>
-          <a
-            href="/signature"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink"
-          >
-            <ExternalLink className="w-4 h-4" />
-            Ouvrir ma signature
-          </a>
-        </div>
+        <EmailSignatureEditor profile={profile} onSaved={refreshProfile} />
       )}
     </div>
   );
@@ -395,6 +381,134 @@ function Field({ label, icon: Icon, required, className = '', children }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────
+// EmailSignatureEditor — éditeur HTML enrichi de signature
+// ─────────────────────────────────────────────────────────
+function EmailSignatureEditor({ profile, onSaved }) {
+  const [signature, setSignature] = useState(profile.email_signature || '');
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState(null);
+  const [error, setError] = useState(null);
+  const [mode, setMode] = useState('preview'); // 'preview' | 'edit-html'
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ email_signature: signature })
+        .eq('id', profile.id);
+      if (updateError) throw updateError;
+      setSavedAt(Date.now());
+      onSaved?.();
+      setTimeout(() => setSavedAt(null), 2500);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Template suggéré pour aider à démarrer
+  const insertTemplate = () => {
+    const template = `<p><strong>${profile.prenom || 'Prénom'} ${profile.nom || 'Nom'}</strong><br>
+${profile.fonction || 'Fonction'}<br>
+<em>Immeubles & Patrimoine</em></p>
+<p>📞 ${profile.telephone || '06 00 00 00 00'}<br>
+✉️ <a href="mailto:${profile.email || 'email@example.com'}">${profile.email || 'email@example.com'}</a><br>
+🌐 <a href="https://www.immeubles-patrimoine.fr">www.immeubles-patrimoine.fr</a></p>`;
+    setSignature(template);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl border border-cream-dark p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h2 className="font-display text-xl font-semibold text-ink mb-1">Ma signature email</h2>
+            <p className="text-sm text-ink/60">
+              Cette signature sera ajoutée automatiquement à la fin des emails créés via "Créer avec l'IA".
+            </p>
+          </div>
+        </div>
+
+        {/* Toggle Aperçu / HTML */}
+        <div className="flex gap-1 mb-3">
+          <button
+            onClick={() => setMode('preview')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium ${mode === 'preview' ? 'bg-ink text-white' : 'bg-white border border-cream-dark text-ink hover:bg-cream-50'}`}
+          >
+            👁️ Aperçu
+          </button>
+          <button
+            onClick={() => setMode('edit-html')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium ${mode === 'edit-html' ? 'bg-ink text-white' : 'bg-white border border-cream-dark text-ink hover:bg-cream-50'}`}
+          >
+            {'</>'} Code HTML
+          </button>
+          {!signature && (
+            <button
+              onClick={insertTemplate}
+              className="ml-auto px-3 py-1.5 rounded-lg text-xs font-medium bg-sage-50 text-sage-darker border border-sage-light hover:bg-sage-100"
+            >
+              ✨ Insérer un modèle
+            </button>
+          )}
+        </div>
+
+        {/* Mode Aperçu */}
+        {mode === 'preview' && (
+          <div className="border border-cream-dark rounded-lg p-4 bg-cream-50 min-h-[150px]">
+            {signature ? (
+              <div dangerouslySetInnerHTML={{ __html: signature }} />
+            ) : (
+              <div className="text-stone-400 text-sm italic">
+                Aucune signature configurée. Clique sur "Code HTML" pour la créer, ou sur "Insérer un modèle" pour partir d'une base.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Mode édition HTML */}
+        {mode === 'edit-html' && (
+          <>
+            <textarea
+              value={signature}
+              onChange={e => setSignature(e.target.value)}
+              rows={12}
+              placeholder='<p><strong>Thomas Boggiani</strong><br>Directeur du développement</p>...'
+              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm font-mono focus:outline-none focus:border-sage"
+            />
+            <div className="mt-2 text-xs text-ink/60">
+              💡 Tu peux utiliser du HTML : <code className="bg-cream-100 px-1 rounded">&lt;strong&gt;</code>, <code className="bg-cream-100 px-1 rounded">&lt;em&gt;</code>, <code className="bg-cream-100 px-1 rounded">&lt;br&gt;</code>, <code className="bg-cream-100 px-1 rounded">&lt;a href="..."&gt;</code>, <code className="bg-cream-100 px-1 rounded">&lt;p&gt;</code>, etc.
+            </div>
+          </>
+        )}
+
+        {error && (
+          <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+            {error}
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-3 pt-4 mt-4 border-t border-cream-dark">
+          {savedAt && (
+            <span className="text-xs text-sage-dark">✓ Signature enregistrée</span>
+          )}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 px-5 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Enregistrer la signature
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 function Shortcuts({ profile, mandats, todos, clients, onNavigate }) {
   const myMandats = mandats.filter(m => m.pourvoyeurId === profile.id || m.vendeurId === profile.id);
   const myTodos = todos.filter(t => t.assigned_to_user_id === profile.id);
