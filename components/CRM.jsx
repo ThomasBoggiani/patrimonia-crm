@@ -35,7 +35,7 @@ import NotificationBell from './NotificationBell';
 import PhotoUploader from './PhotoUploader';
 import IntegrationsTab from './IntegrationsTab';
 import ClientEmails from './ClientEmails'; 
-import ClientAIAssistant from './ClientAIAssistant'; 
+import ClientAnalysisPanel from './ClientAnalysisPanel';
 import InboxTab from './InboxTab'; 
 import QuestionnaireResponseModal from './QuestionnaireResponseModal'; 
 import ClientMatches from './ClientMatches';
@@ -3264,7 +3264,7 @@ function ClientDetail({ client, onBack, onEdit, mandats, deals, interactions, re
       )}
 
       {/* ═══ ASSISTANT IA CLIENT ═══ */}
-      <ClientAIAssistant client={client} />
+      <ClientAnalysisPanel client={client} />
     </div>
   );
 }
