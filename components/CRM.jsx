@@ -458,6 +458,7 @@ export default function CRM() {
             {activeTab === 'direction' && <DashboardDirection mandats={mandats} deals={deals} clients={clients} todos={todos} allProfiles={allProfiles} />}
             {activeTab === 'myprofile' && <MyProfile mandats={mandats} todos={todos} clients={clients} allProfiles={allProfiles} RemunerationComponent={RemunerationTab} onNavigate={(t) => { setActiveTabWithHistory(t); setTabKey(k => k + 1); }} />}
             {activeTab === 'integrations' && <IntegrationsTab />}
+            {activeTab === 'agenda' && <AgendaTab />}
             {activeTab === 'team' && <TeamTab />}
             {activeTab === 'annonces' && <AnnoncesTab annonces={annonces} reload={loadAll} mandats={mandats} />}
             {activeTab === 'questionnaires' && <QuestionnairesTab questionnaires={questionnaires} reload={loadAll} />}
