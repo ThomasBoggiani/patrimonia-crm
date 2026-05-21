@@ -3237,7 +3237,7 @@ function ClientDetail({ client, onBack, onEdit, mandats, deals, interactions, re
       )}
 
       {/* ═══ EMAILS ═══ */}
-      <ClientEmails client={client} reload={reload} />
+      {/* <ClientEmails client={client} reload={reload} /> */}
 
       {/* ═══ INTERACTIONS ═══ */}
       {clientInteractions.length > 0 && (
