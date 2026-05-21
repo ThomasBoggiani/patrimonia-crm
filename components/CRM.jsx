@@ -21,7 +21,6 @@ import { computeRendementsAuto, totalLoyerMensuel, totalLoyerMensuelOptimise, to
 import { getPriceTTC, getPriceNV, isNVEstimated, getCommission, isCommissionEstimated } from '@/lib/priceDisplay';
 import AICreateModal from './AICreateModal';
 import MarkAsSoldModal from './MarkAsSoldModal';
-import VoiceNoteModal from './VoiceNoteModal';
 import CascadeSelectMulti from './CascadeSelectMulti';
 import MandatAIAssistant from './MandatAIAssistant';
 import DocumentsModal from './DocumentsModal';
