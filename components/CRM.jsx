@@ -730,8 +730,70 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
           />
         </div>
   
-        {/* ═══ Tâches par priorité ═══ */}
-        <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-6">
+        {/* ═══ Tâches + RDV en grid 2 colonnes ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        
+        {/* Colonne GAUCHE : RDV du jour */}
+        <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
+          <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-sage-dark" />
+            Mes RDV aujourd'hui
+            {todayEvents.length > 0 && (
+              <span className="text-xs text-stone-500 font-normal">({todayEvents.length})</span>
+            )}
+          </h2>
+
+          {outlookConnectedDash === false && (
+            <div className="text-center py-6 text-stone-400">
+              <Calendar className="w-8 h-8 mx-auto mb-2 text-stone-300" />
+              <p className="text-sm">Outlook non connecté</p>
+              <button onClick={() => onNavigate?.('integrations')} className="text-xs text-sage-dark hover:underline mt-1">
+                Connecter dans Intégrations
+              </button>
+            </div>
+          )}
+
+          {outlookConnectedDash === true && todayEvents.length === 0 && (
+            <div className="text-center py-8 text-stone-400">
+              <Calendar className="w-8 h-8 mx-auto mb-2 text-emerald-400" />
+              <p className="text-sm">Aucun RDV aujourd'hui</p>
+            </div>
+          )}
+
+          {todayEvents.length > 0 && (
+            <div className="space-y-2">
+              {todayEvents.map(ev => {
+                const start = new Date(ev.start.dateTime);
+                const end = new Date(ev.end.dateTime);
+                const heureDeb = start.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', hour12: false });
+                const heureFin = end.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', hour12: false });
+                return (
+                  <div key={ev.id} className="flex items-start gap-3 p-2.5 bg-sage-50/40 border border-sage-light/50 rounded-lg">
+                    <div className="text-xs font-medium text-sage-darker font-mono whitespace-nowrap pt-0.5">
+                      {heureDeb}
+                      <div className="text-stone-400 text-[10px]">{heureFin}</div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-stone-900 truncate">{ev.subject || '(Sans titre)'}</div>
+                      {ev.location?.displayName && (
+                        <div className="text-[11px] text-stone-500 truncate">📍 {ev.location.displayName}</div>
+                      )}
+                      {ev.attendees && ev.attendees.length > 0 && (
+                        <div className="text-[11px] text-stone-500 truncate">
+                          👥 {ev.attendees.slice(0, 2).map(a => a.emailAddress?.name || a.emailAddress?.address).join(', ')}
+                          {ev.attendees.length > 2 && ` +${ev.attendees.length - 2}`}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Colonne DROITE : Tâches */}
+        <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
           <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
             <CheckSquare className="w-5 h-5 text-sage-dark" />
             À faire aujourd'hui
