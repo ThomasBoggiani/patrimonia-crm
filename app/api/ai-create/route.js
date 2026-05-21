@@ -48,6 +48,7 @@ Tu reçois du contenu (texte, document, transcription vocale) et tu dois :
    - "event" : un RDV / rendez-vous / visite avec date et heure ("RDV demain 14h", "visite jeudi 10h")
    - "email" : un brouillon d'email à rédiger ("rédige un mail à", "réponds à")
    - "note" : une note libre / observation à enregistrer ("note importante", "info à retenir")
+   - "send_plaquette" : envoyer la plaquette d'un mandat à un ou plusieurs destinataires ("Envoie la plaquette X à Y", "Fais suivre la plaquette du mandat Z à...")
    - "unknown" : impossible à déterminer
 
 2. EXTRAIRE les données pour l'intention détectée.
@@ -201,6 +202,23 @@ FORMAT note (note libre / observation)
   "lien_hint": "nom du mandat/client si évoqué"
 }
 
+═══════════════════════════════════════════════════════════════════
+FORMAT send_plaquette (envoi plaquette à un ou plusieurs destinataires)
+═══════════════════════════════════════════════════════════════════
+
+{
+  "mandat_hint": "Versailles" ou "9 rue Hoche" ou "immeuble Versailles",
+  "destinataires": [
+    { "email": "marie.dupont@example.com", "prenom": "Marie", "nom": "Dupont" },
+    { "email": "philippe@example.com", "prenom": "Philippe" }
+  ]
+}
+
+Règles pour send_plaquette :
+- mandat_hint = morceau du nom/adresse/ville permettant de retrouver le mandat
+- destinataires : liste, on accepte 1 ou plusieurs
+- email est OBLIGATOIRE pour chaque destinataire
+- prenom et nom sont optionnels (on les met si évoqués)
 ═══════════════════════════════════════════════════════════════════
 COMMENT EXTRAIRE UN CLIENT (rappel)
 ═══════════════════════════════════════════════════════════════════
@@ -365,7 +383,7 @@ export async function POST(request) {
 
     const { parsed, usage } = await callGPT(userContent);
 
-    if (forceType && ['mandat', 'client', 'both', 'task', 'event', 'email', 'note'].includes(forceType)) {
+    if (forceType && ['mandat', 'client', 'both', 'task', 'event', 'email', 'note', 'send_plaquette'].includes(forceType)) {
       parsed.type = forceType;
     }
 
@@ -396,6 +414,17 @@ export async function POST(request) {
       }
     }
 
+    // Pour send_plaquette : résoudre le mandat évoqué via mandat_hint
+    let plaquette_mandat = null;
+    if (parsed.type === 'send_plaquette' && parsed.send_plaquette?.mandat_hint) {
+      const hint = parsed.send_plaquette.mandat_hint.toLowerCase();
+      const { data: mandats } = await supabaseAdmin
+        .from('mandats')
+        .select('id, nom, adresse, ville, prix, surface')
+        .or(`nom.ilike.%${hint}%,adresse.ilike.%${hint}%,ville.ilike.%${hint}%`)
+        .limit(5);
+      plaquette_mandat = mandats || [];
+    }
     return new Response(JSON.stringify({
       ok: true,
       type: parsed.type,
@@ -407,6 +436,8 @@ export async function POST(request) {
       event: parsed.event || null,
       email: parsed.email || null,
       note: parsed.note || null,
+      send_plaquette: parsed.send_plaquette || null,
+      plaquette_mandat,
       duplicates,
       link_suggestions: linkSuggestions,
       usage,
