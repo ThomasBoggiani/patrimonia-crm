@@ -3206,14 +3206,9 @@ function ClientDetail({ client, onBack, onEdit, mandats, deals, interactions, re
       )}
 
       {/* ═══ MATCHING MANDATS ═══ */}
-      {false && ( 
-        <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
-          <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-sage-dark" /> Mandats correspondants ({matches.length})
-          </h2>
-          <ClientMatches client={client} mandats={mandats} interactions={interactions} onOpenMandat={onOpenMandat} reload={reload} />
-        </div>
-      )}
+<div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
+  <ClientMatches client={client} mandats={mandats} interactions={interactions} onOpenMandat={onOpenMandat} reload={reload} />
+</div>
 
       {/* ═══ DEALS ═══ */}
       {clientDeals.length > 0 && (
