@@ -3260,7 +3260,7 @@ function ClientDetail({ client, onBack, onEdit, mandats, deals, interactions, re
       )}
 
       {/* ═══ ASSISTANT IA CLIENT ═══ */}
-      <ClientAnalysisPanel client={client} />
+      {/* <ClientAnalysisPanel client={client} /> */}
     </div>
   );
 }
