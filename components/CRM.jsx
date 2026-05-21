@@ -620,6 +620,38 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
     const d = new Date(t.echeance);
     return d >= tomorrow && d <= endOfWeek;
   });
+  // ─── RDV du jour depuis Outlook ───
+  const [todayEvents, setTodayEvents] = useState([]);
+  const [outlookConnectedDash, setOutlookConnectedDash] = useState(null);
+
+  useEffect(() => {
+    if (!user) return;
+    async function loadTodayEvents() {
+      try {
+        const startOfDay = new Date(today);
+        const endOfDay = new Date(today);
+        endOfDay.setHours(23, 59, 59);
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(
+          `/api/microsoft/events?start=${startOfDay.toISOString()}&end=${endOfDay.toISOString()}`,
+          { headers: { 'Authorization': `Bearer ${session.access_token}` } }
+        );
+        if (!res.ok) {
+          const err = await res.json();
+          if (err.code === 'NOT_CONNECTED') {
+            setOutlookConnectedDash(false);
+          }
+          return;
+        }
+        const { events } = await res.json();
+        setTodayEvents(events || []);
+        setOutlookConnectedDash(true);
+      } catch (e) {
+        console.warn('[Dashboard] Échec chargement RDV jour:', e.message);
+      }
+    }
+    loadTodayEvents();
+  }, [user]);
 
   // ─── Alertes intelligentes ───
   const mandatsExpirentBientot = mandats.filter(m => {
@@ -661,117 +693,103 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
         <p className="text-stone-500 capitalize">{dateLabel}</p>
       </div>
 
-      {/* ═══ 4 KPIs personnalisés ═══ */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <KpiCard
-          label="Mes mandats"
-          value={myMandats.length}
-          icon={Building2}
-          accent="sage"
-          sublabel={`Sur ${mandats.filter(m => !['Perdu', 'Acte', 'Vendu par autres'].includes(m.statut)).length} actifs au total`}
-          onClick={() => onNavigate?.('mandats', { filterMine: true })}
-        />
-        <KpiCard
-          label="Mes tâches du jour"
-          value={myTodayTasks.length}
-          icon={CheckSquare}
-          accent={myTodayTasks.length > 0 ? "amber" : "stone"}
-          sublabel={tasksRetard.length > 0 ? `+ ${tasksRetard.length} en retard` : 'À jour ✓'}
-          onClick={() => onNavigate?.('todos')}
-        />
-        <KpiCard
-          label="Affaires en cours"
-          value={affairesEnCours.length}
-          icon={Handshake}
-          accent="emerald"
-          sublabel="Offre → Acte"
-          onClick={() => onNavigate?.('deals')}
-        />
-        <KpiCard
-          label="Honoraires prévisionnels"
-          value={formatPrixCompact(honorairesPrevisionnels)}
-          icon={Sparkles}
-          accent="sage"
-          sublabel="Promesse signée"
-          isAmount
-          onClick={() => onNavigate?.('deals')}
-        />
-      </div>
-
-      {/* ═══ Tâches par priorité ═══ */}
-      <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-6">
-        <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
-          <CheckSquare className="w-5 h-5 text-sage-dark" />
-          À faire aujourd'hui
-        </h2>
-
-        {tasksRetard.length === 0 && tasksAujourdhui.length === 0 && tasksSemaine.length === 0 && (
-          <div className="text-center py-8 text-stone-400">
-            <Check className="w-8 h-8 mx-auto mb-2 text-emerald-400" />
-            <p className="text-sm">Aucune tâche en attente — bien joué !</p>
-          </div>
-        )}
-
-        {tasksRetard.length > 0 && (
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 rounded-full bg-red-500" />
-              <h3 className="text-sm font-semibold text-red-700">En retard ({tasksRetard.length})</h3>
+        {/* ═══ 4 KPIs personnalisés ═══ */}
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          <KpiCard
+            label="Mes mandats"
+            value={myMandats.length}
+            icon={Building2}
+            accent="sage"
+            sublabel={`Sur ${mandats.filter(m => !['Perdu', 'Acte', 'Vendu par autres'].includes(m.statut)).length} actifs au total`}
+            onClick={() => onNavigate?.('mandats', { filterMine: true })}
+          />
+          <KpiCard
+            label="Mes tâches du jour"
+            value={myTodayTasks.length}
+            icon={CheckSquare}
+            accent={myTodayTasks.length > 0 ? "amber" : "stone"}
+            sublabel={tasksRetard.length > 0 ? `+ ${tasksRetard.length} en retard` : 'À jour ✓'}
+            onClick={() => onNavigate?.('todos')}
+          />
+          <KpiCard
+            label="Affaires en cours"
+            value={affairesEnCours.length}
+            icon={Handshake}
+            accent="emerald"
+            sublabel="Offre → Acte"
+            onClick={() => onNavigate?.('deals')}
+          />
+          <KpiCard
+            label="Honoraires prévisionnels"
+            value={formatPrixCompact(honorairesPrevisionnels)}
+            icon={Sparkles}
+            accent="sage"
+            sublabel="Promesse signée"
+            isAmount
+            onClick={() => onNavigate?.('deals')}
+          />
+        </div>
+  
+        {/* ═══ Tâches par priorité ═══ */}
+        <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-6">
+          <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
+            <CheckSquare className="w-5 h-5 text-sage-dark" />
+            À faire aujourd'hui
+          </h2>
+  
+          {tasksRetard.length === 0 && tasksAujourdhui.length === 0 && tasksSemaine.length === 0 && (
+            <div className="text-center py-8 text-stone-400">
+              <Check className="w-8 h-8 mx-auto mb-2 text-emerald-400" />
+              <p className="text-sm">Aucune tâche en attente — bien joué !</p>
             </div>
-            <div className="space-y-1.5">
-              {tasksRetard.slice(0, 5).map(t => (
-                <TaskInline key={t.id} task={t} mandats={mandats} clients={clients} onUpdate={() => window.location.reload()} />
-              ))}
+          )}
+  
+          {tasksRetard.length > 0 && (
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-2 h-2 rounded-full bg-red-500" />
+                <h3 className="text-sm font-semibold text-red-700">En retard ({tasksRetard.length})</h3>
+              </div>
+              <div className="space-y-1.5">
+                {tasksRetard.slice(0, 10).map(t => (
+                  <TaskRow key={t.id} task={t} mandats={mandats} variant="late" />
+                ))}
+                {tasksRetard.length > 10 && (
+                  <div className="text-xs text-stone-500 italic px-2.5 pt-1">
+                    + {tasksRetard.length - 10} autres tâches en retard...
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
-
-        {tasksRetard.length > 0 && (
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 rounded-full bg-red-500" />
-              <h3 className="text-sm font-semibold text-red-700">En retard ({tasksRetard.length})</h3>
+          )}
+          {tasksAujourdhui.length > 0 && (
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-2 h-2 rounded-full bg-amber-500" />
+                <h3 className="text-sm font-semibold text-amber-700">Aujourd'hui ({tasksAujourdhui.length})</h3>
+              </div>
+              <div className="space-y-1.5">
+                {tasksAujourdhui.slice(0, 5).map(t => (
+                  <TaskRow key={t.id} task={t} mandats={mandats} variant="today" />
+                ))}
+              </div>
             </div>
-            <div className="space-y-1.5">
-              {tasksRetard.slice(0, 10).map(t => (
-                <TaskRow key={t.id} task={t} mandats={mandats} variant="late" />
-              ))}
-              {tasksRetard.length > 10 && (
-                <div className="text-xs text-stone-500 italic px-2.5 pt-1">
-                  + {tasksRetard.length - 10} autres tâches en retard...
-                </div>
-              )}
+          )}
+  
+          {tasksSemaine.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-2 h-2 rounded-full bg-sage-dark" />
+                <h3 className="text-sm font-semibold text-sage-darker">Cette semaine ({tasksSemaine.length})</h3>
+              </div>
+              <div className="space-y-1.5">
+                {tasksSemaine.slice(0, 5).map(t => (
+                  <TaskRow key={t.id} task={t} mandats={mandats} variant="week" />
+                ))}
+              </div>
             </div>
-          </div>
-        )}
-        {tasksAujourdhui.length > 0 && (
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 rounded-full bg-amber-500" />
-              <h3 className="text-sm font-semibold text-amber-700">Aujourd'hui ({tasksAujourdhui.length})</h3>
-            </div>
-            <div className="space-y-1.5">
-              {tasksAujourdhui.slice(0, 5).map(t => (
-                <TaskRow key={t.id} task={t} mandats={mandats} variant="today" />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {tasksSemaine.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 rounded-full bg-sage-dark" />
-              <h3 className="text-sm font-semibold text-sage-darker">Cette semaine ({tasksSemaine.length})</h3>
-            </div>
-            <div className="space-y-1.5">
-              {tasksSemaine.slice(0, 5).map(t => (
-                <TaskRow key={t.id} task={t} mandats={mandats} variant="week" />
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
 
       {/* ═══ Alertes intelligentes ═══ */}
       {(mandatsExpirentBientot.length > 0 || mandatsSansDPE.length > 0 || mandatsSansPhotos.length > 0) && (
