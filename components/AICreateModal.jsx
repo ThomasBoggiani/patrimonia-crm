@@ -1,12 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════
-// components/AICreateModal.jsx — v2.0
+// components/AICreateModal.jsx — v2.1
 // Modal universel : Fichiers + Texte + Voix → 6 intentions
 // Intentions : mandat | client | both | task | event | email | note
 // ═══════════════════════════════════════════════════════════════════
 
 'use client';
 import { useState, useRef } from 'react';
-import { X, Sparkles, FileText, Mic, MicOff, Upload, Loader2, Check, AlertCircle, Building2, User as UserIcon, GitMerge, CheckSquare, Calendar, Mail, StickyNote } from 'lucide-react';
+import { X, Sparkles, FileText, Mic, MicOff, Upload, Loader2, Check, AlertCircle, Building2, User as UserIcon, GitMerge, CheckSquare, Calendar, Mail, StickyNote, Send } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, getCurrentUserInitials } from '@/lib/auth';
 import MergeMandatsModal from './MergeMandatsModal';
@@ -74,6 +74,7 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
   const [creating, setCreating] = useState(false);
   const [forcedType, setForcedType] = useState(null);
   const [mergeWith, setMergeWith] = useState(null);
+  const [showEmailEditor, setShowEmailEditor] = useState(false);
   const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -184,6 +185,13 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
 
   async function handleCreate() {
     if (!result) return;
+
+    // Pour email, on ouvre la modal de validation au lieu de créer directement
+    if (result.type === 'email' && result.email) {
+      setShowEmailEditor(true);
+      return;
+    }
+
     setCreating(true);
 
     try {
@@ -269,8 +277,6 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
           const token = session?.access_token;
           if (!token) throw new Error('Session expirée');
 
-          // Convertir les participants (noms) en emails si possible
-          // Pour l'instant on prend ce que l'IA donne (peut être noms ou emails)
           const participantsList = Array.isArray(result.event.participants)
             ? result.event.participants.filter(p => p && p.includes('@'))
             : [];
@@ -303,16 +309,10 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
             }
           } else {
             created.event = data.event;
-            // On ne fait pas de dispatch global, l'agenda se rechargera au prochain affichage
           }
         } catch (e) {
           alert('Erreur RDV : ' + e.message);
         }
-      }
-
-      // ─── EMAIL (placeholder) ───
-      if (result.type === 'email' && result.email) {
-        alert('La rédaction d\'email arrivera dans la prochaine session.\n\nVoici le brouillon proposé par l\'IA :\n\nObjet : ' + (result.email.objet || '') + '\n\n' + (result.email.corps || ''));
       }
 
       // ─── NOTE (placeholder) ───
@@ -375,7 +375,7 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
 
   const detectedType = forcedType || result?.type || 'unknown';
   const TypeIcon = TYPE_LABELS[detectedType]?.icon || AlertCircle;
-  const isImplemented = ['mandat', 'client', 'both', 'task', 'event'].includes(detectedType);
+  const isImplemented = ['mandat', 'client', 'both', 'task', 'event', 'email'].includes(detectedType);
 
   return (
     <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-6" onClick={onClose}>
@@ -415,6 +415,7 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
 - Un acheteur : « Mme Dupont cherche un T3 Paris 8e budget 1M€ »
 - Une tâche : « Rappelle-moi vendredi d'appeler Philippe »
 - Un RDV : « Visite immeuble Versailles jeudi 14h avec Judith »
+- Un email : « Rédige un mail à Philippe pour faire le point sur le mandat »
 - Une note : « Note : le DPE doit être refait avant commercialisation »"
                     className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-sage-dark"
                   />
@@ -541,8 +542,8 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
             {detectedType === 'email' && result.email && (
               <>
                 <PreviewBlock title="✉️ Email à rédiger" data={result.email} />
-                <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
-                  ⚠️ Envoi d'email arrive prochainement. Pour l'instant : copie le brouillon manuellement.
+                <div className="mb-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900">
+                  💡 Tu pourras relire et modifier l'email avant de l'envoyer.
                 </div>
               </>
             )}
@@ -578,7 +579,7 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
               <button onClick={() => setResult(null)} className="px-4 py-2 text-sm text-stone-700 hover:bg-stone-100 rounded-lg">← Retour</button>
               <button onClick={handleCreate} disabled={creating || detectedType === 'unknown'} className="flex items-center gap-2 px-4 py-2 bg-stone-900 text-white rounded-lg hover:bg-stone-800 disabled:opacity-50 text-sm">
                 {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                {creating ? 'Création...' : isImplemented ? 'Créer ' + (TYPE_LABELS[detectedType]?.label || detectedType) : 'Aperçu (pas encore créable)'}
+                {creating ? 'Création...' : isImplemented ? (detectedType === 'email' ? 'Préparer l\'email →' : 'Créer ' + (TYPE_LABELS[detectedType]?.label || detectedType)) : 'Aperçu (pas encore créable)'}
               </button>
             </div>
           </div>
@@ -593,6 +594,20 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
           onMerged={(mandatId, updates) => {
             setMergeWith(null);
             if (onCreated) onCreated({ mandat: { id: mandatId, ...updates }, client: null, merged: true });
+            reset();
+            onClose();
+          }}
+        />
+      )}
+
+      {showEmailEditor && result?.email && (
+        <EmailEditorModal
+          initialEmail={result.email}
+          linkSuggestions={result.link_suggestions?.suggestions || []}
+          onClose={() => setShowEmailEditor(false)}
+          onSent={() => {
+            setShowEmailEditor(false);
+            if (onCreated) onCreated({ email: result.email });
             reset();
             onClose();
           }}
@@ -672,6 +687,165 @@ function PreviewBlock({ title, data, duplicates, duplicateType, onMerge }) {
             </span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EmailEditorModal — éditeur + envoi via /api/microsoft/emails
+// ═══════════════════════════════════════════════════════════════
+function EmailEditorModal({ initialEmail, linkSuggestions = [], onClose, onSent }) {
+  // Résoudre le destinataire : si l'IA a donné un email valide, on le prend
+  // Sinon, on regarde dans les link_suggestions pour trouver un email
+  const findInitialDestinataire = () => {
+    const dest = initialEmail.destinataire || '';
+    if (dest.includes('@')) return dest;
+    // Sinon, prendre le premier client suggéré qui a un email
+    const clientWithEmail = linkSuggestions.find(s => s.email);
+    return clientWithEmail?.email || '';
+  };
+
+  const [destinataire, setDestinataire] = useState(findInitialDestinataire());
+  const [objet, setObjet] = useState(initialEmail.objet || '');
+  const [corps, setCorps] = useState(initialEmail.corps || '');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Détection client lié (pour journaliser l'interaction)
+  const linkedClient = linkSuggestions.find(s => s.email && s.email.toLowerCase() === destinataire.toLowerCase()) ||
+                       linkSuggestions.find(s => s.prenom || s.nom);
+
+  async function handleSend() {
+    if (!destinataire.trim() || !destinataire.includes('@')) {
+      alert('Destinataire invalide. Saisis une adresse email valide.');
+      return;
+    }
+    if (!objet.trim()) {
+      alert('Objet requis.');
+      return;
+    }
+    if (!corps.trim()) {
+      alert('Corps du mail vide.');
+      return;
+    }
+
+    if (!confirm(`Envoyer cet email à ${destinataire} ?\n\nUne fois envoyé, il ne pourra pas être annulé.`)) return;
+
+    setSending(true);
+    setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Session expirée');
+
+      // Convertir le corps en HTML simple (préserver les retours à la ligne)
+      const htmlContent = corps
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>');
+
+      const body = {
+        to: destinataire,
+        subject: objet,
+        content: htmlContent,
+      };
+      if (linkedClient?.id) body.clientId = linkedClient.id;
+
+      const res = await fetch('/api/microsoft/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.code === 'NOT_CONNECTED') {
+          throw new Error('Microsoft Outlook n\'est pas connecté. Va dans Paramètres → Intégrations.');
+        }
+        throw new Error(data.error || 'Erreur d\'envoi');
+      }
+      onSent();
+    } catch (e) {
+      setError(e.message);
+    }
+    setSending(false);
+  }
+
+  return (
+    <div className="fixed inset-0 bg-stone-900/70 flex items-center justify-center z-[60] p-6" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-luxe-hover max-w-2xl w-full max-h-[92vh] overflow-y-auto scrollbar-thin" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-6 border-b border-stone-200 sticky top-0 bg-white z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-100 to-cyan-200 flex items-center justify-center">
+              <Mail className="w-5 h-5 text-cyan-700" />
+            </div>
+            <div>
+              <h2 className="font-display text-xl font-semibold text-stone-900">Relire et envoyer</h2>
+              <p className="text-xs text-stone-500">Vérifie le contenu avant l'envoi via Outlook</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-stone-500 hover:text-stone-900"><X className="w-5 h-5" /></button>
+        </div>
+
+        {error && (
+          <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /><div>{error}</div>
+          </div>
+        )}
+
+        <div className="p-6 space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 mb-1.5">À :</label>
+            <input
+              type="email"
+              value={destinataire}
+              onChange={e => setDestinataire(e.target.value)}
+              placeholder="email@example.com"
+              className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-sage-dark"
+            />
+            {linkedClient && (
+              <div className="text-[11px] text-sage-darker mt-1">
+                💡 Lié au client : {linkedClient.prenom} {linkedClient.nom}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 mb-1.5">Objet :</label>
+            <input
+              type="text"
+              value={objet}
+              onChange={e => setObjet(e.target.value)}
+              className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-sage-dark"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 mb-1.5">Corps du mail :</label>
+            <textarea
+              value={corps}
+              onChange={e => setCorps(e.target.value)}
+              rows={12}
+              className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-sage-dark font-mono"
+            />
+          </div>
+
+          <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
+            ⚠️ Cet email sera envoyé immédiatement via ton compte Outlook. Tu ne pourras pas le rappeler.
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-stone-200 bg-stone-50">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-stone-700 hover:bg-stone-200 rounded-lg">Annuler</button>
+          <button onClick={handleSend} disabled={sending} className="flex items-center gap-2 px-4 py-2 bg-stone-900 text-white rounded-lg hover:bg-stone-800 disabled:opacity-50 text-sm">
+            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            {sending ? 'Envoi en cours...' : 'Envoyer'}
+          </button>
+        </div>
       </div>
     </div>
   );
