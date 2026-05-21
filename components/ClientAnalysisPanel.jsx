@@ -24,6 +24,11 @@ const PRIORITE_COLORS = {
 };
 
 export default function ClientAnalysisPanel({ client }) {
+  // Garde de sortie si client pas encore prêt
+  if (!client || !client.id) {
+    return null;
+  }
+  
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
