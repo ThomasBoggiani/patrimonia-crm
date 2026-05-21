@@ -696,19 +696,25 @@ function PreviewBlock({ title, data, duplicates, duplicateType, onMerge }) {
 // EmailEditorModal — éditeur + envoi via /api/microsoft/emails
 // ═══════════════════════════════════════════════════════════════
 function EmailEditorModal({ initialEmail, linkSuggestions = [], onClose, onSent }) {
+  const { profile } = useAuth();
+
   // Résoudre le destinataire : si l'IA a donné un email valide, on le prend
-  // Sinon, on regarde dans les link_suggestions pour trouver un email
   const findInitialDestinataire = () => {
     const dest = initialEmail.destinataire || '';
     if (dest.includes('@')) return dest;
-    // Sinon, prendre le premier client suggéré qui a un email
     const clientWithEmail = linkSuggestions.find(s => s.email);
     return clientWithEmail?.email || '';
   };
 
   const [destinataire, setDestinataire] = useState(findInitialDestinataire());
   const [objet, setObjet] = useState(initialEmail.objet || '');
-  const [corps, setCorps] = useState(initialEmail.corps || '');
+  // Corps : on ajoute automatiquement la signature à la fin
+  const [corps, setCorps] = useState(() => {
+    const baseCorps = initialEmail.corps || '';
+    const signature = profile?.email_signature || '';
+    if (!signature) return baseCorps;
+    return baseCorps + '\n\n--\n' + signature;
+  });
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
 
