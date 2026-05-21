@@ -79,7 +79,7 @@ FORMAT DE RÉPONSE (JSON STRICT, pas de markdown)
 ═══════════════════════════════════════════════════════════════════
 
 {
-  "type": "mandat|client|both|task|event|email|note|unknown",
+  "type": "mandat|client|both|task|event|email|note|send_plaquette|unknown",
   "confidence": 0.95,
   "reasoning": "Description courte de ce que tu as détecté",
   "mandat": { /* si type=mandat ou both */ },
@@ -87,7 +87,8 @@ FORMAT DE RÉPONSE (JSON STRICT, pas de markdown)
   "task": { /* si type=task */ },
   "event": { /* si type=event */ },
   "email": { /* si type=email */ },
-  "note": { /* si type=note */ }
+  "note": { /* si type=note */ },
+  "send_plaquette": { /* si type=send_plaquette */ }
 }
 
 ═══════════════════════════════════════════════════════════════════
