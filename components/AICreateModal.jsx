@@ -19,6 +19,7 @@ const TYPE_LABELS = {
   event: { label: 'Rendez-vous', icon: Calendar, color: 'indigo' },
   email: { label: 'Email à rédiger', icon: Mail, color: 'cyan' },
   note: { label: 'Note libre', icon: StickyNote, color: 'stone' },
+  send_plaquette: { label: 'Envoyer plaquette', icon: Send, color: 'emerald' },
   unknown: { label: 'Indéterminé', icon: AlertCircle, color: 'stone' },
 };
 
@@ -196,7 +197,7 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const created = { mandat: null, client: null, task: null, event: null, email: null, note: null };
+      const created = { mandat: null, client: null, task: null, event: null, email: null, note: null, send_plaquette: null };
 
       // ─── MANDAT ───
       if ((result.type === 'mandat' || result.type === 'both') && result.mandat) {
@@ -315,6 +316,53 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
         }
       }
 
+      // ─── SEND_PLAQUETTE (workflow chainé) ───
+      if (result.type === 'send_plaquette' && result.send_plaquette) {
+        try {
+          if (!result.plaquette_mandat || result.plaquette_mandat.length === 0) {
+            alert('Aucun mandat trouvé. Précise le nom du mandat dans ta demande.');
+            setCreating(false);
+            return;
+          }
+          const destinataires = (result.send_plaquette.destinataires || []).filter(d => d.email && d.email.includes('@'));
+          if (destinataires.length === 0) {
+            alert('Aucun destinataire valide (email requis).');
+            setCreating(false);
+            return;
+          }
+          const mandatChoisi = result.plaquette_mandat[0];
+          if (!confirm(`Envoyer la plaquette de "${mandatChoisi.nom}" à ${destinataires.length} destinataire(s) ?\n\n${destinataires.map(d => '• ' + d.email).join('\n')}\n\nL'email sera envoyé immédiatement avec la plaquette PDF en pièce jointe.`)) {
+            setCreating(false);
+            return;
+          }
+
+          const { data: { session } } = await supabase.auth.getSession();
+          const token = session?.access_token;
+          if (!token) throw new Error('Session expirée');
+
+          const res = await fetch('/api/ai-send-plaquette', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              token,
+              mandatId: mandatChoisi.id,
+              destinataires,
+            }),
+          });
+          const data = await res.json();
+          if (!data.ok) {
+            alert('Erreur envoi : ' + (data.error || 'inconnue'));
+            setCreating(false);
+            return;
+          }
+
+          const r = data.results;
+          alert(`✅ Plaquette envoyée !\n\n• ${r.emails_sent} email(s) envoyé(s)\n• ${r.clients_created.length} nouveau(x) client(s) créé(s)\n• ${r.clients_found.length} client(s) existant(s) retrouvé(s)\n• ${r.deals_created} nouveau(x) deal(s) créé(s)\n• ${r.deals_updated} deal(s) mis à jour\n${r.emails_failed > 0 ? '\n⚠️ ' + r.emails_failed + ' email(s) en échec' : ''}`);
+          created.send_plaquette = data;
+        } catch (e) {
+          alert('Erreur workflow : ' + e.message);
+        }
+      }
       // ─── NOTE (placeholder) ───
       if (result.type === 'note' && result.note) {
         alert('La création de notes arrivera dans la prochaine session.\n\nContenu proposé :\n\n' + (result.note.contenu || ''));
@@ -375,8 +423,7 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
 
   const detectedType = forcedType || result?.type || 'unknown';
   const TypeIcon = TYPE_LABELS[detectedType]?.icon || AlertCircle;
-  const isImplemented = ['mandat', 'client', 'both', 'task', 'event', 'email'].includes(detectedType);
-
+  const isImplemented = ['mandat', 'client', 'both', 'task', 'event', 'email', 'send_plaquette'].includes(detectedType);
   return (
     <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-6" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-luxe-hover max-w-2xl w-full max-h-[92vh] overflow-y-auto scrollbar-thin" onClick={e => e.stopPropagation()}>
@@ -513,7 +560,7 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
 
               <div className="mt-2 flex gap-1 flex-wrap">
                 <span className="text-xs text-stone-500 self-center">Forcer :</span>
-                {['mandat', 'client', 'both', 'task', 'event', 'email', 'note'].map(t => (
+                {['mandat', 'client', 'both', 'task', 'event', 'email', 'note', 'send_plaquette'].map(t => (
                   <button key={t} onClick={() => setForcedType(forcedType === t ? null : t)}
                     className={`text-xs px-2 py-0.5 rounded-full border ${forcedType === t || (!forcedType && result.type === t) ? 'bg-sage-100 border-sage-dark text-sage-darker font-medium' : 'bg-white border-stone-200 text-stone-600'}`}>
                     {TYPE_LABELS[t]?.label || t}
@@ -544,6 +591,55 @@ export default function AICreateModal({ open, onClose, defaultType, onCreated })
                 <PreviewBlock title="✉️ Email à rédiger" data={result.email} />
                 <div className="mb-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900">
                   💡 Tu pourras relire et modifier l'email avant de l'envoyer.
+                </div>
+              </>
+            )}
+            {detectedType === 'send_plaquette' && result.send_plaquette && (
+              <>
+                <div className="mb-4 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Send className="w-4 h-4 text-emerald-700" />
+                    <h3 className="text-sm font-semibold text-emerald-900">Envoi plaquette à confirmer</h3>
+                  </div>
+                  
+                  {result.plaquette_mandat && result.plaquette_mandat.length > 0 ? (
+                    <div className="mb-3">
+                      <div className="text-xs font-semibold text-emerald-900 mb-1">📋 Mandat détecté :</div>
+                      <div className="bg-white border border-emerald-100 rounded px-2.5 py-1.5 text-xs">
+                        <div className="font-medium text-stone-900">{result.plaquette_mandat[0].nom}</div>
+                        <div className="text-stone-500">
+                          {[result.plaquette_mandat[0].adresse, result.plaquette_mandat[0].ville].filter(Boolean).join(' · ')}
+                        </div>
+                      </div>
+                      {result.plaquette_mandat.length > 1 && (
+                        <div className="text-[10px] text-amber-700 mt-1">
+                          ⚠️ Plusieurs mandats correspondent. Le premier sera utilisé. Précise davantage si nécessaire.
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-800">
+                      ❌ Aucun mandat correspondant à "{result.send_plaquette.mandat_hint}". Sois plus précis.
+                    </div>
+                  )}
+
+                  <div className="text-xs font-semibold text-emerald-900 mb-1">👥 Destinataires ({result.send_plaquette.destinataires?.length || 0}) :</div>
+                  <div className="space-y-1">
+                    {(result.send_plaquette.destinataires || []).map((d, i) => (
+                      <div key={i} className="bg-white border border-emerald-100 rounded px-2.5 py-1.5 text-xs flex items-center gap-2">
+                        <Mail className="w-3 h-3 text-stone-400" />
+                        <span className="text-stone-900">
+                          {[d.prenom, d.nom].filter(Boolean).join(' ') || 'Sans nom'}
+                        </span>
+                        <span className="text-stone-500">·</span>
+                        <span className="text-stone-600 font-mono">{d.email}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mb-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900">
+                  💡 Ce workflow va : créer/retrouver les clients, créer un deal "Envoyé" pour chacun, et envoyer un email avec la plaquette PDF en pièce jointe + ton lien questionnaire.
                 </div>
               </>
             )}
