@@ -282,19 +282,43 @@ async function executeSendPlaquette(data, userId, userInitials, token) {
     return { ok: false, error: 'mandat_id et client_id requis' };
   }
   try {
+    // Récupère l'email du client + son nom + le nom du mandat
+    const [clientRes, mandatRes] = await Promise.all([
+      supabaseAdmin.from('clients').select('email, prenom, nom, societe').eq('id', data.client_id).single(),
+      supabaseAdmin.from('mandats').select('nom, adresse, ville').eq('id', data.mandat_id).single()
+    ]);
+    if (clientRes.error || !clientRes.data) return { ok: false, error: 'Client introuvable' };
+    if (mandatRes.error || !mandatRes.data) return { ok: false, error: 'Mandat introuvable' };
+    const client = clientRes.data;
+    const mandat = mandatRes.data;
+    if (!client.email) return { ok: false, error: 'Le client n\'a pas d\'email renseigné' };
+
+    const nomClient = [client.prenom, client.nom].filter(Boolean).join(' ') || client.societe || '';
+    const subject = `Opportunité off-market : ${mandat.nom}`;
+
+    // Corps HTML (template simple + custom_message si fourni)
+    const customLine = data.custom_message ? `<p>${data.custom_message.replace(/\n/g, '<br>')}</p>` : '';
+    const htmlBody = `<p>Bonjour${nomClient ? ' ' + nomClient : ''},</p>
+${customLine}
+<p>Je vous fais suivre la plaquette de notre dernière opportunité off-market :</p>
+<p><strong>${mandat.nom}</strong>${mandat.adresse ? '<br>' + mandat.adresse : ''}${mandat.ville ? ' — ' + mandat.ville : ''}</p>
+<p>Restant à votre disposition pour échanger.</p>
+<p>Cordialement,<br>Immeubles & Patrimoine</p>`;
+
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://patrimonia-crm.vercel.app';
-    // Utilise l'endpoint send-batch existant
     const res = await fetch(`${baseUrl}/api/email-drafts/send-batch`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        token,
         mandatId: data.mandat_id,
-        clientIds: [data.client_id],
-        customMessage: data.custom_message || null,
-        includePlaquette: true
+        attachPlaquette: true,
+        emails: [{
+          clientId: data.client_id,
+          to: client.email,
+          subject,
+          htmlBody
+        }]
       })
     });
     if (!res.ok) {
@@ -302,7 +326,10 @@ async function executeSendPlaquette(data, userId, userInitials, token) {
       return { ok: false, error: `Erreur envoi plaquette : ${errText}` };
     }
     const result = await res.json();
-    return { ok: true, result: { id: null, label: `Plaquette envoyée (${result.sentCount || 1})`, type: 'plaquette' } };
+    if (result.sentCount === 0) {
+      return { ok: false, error: `Envoi échoué : ${(result.errors || []).join(', ') || 'raison inconnue'}` };
+    }
+    return { ok: true, result: { id: null, label: `Plaquette envoyée à ${client.email}`, type: 'plaquette' } };
   } catch (e) {
     console.error('[assistant/execute] send_plaquette error:', e);
     return { ok: false, error: e.message };
