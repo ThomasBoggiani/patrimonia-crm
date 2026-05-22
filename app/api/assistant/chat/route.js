@@ -1,8 +1,9 @@
 // app/api/assistant/chat/route.js
 //
-// Assistant Patrimonia - Phase 2.1 (avec contexte)
+// Assistant Patrimonia - Phase 2.2 (avec contexte + pièces jointes)
 // L'IA a 2 outils de LECTURE : search_mandats, search_clients
 // + accepte un "context" décrivant la fiche sur laquelle est l'utilisateur
+// + accepte des "attachments" (PDF extraits en texte, images en Vision GPT-4o)
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -20,7 +21,7 @@ const supabaseAdmin = createClient(
 // SYSTEM PROMPT
 // ==========================================================================
 
-function buildSystemPrompt(context) {
+function buildSystemPrompt(context, pdfTexts) {
   const today = new Date().toLocaleDateString('fr-FR', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
   });
@@ -66,16 +67,27 @@ L'utilisateur est sur la fiche du client suivant :
 Si l'utilisateur pose une question vague ("résume", "qu'est-ce qu'il cherche"), il parle de CE client sauf indication contraire.`;
   }
 
+  // Blocs de texte extrait des PDFs envoyés en pièces jointes
+  let pdfBlock = '';
+  if (pdfTexts && pdfTexts.length > 0) {
+    pdfBlock = '\n\nPIÈCES JOINTES PDF\nL\'utilisateur a joint les documents suivants. Considère leur contenu pour répondre :\n';
+    pdfTexts.forEach((p, i) => {
+      pdfBlock += `\n=== PDF ${i + 1} : ${p.name} ===\n${p.text}\n=== FIN PDF ${i + 1} ===\n`;
+    });
+  }
+
   return `Tu es l'Assistant Patrimonia, l'IA intégrée au CRM d'Immeubles & Patrimoine (off-market patrimonial Paris).
 
 Date du jour : ${today}.
 
 RÔLE
-Tu aides Thomas (le fondateur) à naviguer dans son CRM : tu peux chercher des mandats (biens immobiliers à vendre) et des clients (acquéreurs).
+Tu aides Thomas (le fondateur) à naviguer dans son CRM : tu peux chercher des mandats (biens immobiliers à vendre) et des clients (acquéreurs). Tu peux aussi analyser des PDF et des images qu'il te joint.
 
-CAPACITÉS ACTUELLES (Phase 2.1)
+CAPACITÉS ACTUELLES (Phase 2.2)
 - search_mandats : chercher dans les mandats par nom, adresse, ville, type, prix, statut, etc.
 - search_clients : chercher dans les clients par nom, société, typologie, budget, etc.
+- Analyse de PDF joints (texte extrait automatiquement)
+- Analyse d'images jointes (via vision GPT-4o)
 
 ⚠️ Tu ne peux RIEN créer, modifier ou supprimer pour le moment.
 
@@ -99,7 +111,7 @@ CONTEXTE MÉTIER
 
 UTILISATION DES OUTILS
 - N'hésite pas à appeler plusieurs fois les outils pour raffiner ta recherche.
-- Si Thomas pose une question vague, fais d'abord une recherche large, puis affine.${contextBlock}`;
+- Si Thomas pose une question vague, fais d'abord une recherche large, puis affine.${contextBlock}${pdfBlock}`;
 }
 
 // ==========================================================================
@@ -261,6 +273,26 @@ async function executeTool(name, args) {
 }
 
 // ==========================================================================
+// EXTRACTION DE TEXTE PDF
+// ==========================================================================
+
+async function extractPdfText(base64Data) {
+  try {
+    // Convertit la data URL en Buffer
+    const base64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+    const buffer = Buffer.from(base64, 'base64');
+
+    // Import dynamique pour éviter les soucis de bundling
+    const pdfParse = (await import('pdf-parse')).default;
+    const data = await pdfParse(buffer);
+    return data.text || '';
+  } catch (e) {
+    console.error('[assistant/chat] PDF extract error:', e);
+    return '';
+  }
+}
+
+// ==========================================================================
 // BOUCLE PRINCIPALE
 // ==========================================================================
 
@@ -269,6 +301,7 @@ export async function POST(req) {
     const body = await req.json();
     const userMessages = Array.isArray(body?.messages) ? body.messages : [];
     const context = body?.context || null;
+    const attachments = Array.isArray(body?.attachments) ? body.attachments : [];
 
     if (!userMessages.length) {
       return NextResponse.json({ error: 'messages requis' }, { status: 400 });
@@ -278,11 +311,60 @@ export async function POST(req) {
       return NextResponse.json({ error: 'OPENAI_API_KEY manquante' }, { status: 500 });
     }
 
+    // ====================================================================
+    // TRAITEMENT DES PIÈCES JOINTES
+    // ====================================================================
+    const pdfTexts = []; // { name, text }
+    const imageAttachments = []; // { type, image_url: { url } }
+
+    for (const att of attachments) {
+      if (!att?.type || !att?.data) continue;
+
+      if (att.type === 'application/pdf') {
+        const text = await extractPdfText(att.data);
+        if (text) {
+          // Limite à 50k caractères par PDF pour éviter d'exploser le contexte
+          pdfTexts.push({
+            name: att.name || 'document.pdf',
+            text: text.slice(0, 50000)
+          });
+        }
+      } else if (att.type.startsWith('image/')) {
+        imageAttachments.push({
+          type: 'image_url',
+          image_url: { url: att.data } // déjà au format data URL
+        });
+      }
+    }
+
+    // ====================================================================
+    // CONSTRUCTION DE LA CONVERSATION
+    // ====================================================================
     const conversation = [
-      { role: 'system', content: buildSystemPrompt(context) },
+      { role: 'system', content: buildSystemPrompt(context, pdfTexts) },
       ...userMessages
     ];
 
+    // Si on a des images, on les ajoute au DERNIER message user (format Vision)
+    if (imageAttachments.length > 0) {
+      const lastUserIdx = conversation.length - 1;
+      const lastMsg = conversation[lastUserIdx];
+      if (lastMsg && lastMsg.role === 'user') {
+        // Transforme le content en array multimodal
+        const textContent = typeof lastMsg.content === 'string' ? lastMsg.content : '';
+        conversation[lastUserIdx] = {
+          role: 'user',
+          content: [
+            { type: 'text', text: textContent || 'Analyse cette/ces image(s).' },
+            ...imageAttachments
+          ]
+        };
+      }
+    }
+
+    // ====================================================================
+    // BOUCLE DE FUNCTION CALLING
+    // ====================================================================
     const MAX_ITERATIONS = 6;
     let finalMessage = null;
 
