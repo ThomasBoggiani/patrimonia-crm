@@ -1,7 +1,7 @@
 // components/AIAssistantChat.jsx
 //
-// Assistant Patrimonia - Phase 3 UI Chat (v7)
-// + Pièces jointes : PDF (extraction texte côté backend) + images (compression + Vision GPT-4o)
+// Assistant Patrimonia - Phase 3 UI Chat (v9)
+// + Pièces jointes via Supabase Storage (upload direct, pas de limite Vercel)
 // + Dictée hybride : Web Speech (direct) + Whisper (qualité finale)
 
 'use client';
@@ -13,12 +13,8 @@ import { supabase } from '@/lib/supabase';
 const SAGE_DARK = '#5d6e5d';
 const SAGE_DARKER = '#3d4d3d';
 
-// Limites de compression image
-const IMAGE_MAX_DIM = 1280;       // max 1280px par côté
-const IMAGE_JPEG_QUALITY = 0.75;  // qualité JPEG (75%)
-// Limites strictes (Vercel hobby payload max = 4,5 Mo)
-const MAX_FILE_SIZE = 3 * 1024 * 1024;     // 3 Mo max par fichier
-const MAX_TOTAL_PAYLOAD = 4 * 1024 * 1024;  // 4 Mo max total
+const BUCKET = 'assistant-attachments';
+const SIGNED_URL_TTL = 3600; // 1h, largement assez pour traiter la requête
 
 function renderMarkdown(text) {
   if (!text) return '';
@@ -33,72 +29,14 @@ const SpeechRecognition = typeof window !== 'undefined'
   ? (window.SpeechRecognition || window.webkitSpeechRecognition)
   : null;
 
-// =========================================================================
-// Helpers : compression d'image
-// =========================================================================
-
-function compressImage(file) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const reader = new FileReader();
-
-    reader.onload = (e) => {
-      img.onload = () => {
-        // Calcul nouvelles dimensions
-        let { width, height } = img;
-        if (width > IMAGE_MAX_DIM || height > IMAGE_MAX_DIM) {
-          if (width > height) {
-            height = Math.round((height * IMAGE_MAX_DIM) / width);
-            width = IMAGE_MAX_DIM;
-          } else {
-            width = Math.round((width * IMAGE_MAX_DIM) / height);
-            height = IMAGE_MAX_DIM;
-          }
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-
-        // Convertit en data URL JPEG
-        const dataUrl = canvas.toDataURL('image/jpeg', IMAGE_JPEG_QUALITY);
-        resolve({
-          name: file.name,
-          type: 'image/jpeg',
-          data: dataUrl,
-          originalSize: file.size,
-          compressedSize: Math.round(dataUrl.length * 0.75) // approx (base64 = 4/3 du binaire)
-        });
-      };
-      img.onerror = reject;
-      img.src = e.target.result;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-function readFileAsDataURL(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve({
-      name: file.name,
-      type: file.type,
-      data: reader.result,
-      originalSize: file.size,
-      compressedSize: file.size
-    });
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 function formatSize(bytes) {
   if (bytes < 1024) return bytes + ' o';
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' Ko';
   return (bytes / (1024 * 1024)).toFixed(1) + ' Mo';
+}
+
+function randomKey() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
 // =========================================================================
@@ -127,9 +65,9 @@ export default function AIAssistantChat({
   const [liveTranscript, setLiveTranscript] = useState('');
   const [inputBeforeRecord, setInputBeforeRecord] = useState('');
 
-  // PJ
-  const [attachments, setAttachments] = useState([]); // { name, type, data, originalSize, compressedSize }
-  const [processingFiles, setProcessingFiles] = useState(false);
+  // PJ : { name, type, size, storagePath, signedUrl }
+  const [attachments, setAttachments] = useState([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -168,47 +106,60 @@ export default function AIAssistantChat({
   };
 
   // ========================================================================
-  // PIÈCES JOINTES
+  // PIÈCES JOINTES — Upload direct vers Supabase Storage
   // ========================================================================
 
   const handleFilesSelected = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    setProcessingFiles(true);
+    setUploadingFiles(true);
     const newAttachments = [];
 
     for (const file of files) {
+      if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+        alert(`Type de fichier non supporté : ${file.name} (${file.type})`);
+        continue;
+      }
+
       try {
-        let processed;
-        if (file.type.startsWith('image/')) {
-          processed = await compressImage(file);
-        } else if (file.type === 'application/pdf') {
-          if (file.size > MAX_FILE_SIZE) {
-            alert(`Le PDF "${file.name}" fait ${formatSize(file.size)}, trop volumineux (max ${formatSize(MAX_FILE_SIZE)}). Réduis-le avant d'essayer.`);
-            continue;
-          }
-          processed = await readFileAsDataURL(file);
-        } else {
-          alert(`Type de fichier non supporté : ${file.name} (${file.type})`);
+        // Chemin unique : ts_random_nomFichier
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const storagePath = `chat/${Date.now()}_${randomKey()}_${safeName}`;
+
+        // Upload
+        const { error: uploadErr } = await supabase.storage
+          .from(BUCKET)
+          .upload(storagePath, file, {
+            cacheControl: '3600',
+            upsert: false,
+            contentType: file.type
+          });
+
+        if (uploadErr) {
+          console.error('[AIAssistantChat] Upload error:', uploadErr);
+          alert(`Erreur upload "${file.name}" : ${uploadErr.message}`);
           continue;
         }
 
-        // Vérif taille du fichier compressé
-        if (processed.compressedSize > MAX_FILE_SIZE) {
-          alert(`"${file.name}" reste trop volumineux après compression (${formatSize(processed.compressedSize)}, max ${formatSize(MAX_FILE_SIZE)}).`);
+        // URL signée pour que le backend puisse télécharger
+        const { data: signedData, error: signedErr } = await supabase.storage
+          .from(BUCKET)
+          .createSignedUrl(storagePath, SIGNED_URL_TTL);
+
+        if (signedErr) {
+          console.error('[AIAssistantChat] Signed URL error:', signedErr);
+          alert(`Erreur signed URL "${file.name}" : ${signedErr.message}`);
           continue;
         }
 
-        // Vérif total payload (existant + en cours d'ajout)
-        const existingSize = attachments.reduce((s, a) => s + a.compressedSize, 0);
-        const newSize = newAttachments.reduce((s, a) => s + a.compressedSize, 0);
-        if (existingSize + newSize + processed.compressedSize > MAX_TOTAL_PAYLOAD) {
-          alert(`Limite totale dépassée (max ${formatSize(MAX_TOTAL_PAYLOAD)} au total). "${file.name}" non ajouté.`);
-          continue;
-        }
-
-        newAttachments.push(processed);
+        newAttachments.push({
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          storagePath,
+          signedUrl: signedData.signedUrl
+        });
       } catch (err) {
         console.error('[AIAssistantChat] File error:', err);
         alert('Erreur sur le fichier ' + file.name + ' : ' + err.message);
@@ -216,13 +167,13 @@ export default function AIAssistantChat({
     }
 
     setAttachments(prev => [...prev, ...newAttachments]);
-    setProcessingFiles(false);
+    setUploadingFiles(false);
 
-    // Reset input file pour pouvoir re-sélectionner les mêmes fichiers
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const removeAttachment = (idx) => {
+    // On retire juste de l'UI ; le fichier reste sur Storage mais sera nettoyé plus tard si besoin
     setAttachments(prev => prev.filter((_, i) => i !== idx));
   };
 
@@ -252,7 +203,7 @@ export default function AIAssistantChat({
         payload.attachments = currentAttachments.map(a => ({
           name: a.name,
           type: a.type,
-          data: a.data
+          signedUrl: a.signedUrl
         }));
       }
 
@@ -534,7 +485,7 @@ export default function AIAssistantChat({
                       <FileText className="w-3.5 h-3.5 text-stone-500" />
                     )}
                     <span className="max-w-[140px] truncate" title={att.name}>{att.name}</span>
-                    <span className="text-stone-400">{formatSize(att.compressedSize)}</span>
+                    <span className="text-stone-400">{formatSize(att.size)}</span>
                     <button
                       onClick={() => removeAttachment(idx)}
                       aria-label="Supprimer cette pièce jointe"
@@ -544,10 +495,10 @@ export default function AIAssistantChat({
                     </button>
                   </div>
                 ))}
-                {processingFiles && (
+                {uploadingFiles && (
                   <div className="flex items-center gap-1.5 px-2 py-1 text-xs text-stone-500">
                     <Loader2 className="w-3 h-3 animate-spin" />
-                    <span>Traitement…</span>
+                    <span>Upload…</span>
                   </div>
                 )}
               </div>
@@ -573,12 +524,12 @@ export default function AIAssistantChat({
               />
               <button
                 onClick={() => fileInputRef.current?.click()}
-                disabled={loading || recording || transcribing || processingFiles}
+                disabled={loading || recording || transcribing || uploadingFiles}
                 aria-label="Joindre des fichiers"
                 title="Joindre PDF ou photos"
                 className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-stone-100 text-stone-700 hover:bg-stone-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {processingFiles ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+                {uploadingFiles ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
               </button>
 
               <textarea
@@ -618,9 +569,9 @@ export default function AIAssistantChat({
 
               <button
                 onClick={sendMessage}
-                disabled={(!input.trim() && attachments.length === 0) || loading || recording || transcribing}
+                disabled={(!input.trim() && attachments.length === 0) || loading || recording || transcribing || uploadingFiles}
                 aria-label="Envoyer"
-                style={(!input.trim() && attachments.length === 0) || loading || recording || transcribing ? {} : { backgroundColor: SAGE_DARK }}
+                style={(!input.trim() && attachments.length === 0) || loading || recording || transcribing || uploadingFiles ? {} : { backgroundColor: SAGE_DARK }}
                 className="w-9 h-9 rounded-lg text-white disabled:bg-stone-200 disabled:text-stone-400 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0 transition-colors hover:opacity-90"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
