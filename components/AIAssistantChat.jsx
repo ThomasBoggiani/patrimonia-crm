@@ -42,21 +42,48 @@ function randomKey() {
 // Carte de proposition d'action
 // =========================================================================
 
-// Mapping label → clé data pour les champs éditables
+// Mapping label → clé data pour les champs éditables (couvre tous les types d'action)
 const FIELD_KEYS = {
   'Nom': 'nom',
+  'Prénom': 'prenom',
   'Adresse': 'adresse',
   'Ville': 'ville',
-  'Type': null, // composé, non éditable directement
+  'Société': 'societe',
+  'Email': 'email',
+  'Téléphone': 'tel',
   'Prix': 'prix',
   'Surface': 'surface',
   'Statut': 'statut',
   'Commercialisation': 'commercialisation',
   'Contact': 'contact',
-  'Téléphone': 'tel'
+  'Typologie': 'typologie',
+  'Maturité': 'maturite',
+  'Origine': 'origine',
+  'Marché': 'marche',
+  'Titre': 'titre',
+  'Échéance': 'echeance',
+  'Priorité': 'priorite',
+  'Date début': 'date_debut',
+  'Durée': 'duree_minutes',
+  'Lieu': 'lieu',
+  'Description': 'description',
+  'Type': 'type',
+  'Résumé': 'resume',
+  'Prochaine action': 'next_step',
+  'Date prochaine action': 'date_next_step',
+  'À': 'to',
+  'Objet': 'subject',
+  'Message': 'body',
+  'Mandat ID': null, // non éditable
+  'Client ID': null, // non éditable
+  'ID mandat': null,
+  'ID client': null,
+  'Participants': null, // tableau, non géré simplement
+  'Lié à': null,
+  'Budget': null // composé
 };
 
-const NUMERIC_KEYS = new Set(['prix', 'surface', 'loyers_annuels', 'nb_lots', 'nb_pieces', 'nb_chambres', 'etage']);
+const NUMERIC_KEYS = new Set(['prix', 'surface', 'loyers_annuels', 'nb_lots', 'nb_pieces', 'nb_chambres', 'etage', 'budget_min', 'budget_max', 'rendement_min', 'duree_minutes']);
 
 function parseNumeric(value) {
   if (typeof value === 'number') return value;
@@ -133,7 +160,7 @@ function ProposalCard({ action, onConfirm, onCancel, executing, executed, execut
       {executed && executedResult && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: '#e8f0e8', color: SAGE_DARKER }}>
           <Check className="w-3.5 h-3.5 flex-shrink-0" />
-          <span>Créé avec succès : {executedResult.label}</span>
+          <span>{action.type?.startsWith('update_') ? 'Modifié' : action.type?.startsWith('send_') ? 'Envoyé' : 'Créé'} avec succès : {executedResult.label}</span>
         </div>
       )}
 
@@ -153,7 +180,7 @@ function ProposalCard({ action, onConfirm, onCancel, executing, executed, execut
             className="flex-1 px-3 py-2 rounded-lg text-white text-xs font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
           >
             {executing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-            {executing ? 'Création…' : 'Créer'}
+            {executing ? 'En cours…' : (action.type?.startsWith('update_') ? 'Modifier' : action.type?.startsWith('send_') ? 'Envoyer' : 'Créer')}
           </button>
           <button
             onClick={onCancel}
