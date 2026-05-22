@@ -1,0 +1,333 @@
+// components/AIAssistantChat.jsx
+//
+// Assistant Patrimonia - Phase 3 UI Chat
+// Bouton flottant en bas à droite qui ouvre une fenêtre de chat avec :
+// - Conversation avec /api/assistant/chat
+// - Input texte avec auto-resize
+// - Bouton micro (Whisper via /api/transcribe)
+// - Pas de persistance : conversation effacée à chaque fermeture
+//
+// Pour cette phase, l'IA est en lecture seule (search_mandats, search_clients).
+// Les outils de création arriveront dans la phase suivante.
+
+'use client';
+
+import { useState, useRef, useEffect } from 'react';
+import { Sparkles, X, Send, Mic, Loader2, Square } from 'lucide-react';
+
+// =========================================================================
+// Helper : formatage markdown léger (gras avec **)
+// =========================================================================
+
+function renderMarkdown(text) {
+  if (!text) return '';
+  // Échapper le HTML d'abord pour éviter les injections
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  // Puis appliquer le **gras**
+  return escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+}
+
+// =========================================================================
+// Composant principal
+// =========================================================================
+
+export default function AIAssistantChat() {
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+
+  // Auto-scroll vers le bas à chaque nouveau message
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, loading]);
+
+  // Reset conversation à chaque fermeture
+  useEffect(() => {
+    if (!open) {
+      setMessages([]);
+      setInput('');
+    }
+  }, [open]);
+
+  // Focus auto sur l'input à l'ouverture
+  useEffect(() => {
+    if (open && inputRef.current) {
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [open]);
+
+  // Auto-resize du textarea
+  const handleInputChange = (e) => {
+    setInput(e.target.value);
+    const el = e.target;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  };
+
+  // =======================================================================
+  // Envoi d'un message
+  // =======================================================================
+
+  const sendMessage = async () => {
+    const text = input.trim();
+    if (!text || loading) return;
+
+    const newMessages = [...messages, { role: 'user', content: text }];
+    setMessages(newMessages);
+    setInput('');
+    if (inputRef.current) inputRef.current.style.height = 'auto';
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/assistant/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: newMessages })
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || 'Erreur serveur');
+      }
+
+      const data = await res.json();
+      setMessages(prev => [...prev, { role: 'assistant', content: data.message || '(réponse vide)' }]);
+    } catch (err) {
+      console.error('[AIAssistantChat] Erreur:', err);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: '⚠️ Erreur : ' + (err.message || 'impossible de joindre l\'assistant')
+      }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  // =======================================================================
+  // Enregistrement vocal
+  // =======================================================================
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      audioChunksRef.current = [];
+
+      mr.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      mr.onstop = async () => {
+        // On arrête les pistes du stream
+        stream.getTracks().forEach(t => t.stop());
+
+        if (audioChunksRef.current.length === 0) return;
+
+        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        setTranscribing(true);
+
+        try {
+          const formData = new FormData();
+          formData.append('audio', blob, 'voice.webm');
+
+          const res = await fetch('/api/transcribe', {
+            method: 'POST',
+            body: formData
+          });
+
+          if (!res.ok) throw new Error('Transcription échouée');
+          const data = await res.json();
+          const transcript = data.text || data.transcript || '';
+
+          if (transcript) {
+            setInput(prev => (prev ? prev + ' ' + transcript : transcript));
+            if (inputRef.current) {
+              inputRef.current.focus();
+              // Auto-resize
+              inputRef.current.style.height = 'auto';
+              inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + 'px';
+            }
+          }
+        } catch (err) {
+          console.error('[AIAssistantChat] Transcription error:', err);
+          alert('Erreur de transcription : ' + err.message);
+        } finally {
+          setTranscribing(false);
+        }
+      };
+
+      mediaRecorderRef.current = mr;
+      mr.start();
+      setRecording(true);
+    } catch (err) {
+      console.error('[AIAssistantChat] Mic error:', err);
+      alert('Impossible d\'accéder au micro : ' + err.message);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    setRecording(false);
+  };
+
+  // =======================================================================
+  // Rendu
+  // =======================================================================
+
+  return (
+    <>
+      {/* Bouton flottant */}
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          aria-label="Ouvrir l'Assistant Patrimonia"
+          className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-sage-500 to-sage-700 text-white shadow-luxe-lg hover:scale-105 active:scale-95 transition-transform flex items-center justify-center"
+        >
+          <Sparkles className="w-6 h-6" />
+        </button>
+      )}
+
+      {/* Fenêtre chat */}
+      {open && (
+        <div
+          className="fixed bottom-6 right-6 z-50 flex flex-col bg-white rounded-2xl shadow-luxe-xl border border-stone-200 overflow-hidden"
+          style={{
+            width: '420px',
+            height: '600px',
+            maxWidth: 'calc(100vw - 3rem)',
+            maxHeight: 'calc(100vh - 3rem)',
+            resize: 'both'
+          }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-stone-200 bg-stone-50 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-sage-500 to-sage-700 flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-stone-900">Assistant Patrimonia</div>
+                <div className="text-xs text-stone-500">Cherche dans tes mandats et clients</div>
+              </div>
+            </div>
+            <button
+              onClick={() => setOpen(false)}
+              aria-label="Fermer"
+              className="p-1.5 hover:bg-stone-200 rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4 text-stone-600" />
+            </button>
+          </div>
+
+          {/* Zone messages */}
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-stone-50">
+            {messages.length === 0 && (
+              <div className="text-center text-stone-400 text-sm mt-12">
+                <Sparkles className="w-6 h-6 mx-auto mb-2 text-stone-300" />
+                <p>Pose-moi une question</p>
+                <p className="text-xs mt-1">Ex : "Combien de mandats à Paris ?"</p>
+              </div>
+            )}
+
+            {messages.map((msg, i) => (
+              <div
+                key={i}
+                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed ${
+                    msg.role === 'user'
+                      ? 'bg-sage-dark text-white rounded-br-sm'
+                      : 'bg-white text-stone-900 border border-stone-200 rounded-bl-sm'
+                  }`}
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
+                />
+              </div>
+            ))}
+
+            {loading && (
+              <div className="flex justify-start">
+                <div className="bg-white border border-stone-200 rounded-2xl rounded-bl-sm px-3 py-2.5 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-stone-400 animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-stone-400 animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-stone-400 animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                </div>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input */}
+          <div className="border-t border-stone-200 bg-white p-3 flex-shrink-0">
+            <div className="flex items-end gap-2">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                placeholder={recording ? 'Enregistrement en cours…' : (transcribing ? 'Transcription…' : 'Tape ou parle…')}
+                disabled={loading || recording || transcribing}
+                rows={1}
+                className="flex-1 resize-none px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-sage-dark disabled:bg-stone-50 disabled:text-stone-400 min-h-[36px]"
+                style={{ maxHeight: '120px' }}
+              />
+
+              {/* Bouton micro */}
+              <button
+                onClick={recording ? stopRecording : startRecording}
+                disabled={loading || transcribing}
+                aria-label={recording ? 'Arrêter l\'enregistrement' : 'Enregistrer un message vocal'}
+                className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
+                  recording
+                    ? 'bg-red-500 text-white animate-pulse'
+                    : 'bg-stone-100 text-stone-700 hover:bg-stone-200 disabled:opacity-50 disabled:cursor-not-allowed'
+                }`}
+              >
+                {transcribing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : recording ? (
+                  <Square className="w-4 h-4 fill-current" />
+                ) : (
+                  <Mic className="w-4 h-4" />
+                )}
+              </button>
+
+              {/* Bouton envoyer */}
+              <button
+                onClick={sendMessage}
+                disabled={!input.trim() || loading || recording || transcribing}
+                aria-label="Envoyer"
+                className="w-9 h-9 rounded-lg bg-sage-dark text-white hover:bg-sage-darker disabled:bg-stone-200 disabled:text-stone-400 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0 transition-colors"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
