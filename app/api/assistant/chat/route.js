@@ -1,11 +1,8 @@
 // app/api/assistant/chat/route.js
 //
-// Assistant Patrimonia - Phase 2.0
-// Endpoint de chat avec function calling GPT-4o.
-// Pour cette phase, l'IA n'a que 2 outils de LECTURE :
-//   - search_mandats : cherche dans la table mandats
-//   - search_clients : cherche dans la table clients
-// Aucune création ni modification possible à cette étape.
+// Assistant Patrimonia - Phase 2.1 (avec contexte)
+// L'IA a 2 outils de LECTURE : search_mandats, search_clients
+// + accepte un "context" décrivant la fiche sur laquelle est l'utilisateur
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -23,10 +20,51 @@ const supabaseAdmin = createClient(
 // SYSTEM PROMPT
 // ==========================================================================
 
-function buildSystemPrompt() {
+function buildSystemPrompt(context) {
   const today = new Date().toLocaleDateString('fr-FR', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
   });
+
+  let contextBlock = '';
+
+  if (context?.type === 'mandat' && context.data) {
+    const m = context.data;
+    contextBlock = `
+
+CONTEXTE COURANT
+L'utilisateur est sur la fiche du mandat suivant :
+- ID : ${m.id}
+- Nom : ${m.nom || '(sans nom)'}
+- Adresse : ${m.adresse || '(non renseignée)'}
+- Ville : ${m.ville || '(non renseignée)'}
+- Type : ${m.type || '(non renseigné)'}${m.sous_type ? ' / ' + m.sous_type : ''}
+- Statut : ${m.statut || '(non renseigné)'}
+- Prix : ${m.prix ? m.prix + ' €' : '(non renseigné)'}
+- Surface : ${m.surface ? m.surface + ' m²' : '(non renseignée)'}
+- Owner : ${m.owner || '(non renseigné)'}
+- Commercialisation : ${m.commercialisation || '(non renseignée)'}
+
+Si l'utilisateur pose une question vague ("résume", "qu'est-ce que c'est", "donne-moi les infos"), il parle de CE mandat sauf indication contraire.`;
+  } else if (context?.type === 'client' && context.data) {
+    const c = context.data;
+    const nom = [c.prenom, c.nom].filter(Boolean).join(' ') || c.societe || '(anonyme)';
+    contextBlock = `
+
+CONTEXTE COURANT
+L'utilisateur est sur la fiche du client suivant :
+- ID : ${c.id}
+- Nom : ${nom}
+- Société : ${c.societe || '(aucune)'}
+- Email : ${c.email || '(non renseigné)'}
+- Typologie : ${c.typologie || '(non renseignée)'}
+- Marché : ${c.marche || '(non renseigné)'}
+- Maturité : ${c.maturite || '(non renseignée)'}
+- Statut : ${c.statut || '(non renseigné)'}
+- Budget : ${c.budget_min || 0} - ${c.budget_max || 0} €
+- Owner : ${c.owner || '(non renseigné)'}
+
+Si l'utilisateur pose une question vague ("résume", "qu'est-ce qu'il cherche"), il parle de CE client sauf indication contraire.`;
+  }
 
   return `Tu es l'Assistant Patrimonia, l'IA intégrée au CRM d'Immeubles & Patrimoine (off-market patrimonial Paris).
 
@@ -35,11 +73,11 @@ Date du jour : ${today}.
 RÔLE
 Tu aides Thomas (le fondateur) à naviguer dans son CRM : tu peux chercher des mandats (biens immobiliers à vendre) et des clients (acquéreurs).
 
-CAPACITÉS ACTUELLES (Phase 2.0)
+CAPACITÉS ACTUELLES (Phase 2.1)
 - search_mandats : chercher dans les mandats par nom, adresse, ville, type, prix, statut, etc.
 - search_clients : chercher dans les clients par nom, société, typologie, budget, etc.
 
-⚠️ Tu ne peux RIEN créer, modifier ou supprimer pour le moment. Ces capacités arriveront plus tard.
+⚠️ Tu ne peux RIEN créer, modifier ou supprimer pour le moment.
 
 STYLE
 - Tutoie Thomas.
@@ -51,22 +89,21 @@ STYLE
 - Si l'utilisateur demande "tous" ou "les derniers" ou "combien", appelle search_mandats ou search_clients SANS filtre, ça retourne par défaut les plus récents.
 
 CONTEXTE MÉTIER
-- "Mandat" = un bien immobilier en vente (immeuble, appartement, local commercial, etc.). Champ "nom" = titre du mandat (ex: "Immeuble 9 rue Hoche Versailles").
+- "Mandat" = un bien immobilier en vente.
 - "Client" = un acquéreur potentiel.
 - Statut mandat : Sourcing, En cours, Mandat signé, Vendu, Abandonné.
-- Maturité client : valeur dans la table (peut être "Faible", "Moyen", "Élevé", "Chaud", etc. — utilise ce que tu vois dans les résultats).
+- Maturité client : "Faible", "Moyen", "Élevé".
 - Typologie client : "Foncières", "Family Office", "Particuliers", etc.
 - Marché : "B2B" ou "B2C".
-- Les prix sont en euros, souvent en millions.
-- Owner : initiales du commercial responsable (ex: "TB" = Thomas Boggiani).
+- Owner : initiales du commercial (ex: "TB" = Thomas Boggiani).
 
 UTILISATION DES OUTILS
 - N'hésite pas à appeler plusieurs fois les outils pour raffiner ta recherche.
-- Si Thomas pose une question vague, fais d'abord une recherche large, puis affine.`;
+- Si Thomas pose une question vague, fais d'abord une recherche large, puis affine.${contextBlock}`;
 }
 
 // ==========================================================================
-// DÉFINITION DES OUTILS (function calling OpenAI)
+// DÉFINITION DES OUTILS
 // ==========================================================================
 
 const tools = [
@@ -78,38 +115,14 @@ const tools = [
       parameters: {
         type: 'object',
         properties: {
-          query_text: {
-            type: 'string',
-            description: 'Texte libre à chercher dans le nom, l\'adresse ou la ville du mandat. Optionnel.'
-          },
-          ville: {
-            type: 'string',
-            description: 'Filtre par ville (ex: "Paris", "Versailles"). Optionnel.'
-          },
-          statut: {
-            type: 'string',
-            description: 'Filtre par statut. Valeurs possibles : "Sourcing", "En cours", "Mandat signé", "Vendu", "Abandonné". Optionnel.'
-          },
-          type: {
-            type: 'string',
-            description: 'Filtre par type de bien (ex: "Immeubles", "Appartements", "Locaux commerciaux"). Optionnel.'
-          },
-          prix_min: {
-            type: 'number',
-            description: 'Prix minimum en euros. Optionnel.'
-          },
-          prix_max: {
-            type: 'number',
-            description: 'Prix maximum en euros. Optionnel.'
-          },
-          owner: {
-            type: 'string',
-            description: 'Filtre par owner (initiales du commercial). Ex: "TB". Optionnel.'
-          },
-          limit: {
-            type: 'integer',
-            description: 'Nombre max de résultats. Défaut : 10, max 20.'
-          }
+          query_text: { type: 'string', description: 'Texte libre à chercher dans nom, adresse ou ville. Optionnel.' },
+          ville: { type: 'string', description: 'Filtre par ville. Optionnel.' },
+          statut: { type: 'string', description: 'Valeurs : "Sourcing", "En cours", "Mandat signé", "Vendu", "Abandonné". Optionnel.' },
+          type: { type: 'string', description: 'Type de bien (ex: "Immeubles", "Appartements"). Optionnel.' },
+          prix_min: { type: 'number', description: 'Prix minimum en euros. Optionnel.' },
+          prix_max: { type: 'number', description: 'Prix maximum en euros. Optionnel.' },
+          owner: { type: 'string', description: 'Initiales du commercial. Optionnel.' },
+          limit: { type: 'integer', description: 'Nombre max de résultats. Défaut 10, max 20.' }
         },
         required: []
       }
@@ -119,46 +132,19 @@ const tools = [
     type: 'function',
     function: {
       name: 'search_clients',
-      description: 'Cherche dans la table des clients (acquéreurs). Retourne une liste de clients correspondant aux critères. Si aucun filtre n\'est fourni, retourne les clients les plus récents.',
+      description: 'Cherche dans la table des clients (acquéreurs). Si aucun filtre n\'est fourni, retourne les clients les plus récents.',
       parameters: {
         type: 'object',
         properties: {
-          query_text: {
-            type: 'string',
-            description: 'Texte libre à chercher dans nom, prénom, société ou email. Optionnel.'
-          },
-          typologie: {
-            type: 'string',
-            description: 'Filtre par typologie (ex: "Foncières", "Family Office", "Particuliers"). Optionnel.'
-          },
-          marche: {
-            type: 'string',
-            description: 'Filtre par marché. Valeurs possibles : "B2B", "B2C". Optionnel.'
-          },
-          maturite: {
-            type: 'string',
-            description: 'Filtre par maturité. Valeurs typiques : "Faible", "Moyen", "Élevé". Optionnel.'
-          },
-          statut: {
-            type: 'string',
-            description: 'Filtre par statut. Ex: "Actif". Optionnel.'
-          },
-          owner: {
-            type: 'string',
-            description: 'Filtre par owner (initiales du commercial). Ex: "TB". Optionnel.'
-          },
-          budget_min: {
-            type: 'number',
-            description: 'Budget min en euros (le client a un budget >= cette valeur). Optionnel.'
-          },
-          budget_max: {
-            type: 'number',
-            description: 'Budget max en euros (le client a un budget <= cette valeur). Optionnel.'
-          },
-          limit: {
-            type: 'integer',
-            description: 'Nombre max de résultats. Défaut : 10, max 20.'
-          }
+          query_text: { type: 'string', description: 'Texte libre à chercher dans nom, prénom, société ou email. Optionnel.' },
+          typologie: { type: 'string', description: 'Ex: "Foncières", "Family Office", "Particuliers". Optionnel.' },
+          marche: { type: 'string', description: 'Valeurs : "B2B", "B2C". Optionnel.' },
+          maturite: { type: 'string', description: 'Valeurs : "Faible", "Moyen", "Élevé". Optionnel.' },
+          statut: { type: 'string', description: 'Ex: "Actif". Optionnel.' },
+          owner: { type: 'string', description: 'Initiales du commercial. Optionnel.' },
+          budget_min: { type: 'number', description: 'Budget min en euros. Optionnel.' },
+          budget_max: { type: 'number', description: 'Budget max en euros. Optionnel.' },
+          limit: { type: 'integer', description: 'Nombre max de résultats. Défaut 10, max 20.' }
         },
         required: []
       }
@@ -282,6 +268,7 @@ export async function POST(req) {
   try {
     const body = await req.json();
     const userMessages = Array.isArray(body?.messages) ? body.messages : [];
+    const context = body?.context || null;
 
     if (!userMessages.length) {
       return NextResponse.json({ error: 'messages requis' }, { status: 400 });
@@ -291,13 +278,11 @@ export async function POST(req) {
       return NextResponse.json({ error: 'OPENAI_API_KEY manquante' }, { status: 500 });
     }
 
-    // Construction de la conversation pour OpenAI
     const conversation = [
-      { role: 'system', content: buildSystemPrompt() },
+      { role: 'system', content: buildSystemPrompt(context) },
       ...userMessages
     ];
 
-    // Boucle de function calling (max 6 itérations pour éviter les boucles infinies)
     const MAX_ITERATIONS = 6;
     let finalMessage = null;
 
@@ -334,7 +319,6 @@ export async function POST(req) {
         return NextResponse.json({ error: 'Réponse OpenAI vide' }, { status: 500 });
       }
 
-      // Si l'IA veut appeler des outils
       if (msg.tool_calls && msg.tool_calls.length > 0) {
         conversation.push(msg);
 
@@ -356,11 +340,9 @@ export async function POST(req) {
             content: JSON.stringify(toolResult)
           });
         }
-        // On reboucle pour que l'IA continue
         continue;
       }
 
-      // Sinon, c'est la réponse finale
       finalMessage = msg.content || '';
       break;
     }
