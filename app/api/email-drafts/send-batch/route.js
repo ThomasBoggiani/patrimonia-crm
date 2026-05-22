@@ -27,7 +27,7 @@ async function verifyToken(token) {
 async function downloadPlaquettePdf(mandatId, token) {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://patrimonia-crm.vercel.app';
-    const res = await fetch(`${baseUrl}/api/mandats/${mandatId}/pdf?type=plaquette`, {
+    const res = await fetch(`${baseUrl}/api/mandats/${mandatId}/plaquette-cached`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return null;
