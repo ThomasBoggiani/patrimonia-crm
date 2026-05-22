@@ -267,6 +267,15 @@ export default function CRM() {
     }
   }
 
+  // Écoute les actions exécutées depuis l'Assistant Patrimonia pour recharger les données
+  useEffect(() => {
+    const handler = () => {
+      loadAll();
+    };
+    window.addEventListener('patrimonia:action-executed', handler);
+    return () => window.removeEventListener('patrimonia:action-executed', handler);
+  }, []);
+  
   async function loadAll() {
     setLoading(true);
     try {
