@@ -65,23 +65,24 @@ export async function GET(request, { params }) {
 
       // Sécurité : on s'assure que plaquette_cached_at est bien set en BDD
       // (cas où le PDF existe dans le bucket mais la colonne est null)
-      supabaseAdmin
-        .from('mandats')
-        .select('plaquette_cached_at')
-        .eq('id', mandatId)
-        .single()
-        .then(({ data: current }) => {
-          if (current && current.plaquette_cached_at === null) {
-            supabaseAdmin
-              .from('mandats')
-              .update({ plaquette_cached_at: new Date().toISOString() })
-              .eq('id', mandatId)
-              .then(({ error }) => {
-                if (error) console.warn(`[plaquette-cached] Cache timestamp sync failed:`, error.message);
-                else console.log(`[plaquette-cached] Cache timestamp synced for ${mandatId}`);
-              });
-          }
-        });
+      // On utilise await pour éviter que Vercel tue le process avant la fin
+      try {
+        const { data: current } = await supabaseAdmin
+          .from('mandats')
+          .select('plaquette_cached_at')
+          .eq('id', mandatId)
+          .single();
+        if (current && current.plaquette_cached_at === null) {
+          const { error: syncErr } = await supabaseAdmin
+            .from('mandats')
+            .update({ plaquette_cached_at: new Date().toISOString() })
+            .eq('id', mandatId);
+          if (syncErr) console.warn(`[plaquette-cached] Cache timestamp sync failed:`, syncErr.message);
+          else console.log(`[plaquette-cached] Cache timestamp synced for ${mandatId}`);
+        }
+      } catch (syncE) {
+        console.warn(`[plaquette-cached] Sync error:`, syncE.message);
+      }
 
       const buffer = Buffer.from(await cachedFile.arrayBuffer());
       return new Response(buffer, {
