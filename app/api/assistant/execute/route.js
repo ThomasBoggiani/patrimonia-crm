@@ -28,12 +28,15 @@ async function getUserInitials(userId) {
   try {
     const { data, error } = await supabaseAdmin
       .from('profiles')
-      .select('initials, prenom, nom')
+      .select('prenom, nom')
       .eq('id', userId)
       .single();
-    if (error || !data) return null;
-    // Préfère le champ initials s'il existe, sinon calcule depuis prenom + nom
-    if (data.initials) return data.initials;
+    if (error) {
+      console.error('[assistant/execute] profiles query error:', error);
+      return null;
+    }
+    if (!data) return null;
+    // Calcule les initiales depuis prenom + nom
     const initials = [data.prenom?.[0], data.nom?.[0]].filter(Boolean).join('').toUpperCase();
     return initials || null;
   } catch (e) {
