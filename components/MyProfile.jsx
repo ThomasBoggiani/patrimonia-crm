@@ -403,7 +403,7 @@ function buildSignatureHtml({ prenom, nom, fonction, telephone, email, questionn
 <table cellpadding="0" cellspacing="0" border="0" style="${tableStyle}">
   <tr>
     <td style="${logoCellStyle}">
-      <a href="${baseUrl}" title="notre site"><img src="${LOGO_URL}" alt="Immeubles & Patrimoine" width="120" height="120" style="display: block; border-radius: 4px; border: 0;"></a>
+      <a href="https://www.immeubles-patrimoine.fr/" title="notre site"><img src="${LOGO_URL}" alt="Immeubles & Patrimoine" width="120" height="120" style="display: block; border-radius: 4px; border: 0;"></a>
     </td>
     <td style="${textCellStyle}">
       <p style="${nameStyle}">${prenom || ''} ${nom || ''}</p>
