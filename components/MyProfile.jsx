@@ -180,13 +180,6 @@ function QuestionnaireSection({ profile, isManager, allProfiles }) {
             <Eye className="w-3.5 h-3.5" /> Aperçu
           </a>
           <a
-            href="/signature"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-2 bg-white border border-cream-dark text-ink rounded-lg text-sm hover:bg-cream-50"
-          >
-            <Mail className="w-3.5 h-3.5" /> Ma signature email
-          </a>
         </div>
 
         {stats.lastSubmittedAt && (
