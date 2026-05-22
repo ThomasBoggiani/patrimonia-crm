@@ -1,8 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════
-// components/PdfExportButtons.jsx — VERSION FINALE v12.2.2
-// 
+// components/PdfExportButtons.jsx — v13 (avec badge "À régénérer")
+//
 // 3 boutons d'export PDF + modal de période pour le rapport vendeur.
-// 
+// + Badge orange si la plaquette en cache est invalidée (mandat modifié).
+//
 // Auth : récupère le token Supabase via supabase.auth.getSession()
 // et le passe dans l'URL d'appel (?token=...)
 // ═══════════════════════════════════════════════════════════════════
@@ -12,30 +13,33 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
-export default function PdfExportButtons({ mandatId, mandatNom, isOffMarket }) {
+export default function PdfExportButtons({ mandatId, mandatNom, isOffMarket, plaquetteCachedAt }) {
   const [showPeriodModal, setShowPeriodModal] = useState(false);
   const [loading, setLoading] = useState(null);
   const [error, setError] = useState(null);
 
+  // Badge "À régénérer" affiché si pas de cache (mandat modifié depuis la dernière mise en cache, ou jamais mis en cache)
+  const needsRegeneration = !plaquetteCachedAt;
+
   async function downloadPdf(template, params = {}) {
     setLoading(template);
     setError(null);
-    
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (!session?.access_token) {
         setError('Session expirée, reconnectez-vous');
         setLoading(null);
         return;
       }
-      
+
       const queryString = new URLSearchParams({
         template,
         token: session.access_token,
         ...params,
       }).toString();
-      
+
       const url = `/api/mandats/${mandatId}/pdf?${queryString}`;
       window.open(url, '_blank');
       setTimeout(() => setLoading(null), 1000);
@@ -71,6 +75,14 @@ export default function PdfExportButtons({ mandatId, mandatNom, isOffMarket }) {
         {isOffMarket && (
           <span className="text-[9px] px-1 py-0.5 rounded bg-stone-900 text-amber-200 font-semibold tracking-wider">
             OFF
+          </span>
+        )}
+        {needsRegeneration && (
+          <span
+            className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold border border-amber-300"
+            title="Le mandat a été modifié depuis la dernière génération. La plaquette sera régénérée au prochain envoi."
+          >
+            ⚠ À régénérer
           </span>
         )}
       </button>
