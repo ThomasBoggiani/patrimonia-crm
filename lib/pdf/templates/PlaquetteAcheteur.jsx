@@ -180,7 +180,7 @@ function TeamCard({ member, palette, size = 100, compact = false }) {
       }}>
         {member.role || ''}
       </Text>
-      {member.email && (
+      {!!member.email && (
         <Text style={{
           fontSize: compact ? 7 : 8,
           color: palette.text || '#333',
@@ -351,7 +351,7 @@ export default function PlaquetteAcheteur({
       <Page size="A4" style={styles.page}>
         <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
         <SectionTitle title="LE BIEN" isOffMarket={isOffMarket} />
-        {description && (
+        {!!description && (
           <View style={styles.descriptionBlock}>
             <Text style={styles.descriptionText}>{description}</Text>
           </View>
@@ -374,7 +374,7 @@ export default function PlaquetteAcheteur({
             multiLine={true}
             isOffMarket={isOffMarket}
           />
-          {mandat?.transport_info && (
+          {!!mandat?.transport_info && (
             <View style={styles.descriptionBlock}>
               <Text style={styles.descriptionText}>{mandat.transport_info}</Text>
             </View>
@@ -457,7 +457,7 @@ export default function PlaquetteAcheteur({
         <Page size="A4" style={styles.page}>
           <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
           <SectionTitle title="CADASTRE" isOffMarket={isOffMarket} />
-          {mandat?.cadastre_description && (
+          {!!mandat?.cadastre_description && (
             <Text style={[styles.descriptionText, { marginVertical: 12 }]}>
               {mandat.cadastre_description}
             </Text>
