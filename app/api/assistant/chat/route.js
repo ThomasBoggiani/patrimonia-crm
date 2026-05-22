@@ -1,9 +1,8 @@
 // app/api/assistant/chat/route.js
 //
-// Assistant Patrimonia - Phase 2.2 (avec contexte + pièces jointes)
-// L'IA a 2 outils de LECTURE : search_mandats, search_clients
-// + accepte un "context" décrivant la fiche sur laquelle est l'utilisateur
-// + accepte des "attachments" (PDF extraits en texte, images en Vision GPT-4o)
+// Assistant Patrimonia - Phase 2.3
+// Pièces jointes via URL signée Supabase Storage (au lieu de base64 dans payload)
+// Le backend télécharge depuis l'URL → pas de limite Vercel 4,5 Mo
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -67,7 +66,6 @@ L'utilisateur est sur la fiche du client suivant :
 Si l'utilisateur pose une question vague ("résume", "qu'est-ce qu'il cherche"), il parle de CE client sauf indication contraire.`;
   }
 
-  // Blocs de texte extrait des PDFs envoyés en pièces jointes
   let pdfBlock = '';
   if (pdfTexts && pdfTexts.length > 0) {
     pdfBlock = '\n\nPIÈCES JOINTES PDF\nL\'utilisateur a joint les documents suivants. Considère leur contenu pour répondre :\n';
@@ -83,7 +81,7 @@ Date du jour : ${today}.
 RÔLE
 Tu aides Thomas (le fondateur) à naviguer dans son CRM : tu peux chercher des mandats (biens immobiliers à vendre) et des clients (acquéreurs). Tu peux aussi analyser des PDF et des images qu'il te joint.
 
-CAPACITÉS ACTUELLES (Phase 2.2)
+CAPACITÉS ACTUELLES (Phase 2.3)
 - search_mandats : chercher dans les mandats par nom, adresse, ville, type, prix, statut, etc.
 - search_clients : chercher dans les clients par nom, société, typologie, budget, etc.
 - Analyse de PDF joints (texte extrait automatiquement)
@@ -98,7 +96,7 @@ STYLE
 - Mets en gras les noms importants (mandats, clients) avec **double étoiles**.
 - Si tu trouves plusieurs résultats, liste-les de façon concise (1 ligne par item).
 - Si tu ne trouves rien, dis-le clairement et propose une recherche alternative.
-- Si l'utilisateur demande "tous" ou "les derniers" ou "combien", appelle search_mandats ou search_clients SANS filtre, ça retourne par défaut les plus récents.
+- Si l'utilisateur demande "tous" ou "les derniers" ou "combien", appelle search_mandats ou search_clients SANS filtre.
 
 CONTEXTE MÉTIER
 - "Mandat" = un bien immobilier en vente.
@@ -115,7 +113,7 @@ UTILISATION DES OUTILS
 }
 
 // ==========================================================================
-// DÉFINITION DES OUTILS
+// OUTILS
 // ==========================================================================
 
 const tools = [
@@ -164,18 +162,12 @@ const tools = [
   }
 ];
 
-// ==========================================================================
-// IMPLÉMENTATION DES OUTILS
-// ==========================================================================
-
 async function executeSearchMandats(args) {
   const { query_text, ville, statut, type, prix_min, prix_max, owner, limit = 10 } = args;
-
   let query = supabaseAdmin
     .from('mandats')
     .select('id, nom, adresse, ville, statut, prix, surface, type, sous_type, owner, marche, commercialisation, created_at')
     .limit(Math.min(limit, 20));
-
   if (query_text && query_text.trim()) {
     const q = `%${query_text.trim()}%`;
     query = query.or(`nom.ilike.${q},adresse.ilike.${q},ville.ilike.${q}`);
@@ -186,9 +178,7 @@ async function executeSearchMandats(args) {
   if (owner) query = query.eq('owner', owner);
   if (typeof prix_min === 'number') query = query.gte('prix', prix_min);
   if (typeof prix_max === 'number') query = query.lte('prix', prix_max);
-
   query = query.order('created_at', { ascending: false });
-
   const { data, error } = await query;
   if (error) {
     console.error('[assistant/chat] search_mandats error:', error);
@@ -197,30 +187,19 @@ async function executeSearchMandats(args) {
   return {
     count: data?.length || 0,
     results: (data || []).map(m => ({
-      id: m.id,
-      nom: m.nom || '(sans nom)',
-      adresse: m.adresse,
-      ville: m.ville,
-      statut: m.statut,
-      prix: m.prix,
-      surface: m.surface,
-      type: m.type,
-      sous_type: m.sous_type,
-      owner: m.owner,
-      marche: m.marche,
-      commercialisation: m.commercialisation
+      id: m.id, nom: m.nom || '(sans nom)', adresse: m.adresse, ville: m.ville,
+      statut: m.statut, prix: m.prix, surface: m.surface, type: m.type,
+      sous_type: m.sous_type, owner: m.owner, marche: m.marche, commercialisation: m.commercialisation
     }))
   };
 }
 
 async function executeSearchClients(args) {
   const { query_text, typologie, marche, maturite, statut, owner, budget_min, budget_max, limit = 10 } = args;
-
   let query = supabaseAdmin
     .from('clients')
     .select('id, prenom, nom, societe, email, tel, typologie, sous_typologie, marche, maturite, statut, budget_min, budget_max, rendement_min, zones, typologies_recherchees, owner, created_at')
     .limit(Math.min(limit, 20));
-
   if (query_text && query_text.trim()) {
     const q = `%${query_text.trim()}%`;
     query = query.or(`prenom.ilike.${q},nom.ilike.${q},societe.ilike.${q},email.ilike.${q}`);
@@ -232,9 +211,7 @@ async function executeSearchClients(args) {
   if (owner) query = query.eq('owner', owner);
   if (typeof budget_min === 'number') query = query.gte('budget_min', budget_min);
   if (typeof budget_max === 'number') query = query.lte('budget_max', budget_max);
-
   query = query.order('created_at', { ascending: false });
-
   const { data, error } = await query;
   if (error) {
     console.error('[assistant/chat] search_clients error:', error);
@@ -245,20 +222,11 @@ async function executeSearchClients(args) {
     results: (data || []).map(c => ({
       id: c.id,
       nom_complet: [c.prenom, c.nom].filter(Boolean).join(' ') || c.societe || '(anonyme)',
-      societe: c.societe,
-      email: c.email,
-      tel: c.tel,
-      typologie: c.typologie,
-      sous_typologie: c.sous_typologie,
-      marche: c.marche,
-      maturite: c.maturite,
-      statut: c.statut,
-      budget_min: c.budget_min,
-      budget_max: c.budget_max,
-      rendement_min: c.rendement_min,
-      zones: c.zones,
-      typologies_recherchees: c.typologies_recherchees,
-      owner: c.owner
+      societe: c.societe, email: c.email, tel: c.tel,
+      typologie: c.typologie, sous_typologie: c.sous_typologie,
+      marche: c.marche, maturite: c.maturite, statut: c.statut,
+      budget_min: c.budget_min, budget_max: c.budget_max, rendement_min: c.rendement_min,
+      zones: c.zones, typologies_recherchees: c.typologies_recherchees, owner: c.owner
     }))
   };
 }
@@ -273,16 +241,18 @@ async function executeTool(name, args) {
 }
 
 // ==========================================================================
-// EXTRACTION DE TEXTE PDF
+// TÉLÉCHARGEMENT DES PJ DEPUIS SUPABASE STORAGE
 // ==========================================================================
 
-async function extractPdfText(base64Data) {
-  try {
-    // Convertit la data URL en Buffer
-    const base64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
-    const buffer = Buffer.from(base64, 'base64');
+async function downloadFromSignedUrl(signedUrl) {
+  const res = await fetch(signedUrl);
+  if (!res.ok) throw new Error(`Téléchargement échoué : ${res.status}`);
+  const buffer = Buffer.from(await res.arrayBuffer());
+  return buffer;
+}
 
-    // Import dynamique pour éviter les soucis de bundling
+async function extractPdfTextFromBuffer(buffer) {
+  try {
     const pdfParse = (await import('pdf-parse')).default;
     const data = await pdfParse(buffer);
     return data.text || '';
@@ -290,6 +260,11 @@ async function extractPdfText(base64Data) {
     console.error('[assistant/chat] PDF extract error:', e);
     return '';
   }
+}
+
+function bufferToDataUrl(buffer, mimeType) {
+  const base64 = buffer.toString('base64');
+  return `data:${mimeType};base64,${base64}`;
 }
 
 // ==========================================================================
@@ -312,45 +287,49 @@ export async function POST(req) {
     }
 
     // ====================================================================
-    // TRAITEMENT DES PIÈCES JOINTES
+    // TRAITEMENT DES PJ (téléchargement depuis URL signée)
     // ====================================================================
-    const pdfTexts = []; // { name, text }
-    const imageAttachments = []; // { type, image_url: { url } }
+    const pdfTexts = [];
+    const imageAttachments = [];
 
     for (const att of attachments) {
-      if (!att?.type || !att?.data) continue;
+      if (!att?.type || !att?.signedUrl) continue;
 
-      if (att.type === 'application/pdf') {
-        const text = await extractPdfText(att.data);
-        if (text) {
-          // Limite à 50k caractères par PDF pour éviter d'exploser le contexte
-          pdfTexts.push({
-            name: att.name || 'document.pdf',
-            text: text.slice(0, 50000)
+      try {
+        const buffer = await downloadFromSignedUrl(att.signedUrl);
+
+        if (att.type === 'application/pdf') {
+          const text = await extractPdfTextFromBuffer(buffer);
+          if (text) {
+            pdfTexts.push({
+              name: att.name || 'document.pdf',
+              text: text.slice(0, 50000)
+            });
+          }
+        } else if (att.type.startsWith('image/')) {
+          const dataUrl = bufferToDataUrl(buffer, att.type);
+          imageAttachments.push({
+            type: 'image_url',
+            image_url: { url: dataUrl }
           });
         }
-      } else if (att.type.startsWith('image/')) {
-        imageAttachments.push({
-          type: 'image_url',
-          image_url: { url: att.data } // déjà au format data URL
-        });
+      } catch (e) {
+        console.error('[assistant/chat] Download attachment error:', att.name, e);
       }
     }
 
     // ====================================================================
-    // CONSTRUCTION DE LA CONVERSATION
+    // CONVERSATION
     // ====================================================================
     const conversation = [
       { role: 'system', content: buildSystemPrompt(context, pdfTexts) },
       ...userMessages
     ];
 
-    // Si on a des images, on les ajoute au DERNIER message user (format Vision)
     if (imageAttachments.length > 0) {
       const lastUserIdx = conversation.length - 1;
       const lastMsg = conversation[lastUserIdx];
       if (lastMsg && lastMsg.role === 'user') {
-        // Transforme le content en array multimodal
         const textContent = typeof lastMsg.content === 'string' ? lastMsg.content : '';
         conversation[lastUserIdx] = {
           role: 'user',
@@ -363,7 +342,7 @@ export async function POST(req) {
     }
 
     // ====================================================================
-    // BOUCLE DE FUNCTION CALLING
+    // BOUCLE FUNCTION CALLING
     // ====================================================================
     const MAX_ITERATIONS = 6;
     let finalMessage = null;
