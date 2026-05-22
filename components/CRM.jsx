@@ -19,7 +19,6 @@ import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/
 import { matchMandatsForClient } from '@/lib/matching';
 import { computeRendementsAuto, totalLoyerMensuel, totalLoyerMensuelOptimise, totalSurface, comptageStatuts } from '@/lib/rendements';
 import { getPriceTTC, getPriceNV, isNVEstimated, getCommission, isCommissionEstimated } from '@/lib/priceDisplay';
-import AICreateModal from './AICreateModal';
 import AIAssistantChat from './AIAssistantChat';
 import MarkAsSoldModal from './MarkAsSoldModal';
 import CascadeSelectMulti from './CascadeSelectMulti';
@@ -120,7 +119,6 @@ async function triggerMatchingBatch({ mandatId, clientId }) {
 }
 export default function CRM() {
   const { profile, signOut } = useAuth();
-  const [showAICreate, setShowAICreate] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [tabKey, setTabKey] = useState(0);
@@ -530,18 +528,6 @@ export default function CRM() {
           onClose={() => setEmailDraftsState(null)}
         />
       )}
-      <AICreateModal
-        open={showAICreate}
-        onClose={() => setShowAICreate(false)}
-        onCreated={({ mandat, client }) => {
-          setImportToast({
-            mandat: mandat ? { id: mandat.id, label: mandat.nom || 'Nouveau mandat' } : null,
-            client: client ? { id: client.id, label: `${client.prenom || ''} ${client.nom || ''}`.trim() || 'Nouveau client' } : null
-          });
-          loadAll();
-          setTimeout(() => setImportToast(null), 10000);
-        }}
-      />
       <AIAssistantChat open={assistantOpen} onOpenChange={setAssistantOpen} />
     </div>
   );
