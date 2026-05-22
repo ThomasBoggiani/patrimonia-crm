@@ -1,8 +1,9 @@
 // app/api/assistant/chat/route.js
 //
-// Assistant Patrimonia - Phase 2.3
-// Pièces jointes via URL signée Supabase Storage (au lieu de base64 dans payload)
-// Le backend télécharge depuis l'URL → pas de limite Vercel 4,5 Mo
+// Assistant Patrimonia - Phase 4.1 (avec propose_create_mandat)
+// - L'IA peut proposer des actions (création, modification, envoi)
+// - Les propositions sont retournées au frontend pour validation utilisateur
+// - L'exécution réelle se fait via /api/assistant/execute APRÈS confirmation
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -26,7 +27,6 @@ function buildSystemPrompt(context, pdfTexts) {
   });
 
   let contextBlock = '';
-
   if (context?.type === 'mandat' && context.data) {
     const m = context.data;
     contextBlock = `
@@ -42,9 +42,8 @@ L'utilisateur est sur la fiche du mandat suivant :
 - Prix : ${m.prix ? m.prix + ' €' : '(non renseigné)'}
 - Surface : ${m.surface ? m.surface + ' m²' : '(non renseignée)'}
 - Owner : ${m.owner || '(non renseigné)'}
-- Commercialisation : ${m.commercialisation || '(non renseignée)'}
 
-Si l'utilisateur pose une question vague ("résume", "qu'est-ce que c'est", "donne-moi les infos"), il parle de CE mandat sauf indication contraire.`;
+Si l'utilisateur pose une question vague, il parle de CE mandat sauf indication contraire.`;
   } else if (context?.type === 'client' && context.data) {
     const c = context.data;
     const nom = [c.prenom, c.nom].filter(Boolean).join(' ') || c.societe || '(anonyme)';
@@ -63,12 +62,12 @@ L'utilisateur est sur la fiche du client suivant :
 - Budget : ${c.budget_min || 0} - ${c.budget_max || 0} €
 - Owner : ${c.owner || '(non renseigné)'}
 
-Si l'utilisateur pose une question vague ("résume", "qu'est-ce qu'il cherche"), il parle de CE client sauf indication contraire.`;
+Si l'utilisateur pose une question vague, il parle de CE client sauf indication contraire.`;
   }
 
   let pdfBlock = '';
   if (pdfTexts && pdfTexts.length > 0) {
-    pdfBlock = '\n\nPIÈCES JOINTES PDF\nL\'utilisateur a joint les documents suivants. Considère leur contenu pour répondre :\n';
+    pdfBlock = '\n\nPIÈCES JOINTES PDF\nL\'utilisateur a joint les documents suivants :\n';
     pdfTexts.forEach((p, i) => {
       pdfBlock += `\n=== PDF ${i + 1} : ${p.name} ===\n${p.text}\n=== FIN PDF ${i + 1} ===\n`;
     });
@@ -79,37 +78,36 @@ Si l'utilisateur pose une question vague ("résume", "qu'est-ce qu'il cherche"),
 Date du jour : ${today}.
 
 RÔLE
-Tu aides Thomas (le fondateur) à naviguer dans son CRM : tu peux chercher des mandats (biens immobiliers à vendre) et des clients (acquéreurs). Tu peux aussi analyser des PDF et des images qu'il te joint.
+Tu aides Thomas (le fondateur) à naviguer dans son CRM, créer des mandats, et analyser des documents.
 
-CAPACITÉS ACTUELLES (Phase 2.3)
-- search_mandats : chercher dans les mandats par nom, adresse, ville, type, prix, statut, etc.
-- search_clients : chercher dans les clients par nom, société, typologie, budget, etc.
-- Analyse de PDF joints (texte extrait automatiquement)
-- Analyse d'images jointes (via vision GPT-4o)
+CAPACITÉS ACTUELLES (Phase 4.1)
+- search_mandats : chercher dans les mandats
+- search_clients : chercher dans les clients
+- propose_create_mandat : PROPOSER la création d'un mandat (l'utilisateur confirme avant exécution)
+- Analyse de PDF et d'images joints
 
-⚠️ Tu ne peux RIEN créer, modifier ou supprimer pour le moment.
+⚠️ Pour les créations, tu PROPOSES via propose_create_mandat — Thomas confirme ensuite. Tu ne crées JAMAIS directement.
 
 STYLE
 - Tutoie Thomas.
 - Court et direct, jamais bavard.
 - En français.
-- Mets en gras les noms importants (mandats, clients) avec **double étoiles**.
+- Mets en gras les noms importants (**double étoiles**).
 - Si tu trouves plusieurs résultats, liste-les de façon concise (1 ligne par item).
-- Si tu ne trouves rien, dis-le clairement et propose une recherche alternative.
-- Si l'utilisateur demande "tous" ou "les derniers" ou "combien", appelle search_mandats ou search_clients SANS filtre.
 
 CONTEXTE MÉTIER
 - "Mandat" = un bien immobilier en vente.
-- "Client" = un acquéreur potentiel.
-- Statut mandat : Sourcing, En cours, Mandat signé, Vendu, Abandonné.
-- Maturité client : "Faible", "Moyen", "Élevé".
-- Typologie client : "Foncières", "Family Office", "Particuliers", etc.
+- Statut mandat (valeurs typiques) : "Sourcing", "En cours", "Mandat signé", "Vendu", "Abandonné".
+- Type mandat (valeurs typiques) : "Immeubles", "Appartements", "Locaux commerciaux", "Maisons", etc.
+- Commercialisation : "Off-market" (défaut) ou "Public".
 - Marché : "B2B" ou "B2C".
 - Owner : initiales du commercial (ex: "TB" = Thomas Boggiani).
+- Les prix sont en euros, souvent en millions. Convertis "2,5 M€" en 2500000.
 
 UTILISATION DES OUTILS
 - N'hésite pas à appeler plusieurs fois les outils pour raffiner ta recherche.
-- Si Thomas pose une question vague, fais d'abord une recherche large, puis affine.${contextBlock}${pdfBlock}`;
+- Si Thomas demande de créer un mandat, utilise propose_create_mandat avec les infos disponibles. Mets des valeurs par défaut sensées si manquantes (statut="Sourcing", commercialisation="Off-market").
+- Si Thomas dit "crée un mandat à partir de ce PDF", lis le PDF en contexte, extrais les infos, puis appelle propose_create_mandat.${contextBlock}${pdfBlock}`;
 }
 
 // ==========================================================================
@@ -121,18 +119,18 @@ const tools = [
     type: 'function',
     function: {
       name: 'search_mandats',
-      description: 'Cherche dans la table des mandats (biens immobiliers à vendre). Retourne une liste de mandats correspondant aux critères. Si aucun filtre n\'est fourni, retourne les mandats les plus récents.',
+      description: 'Cherche dans la table des mandats. Sans filtre, retourne les plus récents.',
       parameters: {
         type: 'object',
         properties: {
-          query_text: { type: 'string', description: 'Texte libre à chercher dans nom, adresse ou ville. Optionnel.' },
-          ville: { type: 'string', description: 'Filtre par ville. Optionnel.' },
-          statut: { type: 'string', description: 'Valeurs : "Sourcing", "En cours", "Mandat signé", "Vendu", "Abandonné". Optionnel.' },
-          type: { type: 'string', description: 'Type de bien (ex: "Immeubles", "Appartements"). Optionnel.' },
-          prix_min: { type: 'number', description: 'Prix minimum en euros. Optionnel.' },
-          prix_max: { type: 'number', description: 'Prix maximum en euros. Optionnel.' },
-          owner: { type: 'string', description: 'Initiales du commercial. Optionnel.' },
-          limit: { type: 'integer', description: 'Nombre max de résultats. Défaut 10, max 20.' }
+          query_text: { type: 'string', description: 'Texte libre dans nom, adresse, ville.' },
+          ville: { type: 'string' },
+          statut: { type: 'string' },
+          type: { type: 'string' },
+          prix_min: { type: 'number' },
+          prix_max: { type: 'number' },
+          owner: { type: 'string' },
+          limit: { type: 'integer' }
         },
         required: []
       }
@@ -142,25 +140,60 @@ const tools = [
     type: 'function',
     function: {
       name: 'search_clients',
-      description: 'Cherche dans la table des clients (acquéreurs). Si aucun filtre n\'est fourni, retourne les clients les plus récents.',
+      description: 'Cherche dans la table des clients. Sans filtre, retourne les plus récents.',
       parameters: {
         type: 'object',
         properties: {
-          query_text: { type: 'string', description: 'Texte libre à chercher dans nom, prénom, société ou email. Optionnel.' },
-          typologie: { type: 'string', description: 'Ex: "Foncières", "Family Office", "Particuliers". Optionnel.' },
-          marche: { type: 'string', description: 'Valeurs : "B2B", "B2C". Optionnel.' },
-          maturite: { type: 'string', description: 'Valeurs : "Faible", "Moyen", "Élevé". Optionnel.' },
-          statut: { type: 'string', description: 'Ex: "Actif". Optionnel.' },
-          owner: { type: 'string', description: 'Initiales du commercial. Optionnel.' },
-          budget_min: { type: 'number', description: 'Budget min en euros. Optionnel.' },
-          budget_max: { type: 'number', description: 'Budget max en euros. Optionnel.' },
-          limit: { type: 'integer', description: 'Nombre max de résultats. Défaut 10, max 20.' }
+          query_text: { type: 'string' },
+          typologie: { type: 'string' },
+          marche: { type: 'string' },
+          maturite: { type: 'string' },
+          statut: { type: 'string' },
+          owner: { type: 'string' },
+          budget_min: { type: 'number' },
+          budget_max: { type: 'number' },
+          limit: { type: 'integer' }
         },
         required: []
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'propose_create_mandat',
+      description: 'PROPOSE la création d\'un mandat. Ne crée RIEN en base. Retourne une proposition que Thomas devra valider manuellement avant exécution. Utilise les valeurs par défaut sensées si infos manquantes.',
+      parameters: {
+        type: 'object',
+        properties: {
+          nom: { type: 'string', description: 'Titre du mandat (ex: "Immeuble 9 rue Hoche Versailles"). OBLIGATOIRE.' },
+          adresse: { type: 'string', description: 'Adresse complète du bien.' },
+          ville: { type: 'string', description: 'Ville.' },
+          type: { type: 'string', description: 'Type de bien (Immeubles, Appartements, etc.). Défaut "Immeubles".' },
+          sous_type: { type: 'string', description: 'Sous-type optionnel.' },
+          prix: { type: 'number', description: 'Prix annoncé en euros.' },
+          surface: { type: 'number', description: 'Surface en m².' },
+          nb_lots: { type: 'integer', description: 'Nombre de lots.' },
+          nb_pieces: { type: 'integer', description: 'Nombre de pièces.' },
+          nb_chambres: { type: 'integer', description: 'Nombre de chambres.' },
+          etage: { type: 'integer', description: 'Étage.' },
+          loyers_annuels: { type: 'number', description: 'Loyers annuels en euros.' },
+          statut: { type: 'string', description: 'Statut. Défaut "Sourcing".' },
+          commercialisation: { type: 'string', description: 'Défaut "Off-market".' },
+          marche: { type: 'string', description: 'B2B ou B2C.' },
+          description: { type: 'string', description: 'Description libre.' },
+          contact: { type: 'string', description: 'Nom du contact mandant.' },
+          tel: { type: 'string', description: 'Téléphone du contact.' }
+        },
+        required: ['nom']
+      }
+    }
   }
 ];
+
+// ==========================================================================
+// IMPLÉMENTATION DES OUTILS DE LECTURE
+// ==========================================================================
 
 async function executeSearchMandats(args) {
   const { query_text, ville, statut, type, prix_min, prix_max, owner, limit = 10 } = args;
@@ -231,24 +264,80 @@ async function executeSearchClients(args) {
   };
 }
 
+// ==========================================================================
+// IMPLÉMENTATION DES OUTILS DE PROPOSITION (ne créent RIEN en BDD)
+// ==========================================================================
+
+function buildProposeCreateMandatResult(args) {
+  // L'outil ne CRÉE rien. Il retourne juste la proposition structurée.
+  // Le frontend récupère ça via le champ proposed_action et affiche la carte.
+  const formatPrix = (p) => {
+    if (typeof p !== 'number') return null;
+    return new Intl.NumberFormat('fr-FR').format(p) + ' €';
+  };
+
+  const data = {
+    nom: args.nom || '(sans nom)',
+    adresse: args.adresse || null,
+    ville: args.ville || null,
+    type: args.type || 'Immeubles',
+    sous_type: args.sous_type || null,
+    prix: args.prix || 0,
+    surface: args.surface || 0,
+    nb_lots: args.nb_lots || 1,
+    nb_pieces: args.nb_pieces || null,
+    nb_chambres: args.nb_chambres || null,
+    etage: args.etage || null,
+    loyers_annuels: args.loyers_annuels || 0,
+    statut: args.statut || 'Sourcing',
+    commercialisation: args.commercialisation || 'Off-market',
+    marche: args.marche || null,
+    description: args.description || null,
+    contact: args.contact || null,
+    tel: args.tel || null
+  };
+
+  const fields = [
+    { label: 'Nom', value: data.nom },
+    { label: 'Adresse', value: data.adresse || '—' },
+    { label: 'Ville', value: data.ville || '—' },
+    { label: 'Type', value: data.type + (data.sous_type ? ' / ' + data.sous_type : '') },
+    { label: 'Prix', value: formatPrix(data.prix) || '—' },
+    { label: 'Surface', value: data.surface ? data.surface + ' m²' : '—' },
+    { label: 'Statut', value: data.statut },
+    { label: 'Commercialisation', value: data.commercialisation }
+  ];
+
+  if (data.contact) fields.push({ label: 'Contact', value: data.contact });
+  if (data.tel) fields.push({ label: 'Téléphone', value: data.tel });
+
+  return {
+    proposed: true,
+    type: 'create_mandat',
+    summary: 'Mandat à créer',
+    fields,
+    data
+  };
+}
+
 async function executeTool(name, args) {
   switch (name) {
     case 'search_mandats': return await executeSearchMandats(args);
     case 'search_clients': return await executeSearchClients(args);
+    case 'propose_create_mandat': return buildProposeCreateMandatResult(args);
     default:
       return { error: `Outil inconnu : ${name}` };
   }
 }
 
 // ==========================================================================
-// TÉLÉCHARGEMENT DES PJ DEPUIS SUPABASE STORAGE
+// PJ : Helpers
 // ==========================================================================
 
 async function downloadFromSignedUrl(signedUrl) {
   const res = await fetch(signedUrl);
   if (!res.ok) throw new Error(`Téléchargement échoué : ${res.status}`);
-  const buffer = Buffer.from(await res.arrayBuffer());
-  return buffer;
+  return Buffer.from(await res.arrayBuffer());
 }
 
 async function extractPdfTextFromBuffer(buffer) {
@@ -263,8 +352,7 @@ async function extractPdfTextFromBuffer(buffer) {
 }
 
 function bufferToDataUrl(buffer, mimeType) {
-  const base64 = buffer.toString('base64');
-  return `data:${mimeType};base64,${base64}`;
+  return `data:${mimeType};base64,${buffer.toString('base64')}`;
 }
 
 // ==========================================================================
@@ -281,36 +369,24 @@ export async function POST(req) {
     if (!userMessages.length) {
       return NextResponse.json({ error: 'messages requis' }, { status: 400 });
     }
-
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: 'OPENAI_API_KEY manquante' }, { status: 500 });
     }
 
-    // ====================================================================
-    // TRAITEMENT DES PJ (téléchargement depuis URL signée)
-    // ====================================================================
+    // Traitement PJ
     const pdfTexts = [];
     const imageAttachments = [];
-
     for (const att of attachments) {
       if (!att?.type || !att?.signedUrl) continue;
-
       try {
         const buffer = await downloadFromSignedUrl(att.signedUrl);
-
         if (att.type === 'application/pdf') {
           const text = await extractPdfTextFromBuffer(buffer);
-          if (text) {
-            pdfTexts.push({
-              name: att.name || 'document.pdf',
-              text: text.slice(0, 50000)
-            });
-          }
+          if (text) pdfTexts.push({ name: att.name || 'document.pdf', text: text.slice(0, 50000) });
         } else if (att.type.startsWith('image/')) {
-          const dataUrl = bufferToDataUrl(buffer, att.type);
           imageAttachments.push({
             type: 'image_url',
-            image_url: { url: dataUrl }
+            image_url: { url: bufferToDataUrl(buffer, att.type) }
           });
         }
       } catch (e) {
@@ -318,9 +394,6 @@ export async function POST(req) {
       }
     }
 
-    // ====================================================================
-    // CONVERSATION
-    // ====================================================================
     const conversation = [
       { role: 'system', content: buildSystemPrompt(context, pdfTexts) },
       ...userMessages
@@ -341,11 +414,10 @@ export async function POST(req) {
       }
     }
 
-    // ====================================================================
-    // BOUCLE FUNCTION CALLING
-    // ====================================================================
+    // Boucle function calling — capture les propositions
     const MAX_ITERATIONS = 6;
     let finalMessage = null;
+    let proposedAction = null;
 
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -366,16 +438,11 @@ export async function POST(req) {
       if (!openaiRes.ok) {
         const errText = await openaiRes.text();
         console.error('[assistant/chat] OpenAI error:', errText);
-        return NextResponse.json(
-          { error: 'Erreur OpenAI', detail: errText },
-          { status: 500 }
-        );
+        return NextResponse.json({ error: 'Erreur OpenAI', detail: errText }, { status: 500 });
       }
 
       const openaiData = await openaiRes.json();
-      const choice = openaiData?.choices?.[0];
-      const msg = choice?.message;
-
+      const msg = openaiData?.choices?.[0]?.message;
       if (!msg) {
         return NextResponse.json({ error: 'Réponse OpenAI vide' }, { status: 500 });
       }
@@ -386,14 +453,21 @@ export async function POST(req) {
         for (const toolCall of msg.tool_calls) {
           const toolName = toolCall.function.name;
           let toolArgs = {};
-          try {
-            toolArgs = JSON.parse(toolCall.function.arguments || '{}');
-          } catch (e) {
-            console.error('[assistant/chat] JSON parse args error:', e);
-          }
+          try { toolArgs = JSON.parse(toolCall.function.arguments || '{}'); }
+          catch (e) { console.error('[assistant/chat] JSON parse args error:', e); }
 
           console.log(`[assistant/chat] Tool call: ${toolName}`, toolArgs);
           const toolResult = await executeTool(toolName, toolArgs);
+
+          // Si l'outil est une proposition, on capture pour le retourner au front
+          if (toolResult?.proposed) {
+            proposedAction = {
+              type: toolResult.type,
+              summary: toolResult.summary,
+              fields: toolResult.fields,
+              data: toolResult.data
+            };
+          }
 
           conversation.push({
             role: 'tool',
@@ -409,22 +483,16 @@ export async function POST(req) {
     }
 
     if (finalMessage === null) {
-      return NextResponse.json(
-        { error: 'Limite d\'itérations atteinte sans réponse finale' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Limite d\'itérations atteinte sans réponse finale' }, { status: 500 });
     }
 
-    return NextResponse.json({
-      message: finalMessage,
-      role: 'assistant'
-    });
+    const response = { message: finalMessage, role: 'assistant' };
+    if (proposedAction) response.proposed_action = proposedAction;
+
+    return NextResponse.json(response);
 
   } catch (e) {
     console.error('[assistant/chat] Erreur:', e);
-    return NextResponse.json(
-      { error: 'Erreur serveur', detail: e.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Erreur serveur', detail: e.message }, { status: 500 });
   }
 }
