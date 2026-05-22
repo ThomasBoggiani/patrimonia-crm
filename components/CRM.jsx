@@ -122,6 +122,7 @@ async function triggerMatchingBatch({ mandatId, clientId }) {
 export default function CRM() {
   const { profile, signOut } = useAuth();
   const [showAICreate, setShowAICreate] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [tabKey, setTabKey] = useState(0);
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
@@ -389,7 +390,7 @@ export default function CRM() {
           <nav className="flex-1 p-3 overflow-y-auto scrollbar-thin">
             {/* Bouton ✨ Créer avec l'IA - unifié */}
             <button 
-              onClick={() => { setShowAICreate(true); setSidebarOpen(false); }}
+              onClick={() => { setAssistantOpen(true); setSidebarOpen(false); }}
               className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm mb-3 gradient-sage-dark text-white hover:opacity-90 shadow-luxe font-medium"
             >
               <Sparkles className="w-4 h-4" />
@@ -542,7 +543,7 @@ export default function CRM() {
           setTimeout(() => setImportToast(null), 10000);
         }}
       />
-      <AIAssistantChat />
+      <AIAssistantChat open={assistantOpen} onOpenChange={setAssistantOpen} />
     </div>
   );
 }
