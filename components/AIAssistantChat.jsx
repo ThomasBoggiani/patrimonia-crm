@@ -1,20 +1,19 @@
 // components/AIAssistantChat.jsx
 //
-// Assistant Patrimonia - Phase 3 UI Chat (v9)
-// + Pièces jointes via Supabase Storage (upload direct, pas de limite Vercel)
-// + Dictée hybride : Web Speech (direct) + Whisper (qualité finale)
+// Assistant Patrimonia - Phase 4.1 UI Chat (v10)
+// + Cartes de proposition d'actions (création de mandat) avec confirmation utilisateur
 
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Sparkles, X, Send, Mic, Loader2, Square, Paperclip, FileText, Image as ImageIcon } from 'lucide-react';
+import { Sparkles, X, Send, Mic, Loader2, Square, Paperclip, FileText, Image as ImageIcon, Check, ExternalLink } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 const SAGE_DARK = '#5d6e5d';
 const SAGE_DARKER = '#3d4d3d';
 
 const BUCKET = 'assistant-attachments';
-const SIGNED_URL_TTL = 3600; // 1h, largement assez pour traiter la requête
+const SIGNED_URL_TTL = 3600;
 
 function renderMarkdown(text) {
   if (!text) return '';
@@ -40,6 +39,65 @@ function randomKey() {
 }
 
 // =========================================================================
+// Carte de proposition d'action
+// =========================================================================
+
+function ProposalCard({ action, onConfirm, onCancel, executing, executed, executedResult, executedError }) {
+  return (
+    <div className="bg-white border border-stone-200 rounded-2xl rounded-bl-sm p-3 max-w-[90%]">
+      <div className="text-xs font-medium text-stone-600 mb-2 flex items-center gap-1.5">
+        <Sparkles className="w-3.5 h-3.5" style={{ color: SAGE_DARK }} />
+        {action.summary || 'Action proposée'}
+      </div>
+
+      <div className="bg-stone-50 rounded-lg p-2.5 text-xs space-y-1 mb-3">
+        {action.fields.map((f, i) => (
+          <div key={i} className="flex gap-2">
+            <span className="text-stone-500 flex-shrink-0">{f.label} :</span>
+            <span className="text-stone-900 font-medium truncate">{f.value}</span>
+          </div>
+        ))}
+      </div>
+
+      {executed && executedResult && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: '#e8f0e8', color: SAGE_DARKER }}>
+          <Check className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>Créé avec succès : {executedResult.label}</span>
+        </div>
+      )}
+
+      {executed && executedError && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-red-50 text-red-700">
+          <X className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>Erreur : {executedError}</span>
+        </div>
+      )}
+
+      {!executed && (
+        <div className="flex gap-2">
+          <button
+            onClick={onConfirm}
+            disabled={executing}
+            style={{ backgroundColor: SAGE_DARK }}
+            className="flex-1 px-3 py-2 rounded-lg text-white text-xs font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+          >
+            {executing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+            {executing ? 'Création…' : 'Créer'}
+          </button>
+          <button
+            onClick={onCancel}
+            disabled={executing}
+            className="px-3 py-2 rounded-lg text-xs font-medium border border-stone-200 text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+          >
+            Annuler
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =========================================================================
 // Composant principal
 // =========================================================================
 
@@ -57,6 +115,8 @@ export default function AIAssistantChat({
     else setInternalOpen(val);
   };
 
+  // Messages = { role, content?, proposed_action?, action_state? }
+  // action_state : { executing, executed, result, error }
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -65,7 +125,6 @@ export default function AIAssistantChat({
   const [liveTranscript, setLiveTranscript] = useState('');
   const [inputBeforeRecord, setInputBeforeRecord] = useState('');
 
-  // PJ : { name, type, size, storagePath, signedUrl }
   const [attachments, setAttachments] = useState([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
 
@@ -106,89 +165,67 @@ export default function AIAssistantChat({
   };
 
   // ========================================================================
-  // PIÈCES JOINTES — Upload direct vers Supabase Storage
+  // PJ
   // ========================================================================
 
   const handleFilesSelected = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
-
     setUploadingFiles(true);
     const newAttachments = [];
 
     for (const file of files) {
       if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
-        alert(`Type de fichier non supporté : ${file.name} (${file.type})`);
+        alert(`Type de fichier non supporté : ${file.name}`);
         continue;
       }
-
       try {
-        // Chemin unique : ts_random_nomFichier
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
         const storagePath = `chat/${Date.now()}_${randomKey()}_${safeName}`;
-
-        // Upload
         const { error: uploadErr } = await supabase.storage
           .from(BUCKET)
-          .upload(storagePath, file, {
-            cacheControl: '3600',
-            upsert: false,
-            contentType: file.type
-          });
-
+          .upload(storagePath, file, { cacheControl: '3600', upsert: false, contentType: file.type });
         if (uploadErr) {
           console.error('[AIAssistantChat] Upload error:', uploadErr);
           alert(`Erreur upload "${file.name}" : ${uploadErr.message}`);
           continue;
         }
-
-        // URL signée pour que le backend puisse télécharger
         const { data: signedData, error: signedErr } = await supabase.storage
           .from(BUCKET)
           .createSignedUrl(storagePath, SIGNED_URL_TTL);
-
         if (signedErr) {
           console.error('[AIAssistantChat] Signed URL error:', signedErr);
-          alert(`Erreur signed URL "${file.name}" : ${signedErr.message}`);
           continue;
         }
-
         newAttachments.push({
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          storagePath,
-          signedUrl: signedData.signedUrl
+          name: file.name, type: file.type, size: file.size,
+          storagePath, signedUrl: signedData.signedUrl
         });
       } catch (err) {
         console.error('[AIAssistantChat] File error:', err);
-        alert('Erreur sur le fichier ' + file.name + ' : ' + err.message);
+        alert('Erreur sur ' + file.name + ' : ' + err.message);
       }
     }
-
     setAttachments(prev => [...prev, ...newAttachments]);
     setUploadingFiles(false);
-
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const removeAttachment = (idx) => {
-    // On retire juste de l'UI ; le fichier reste sur Storage mais sera nettoyé plus tard si besoin
-    setAttachments(prev => prev.filter((_, i) => i !== idx));
-  };
+  const removeAttachment = (idx) => setAttachments(prev => prev.filter((_, i) => i !== idx));
 
   // ========================================================================
-  // ENVOI DU MESSAGE
+  // ENVOI MESSAGE
   // ========================================================================
 
   const sendMessage = async () => {
     const text = input.trim();
     if ((!text && attachments.length === 0) || loading) return;
 
-    const newMessages = [...messages, {
+    const userMsg = {
       role: 'user',
       content: text || (attachments.length > 0 ? '(pièces jointes uniquement)' : '')
-    }];
+    };
+    const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     const currentAttachments = attachments;
     setInput('');
@@ -197,13 +234,11 @@ export default function AIAssistantChat({
     setLoading(true);
 
     try {
-      const payload = { messages: newMessages };
+      const payload = { messages: newMessages.map(m => ({ role: m.role, content: m.content })) };
       if (context) payload.context = context;
       if (currentAttachments.length > 0) {
         payload.attachments = currentAttachments.map(a => ({
-          name: a.name,
-          type: a.type,
-          signedUrl: a.signedUrl
+          name: a.name, type: a.type, signedUrl: a.signedUrl
         }));
       }
 
@@ -212,14 +247,18 @@ export default function AIAssistantChat({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(errText || 'Erreur serveur');
-      }
+      if (!res.ok) throw new Error(await res.text() || 'Erreur serveur');
 
       const data = await res.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.message || '(réponse vide)' }]);
+      const assistantMsg = {
+        role: 'assistant',
+        content: data.message || '(réponse vide)'
+      };
+      if (data.proposed_action) {
+        assistantMsg.proposed_action = data.proposed_action;
+        assistantMsg.action_state = { executing: false, executed: false };
+      }
+      setMessages(prev => [...prev, assistantMsg]);
     } catch (err) {
       console.error('[AIAssistantChat] Erreur:', err);
       setMessages(prev => [...prev, {
@@ -239,6 +278,75 @@ export default function AIAssistantChat({
   };
 
   // ========================================================================
+  // CONFIRMATION D'UNE ACTION
+  // ========================================================================
+
+  const confirmAction = async (msgIdx) => {
+    const msg = messages[msgIdx];
+    if (!msg?.proposed_action) return;
+
+    // Marquer en cours d'exécution
+    setMessages(prev => {
+      const copy = [...prev];
+      copy[msgIdx] = { ...copy[msgIdx], action_state: { executing: true, executed: false } };
+      return copy;
+    });
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || '';
+
+      const res = await fetch('/api/assistant/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: { type: msg.proposed_action.type, data: msg.proposed_action.data },
+          token
+        })
+      });
+
+      const data = await res.json();
+
+      setMessages(prev => {
+        const copy = [...prev];
+        if (data.ok) {
+          copy[msgIdx] = {
+            ...copy[msgIdx],
+            action_state: { executing: false, executed: true, result: data.result }
+          };
+        } else {
+          copy[msgIdx] = {
+            ...copy[msgIdx],
+            action_state: { executing: false, executed: true, error: data.error || 'Erreur inconnue' }
+          };
+        }
+        return copy;
+      });
+    } catch (err) {
+      console.error('[AIAssistantChat] Execute error:', err);
+      setMessages(prev => {
+        const copy = [...prev];
+        copy[msgIdx] = {
+          ...copy[msgIdx],
+          action_state: { executing: false, executed: true, error: err.message }
+        };
+        return copy;
+      });
+    }
+  };
+
+  const cancelAction = (msgIdx) => {
+    setMessages(prev => {
+      const copy = [...prev];
+      copy[msgIdx] = {
+        ...copy[msgIdx],
+        action_state: { executing: false, executed: true, error: 'Annulé par l\'utilisateur' }
+      };
+      return copy;
+    });
+  };
+
+  // ========================================================================
   // VOCAL HYBRIDE
   // ========================================================================
 
@@ -247,35 +355,25 @@ export default function AIAssistantChat({
       const currentInput = input;
       setInputBeforeRecord(currentInput);
       setLiveTranscript('');
-
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       audioChunksRef.current = [];
-
-      mr.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-
+      mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data); };
       mr.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
         if (audioChunksRef.current.length === 0) return;
-
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         setTranscribing(true);
-
         try {
           const { data: { session } } = await supabase.auth.getSession();
           const token = session?.access_token || '';
-
           const formData = new FormData();
           formData.append('audio', blob, 'voice.webm');
           formData.append('token', token);
-
           const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
           if (!res.ok) throw new Error('Transcription échouée');
           const data = await res.json();
           const transcript = data.text || data.transcript || '';
-
           if (transcript) {
             setInput(prev => {
               const base = inputBeforeRecord || '';
@@ -300,39 +398,29 @@ export default function AIAssistantChat({
           setLiveTranscript('');
         }
       };
-
       mediaRecorderRef.current = mr;
       mr.start();
-
       if (SpeechRecognition) {
         try {
           const recognition = new SpeechRecognition();
           recognition.lang = 'fr-FR';
           recognition.continuous = true;
           recognition.interimResults = true;
-
           recognition.onresult = (event) => {
-            let interim = '';
-            let final = '';
+            let interim = '', final = '';
             for (let i = event.resultIndex; i < event.results.length; i++) {
-              const transcript = event.results[i][0].transcript;
-              if (event.results[i].isFinal) final += transcript + ' ';
-              else interim += transcript;
+              const t = event.results[i][0].transcript;
+              if (event.results[i].isFinal) final += t + ' '; else interim += t;
             }
             setLiveTranscript(() => (final + interim).trim());
           };
-
-          recognition.onerror = (e) => {
-            console.warn('[AIAssistantChat] Web Speech error:', e.error);
-          };
-
+          recognition.onerror = (e) => console.warn('[AIAssistantChat] Web Speech error:', e.error);
           speechRecognitionRef.current = recognition;
           recognition.start();
         } catch (e) {
           console.warn('[AIAssistantChat] Web Speech start failed:', e);
         }
       }
-
       setRecording(true);
     } catch (err) {
       console.error('[AIAssistantChat] Mic error:', err);
@@ -367,7 +455,6 @@ export default function AIAssistantChat({
     }
     return null;
   };
-
   const contextLabel = getContextLabel();
 
   const gradientStyle = {
@@ -391,20 +478,15 @@ export default function AIAssistantChat({
         <div
           className="fixed bottom-6 right-6 z-50 flex flex-col bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden"
           style={{
-            width: '420px',
-            height: '600px',
-            maxWidth: 'calc(100vw - 3rem)',
-            maxHeight: 'calc(100vh - 3rem)',
+            width: '420px', height: '600px',
+            maxWidth: 'calc(100vw - 3rem)', maxHeight: 'calc(100vh - 3rem)',
             resize: 'both'
           }}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-stone-200 bg-stone-50 flex-shrink-0">
             <div className="flex items-center gap-2 min-w-0">
-              <div
-                style={gradientStyle}
-                className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-              >
+              <div style={gradientStyle} className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0">
                 <Sparkles className="w-4 h-4 text-white" />
               </div>
               <div className="min-w-0">
@@ -412,7 +494,7 @@ export default function AIAssistantChat({
                 {contextLabel ? (
                   <div className="text-xs text-stone-500 truncate" title={contextLabel}>{contextLabel}</div>
                 ) : (
-                  <div className="text-xs text-stone-500">Cherche dans tes mandats et clients</div>
+                  <div className="text-xs text-stone-500">Cherche, propose, agit dans le CRM</div>
                 )}
               </div>
             </div>
@@ -425,37 +507,54 @@ export default function AIAssistantChat({
             </button>
           </div>
 
-          {/* Zone messages */}
+          {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-stone-50">
             {messages.length === 0 && (
               <div className="text-center text-stone-400 text-sm mt-12">
                 <Sparkles className="w-6 h-6 mx-auto mb-2 text-stone-300" />
-                <p>Pose-moi une question</p>
+                <p>Pose-moi une question ou demande-moi de créer un mandat</p>
                 {contextLabel ? (
                   <p className="text-xs mt-1">Ex : "Donne-moi un résumé"</p>
                 ) : (
-                  <p className="text-xs mt-1">Ex : "Combien de mandats à Paris ?"</p>
+                  <p className="text-xs mt-1">Ex : "Crée un mandat 9 rue Hoche à Versailles"</p>
                 )}
-                <p className="text-xs mt-3 text-stone-400">Tu peux aussi joindre des PDF ou des photos.</p>
+                <p className="text-xs mt-3 text-stone-400">Tu peux joindre PDF ou photos.</p>
               </div>
             )}
 
-            {messages.map((msg, i) => (
-              <div
-                key={i}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  style={msg.role === 'user' ? { backgroundColor: SAGE_DARK } : {}}
-                  className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed ${
-                    msg.role === 'user'
-                      ? 'text-white rounded-br-sm'
-                      : 'bg-white text-stone-900 border border-stone-200 rounded-bl-sm'
-                  }`}
-                  dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
-                />
-              </div>
-            ))}
+            {messages.map((msg, i) => {
+              const isUser = msg.role === 'user';
+              const hasProposal = msg.proposed_action;
+              return (
+                <div key={i} className={`flex ${isUser ? 'justify-end' : 'justify-start'} ${hasProposal ? 'flex-col items-start gap-2' : ''}`}>
+                  {/* Message texte */}
+                  {msg.content && (
+                    <div
+                      style={isUser ? { backgroundColor: SAGE_DARK } : {}}
+                      className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed ${
+                        isUser
+                          ? 'text-white rounded-br-sm'
+                          : 'bg-white text-stone-900 border border-stone-200 rounded-bl-sm'
+                      }`}
+                      dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
+                    />
+                  )}
+
+                  {/* Carte de proposition */}
+                  {hasProposal && (
+                    <ProposalCard
+                      action={msg.proposed_action}
+                      onConfirm={() => confirmAction(i)}
+                      onCancel={() => cancelAction(i)}
+                      executing={msg.action_state?.executing}
+                      executed={msg.action_state?.executed}
+                      executedResult={msg.action_state?.result}
+                      executedError={msg.action_state?.error}
+                    />
+                  )}
+                </div>
+              );
+            })}
 
             {loading && (
               <div className="flex justify-start">
@@ -475,10 +574,7 @@ export default function AIAssistantChat({
             <div className="px-3 pt-2 pb-1 border-t border-stone-100 bg-white flex-shrink-0">
               <div className="flex gap-2 flex-wrap">
                 {attachments.map((att, idx) => (
-                  <div
-                    key={idx}
-                    className="relative group flex items-center gap-1.5 px-2 py-1 bg-stone-100 rounded-lg text-xs"
-                  >
+                  <div key={idx} className="relative group flex items-center gap-1.5 px-2 py-1 bg-stone-100 rounded-lg text-xs">
                     {att.type.startsWith('image/') ? (
                       <ImageIcon className="w-3.5 h-3.5 text-stone-500" />
                     ) : (
@@ -486,11 +582,7 @@ export default function AIAssistantChat({
                     )}
                     <span className="max-w-[140px] truncate" title={att.name}>{att.name}</span>
                     <span className="text-stone-400">{formatSize(att.size)}</span>
-                    <button
-                      onClick={() => removeAttachment(idx)}
-                      aria-label="Supprimer cette pièce jointe"
-                      className="ml-1 hover:bg-stone-200 rounded p-0.5"
-                    >
+                    <button onClick={() => removeAttachment(idx)} aria-label="Supprimer" className="ml-1 hover:bg-stone-200 rounded p-0.5">
                       <X className="w-3 h-3" />
                     </button>
                   </div>
@@ -514,14 +606,7 @@ export default function AIAssistantChat({
               </div>
             )}
             <div className="flex items-end gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="application/pdf,image/*"
-                onChange={handleFilesSelected}
-                className="hidden"
-              />
+              <input ref={fileInputRef} type="file" multiple accept="application/pdf,image/*" onChange={handleFilesSelected} className="hidden" />
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={loading || recording || transcribing || uploadingFiles}
@@ -537,34 +622,24 @@ export default function AIAssistantChat({
                 value={displayValue}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                placeholder={recording ? 'Parle, je t\'écoute…' : (transcribing ? 'Transcription en cours…' : 'Tape ou parle…')}
+                placeholder={recording ? 'Parle, je t\'écoute…' : (transcribing ? 'Transcription…' : 'Tape ou parle…')}
                 disabled={loading || recording || transcribing}
                 rows={1}
-                style={{
-                  maxHeight: '120px',
-                  color: recording ? '#888' : undefined,
-                  fontStyle: recording ? 'italic' : undefined
-                }}
+                style={{ maxHeight: '120px', color: recording ? '#888' : undefined, fontStyle: recording ? 'italic' : undefined }}
                 className="flex-1 resize-none px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 disabled:bg-stone-50 min-h-[36px]"
               />
 
               <button
                 onClick={recording ? stopRecording : startRecording}
                 disabled={loading || transcribing}
-                aria-label={recording ? 'Arrêter l\'enregistrement' : 'Enregistrer un message vocal'}
+                aria-label={recording ? 'Arrêter' : 'Enregistrer'}
                 className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
                   recording
                     ? 'bg-red-500 text-white animate-pulse'
                     : 'bg-stone-100 text-stone-700 hover:bg-stone-200 disabled:opacity-50 disabled:cursor-not-allowed'
                 }`}
               >
-                {transcribing ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : recording ? (
-                  <Square className="w-4 h-4 fill-current" />
-                ) : (
-                  <Mic className="w-4 h-4" />
-                )}
+                {transcribing ? <Loader2 className="w-4 h-4 animate-spin" /> : recording ? <Square className="w-4 h-4 fill-current" /> : <Mic className="w-4 h-4" />}
               </button>
 
               <button
