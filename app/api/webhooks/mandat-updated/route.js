@@ -1,0 +1,74 @@
+// app/api/webhooks/mandat-updated/route.js
+//
+// Webhook appelé par Supabase Database Webhook à chaque UPDATE de la table 'mandats'.
+// Supprime le PDF en cache dans le bucket mandat-plaquettes pour forcer la regénération.
+//
+// Auth : on attend un header X-Webhook-Secret égal à process.env.SUPABASE_WEBHOOK_SECRET
+
+import { createClient } from '@supabase/supabase-js';
+
+export const runtime = 'nodejs';
+export const maxDuration = 10;
+
+const BUCKET = 'mandat-plaquettes';
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  { auth: { autoRefreshToken: false, persistSession: false } }
+);
+
+export async function POST(request) {
+  try {
+    // Vérification du secret webhook
+    const secret = request.headers.get('x-webhook-secret') || '';
+    const expectedSecret = process.env.SUPABASE_WEBHOOK_SECRET || '';
+
+    if (!expectedSecret) {
+      console.error('[webhook/mandat-updated] SUPABASE_WEBHOOK_SECRET non configuré');
+      return new Response(JSON.stringify({ ok: false, error: 'Webhook secret non configuré côté serveur' }), {
+        status: 500, headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (secret !== expectedSecret) {
+      console.warn('[webhook/mandat-updated] Secret invalide');
+      return new Response(JSON.stringify({ ok: false, error: 'Unauthorized' }), {
+        status: 401, headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const body = await request.json();
+    // Format Supabase Database Webhook : { type, table, record, old_record, schema }
+    const mandatId = body?.record?.id || body?.old_record?.id;
+
+    if (!mandatId) {
+      console.warn('[webhook/mandat-updated] Pas d\'id dans le body', body);
+      return new Response(JSON.stringify({ ok: false, error: 'Pas d\'id mandat' }), {
+        status: 400, headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Supprime le PDF du cache
+    const { error } = await supabaseAdmin.storage
+      .from(BUCKET)
+      .remove([`${mandatId}.pdf`]);
+
+    if (error) {
+      // Pas grave si le fichier n'existait pas, on log juste
+      console.log(`[webhook/mandat-updated] Cache delete info for ${mandatId}:`, error.message);
+    } else {
+      console.log(`[webhook/mandat-updated] Cache invalidated for mandat ${mandatId}`);
+    }
+
+    return new Response(JSON.stringify({ ok: true, mandatId, message: 'Cache invalidated' }), {
+      status: 200, headers: { 'Content-Type': 'application/json' }
+    });
+
+  } catch (e) {
+    console.error('[webhook/mandat-updated] Erreur:', e);
+    return new Response(JSON.stringify({ ok: false, error: 'Erreur serveur', detail: e.message }), {
+      status: 500, headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
