@@ -1,20 +1,21 @@
 // components/AIAssistantChat.jsx
 //
-// Assistant Patrimonia - Phase 3 UI Chat (v6)
-// Dictée vocale hybride : Web Speech (direct) + Whisper (qualité finale)
-//
-// - Click micro → démarre Web Speech (live transcript en gris) + MediaRecorder (audio pour Whisper)
-// - Click stop → arrête les deux, envoie l'audio à Whisper, remplace le texte gris par le texte noir net
-// - Auto-envoi DÉSACTIVÉ : Thomas relit avant d'envoyer
+// Assistant Patrimonia - Phase 3 UI Chat (v7)
+// + Pièces jointes : PDF (extraction texte côté backend) + images (compression + Vision GPT-4o)
+// + Dictée hybride : Web Speech (direct) + Whisper (qualité finale)
 
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Sparkles, X, Send, Mic, Loader2, Square } from 'lucide-react';
+import { Sparkles, X, Send, Mic, Loader2, Square, Paperclip, FileText, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 const SAGE_DARK = '#5d6e5d';
 const SAGE_DARKER = '#3d4d3d';
+
+// Limites de compression image
+const IMAGE_MAX_DIM = 1600;     // max 1600px par côté
+const IMAGE_JPEG_QUALITY = 0.85; // qualité JPEG
 
 function renderMarkdown(text) {
   if (!text) return '';
@@ -25,10 +26,81 @@ function renderMarkdown(text) {
   return escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
 }
 
-// Check Web Speech API support
 const SpeechRecognition = typeof window !== 'undefined'
   ? (window.SpeechRecognition || window.webkitSpeechRecognition)
   : null;
+
+// =========================================================================
+// Helpers : compression d'image
+// =========================================================================
+
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      img.onload = () => {
+        // Calcul nouvelles dimensions
+        let { width, height } = img;
+        if (width > IMAGE_MAX_DIM || height > IMAGE_MAX_DIM) {
+          if (width > height) {
+            height = Math.round((height * IMAGE_MAX_DIM) / width);
+            width = IMAGE_MAX_DIM;
+          } else {
+            width = Math.round((width * IMAGE_MAX_DIM) / height);
+            height = IMAGE_MAX_DIM;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Convertit en data URL JPEG
+        const dataUrl = canvas.toDataURL('image/jpeg', IMAGE_JPEG_QUALITY);
+        resolve({
+          name: file.name,
+          type: 'image/jpeg',
+          data: dataUrl,
+          originalSize: file.size,
+          compressedSize: Math.round(dataUrl.length * 0.75) // approx (base64 = 4/3 du binaire)
+        });
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({
+      name: file.name,
+      type: file.type,
+      data: reader.result,
+      originalSize: file.size,
+      compressedSize: file.size
+    });
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' o';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' Ko';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' Mo';
+}
+
+// =========================================================================
+// Composant principal
+// =========================================================================
 
 export default function AIAssistantChat({
   floating = false,
@@ -49,13 +121,16 @@ export default function AIAssistantChat({
   const [loading, setLoading] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
-  // Texte en cours de dictée (Web Speech, gris, non confirmé)
   const [liveTranscript, setLiveTranscript] = useState('');
-  // Texte de base avant la dictée (à conserver)
   const [inputBeforeRecord, setInputBeforeRecord] = useState('');
+
+  // PJ
+  const [attachments, setAttachments] = useState([]); // { name, type, data, originalSize, compressedSize }
+  const [processingFiles, setProcessingFiles] = useState(false);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const speechRecognitionRef = useRef(null);
@@ -72,6 +147,7 @@ export default function AIAssistantChat({
       setInput('');
       setLiveTranscript('');
       setInputBeforeRecord('');
+      setAttachments([]);
     }
   }, [open]);
 
@@ -89,22 +165,74 @@ export default function AIAssistantChat({
   };
 
   // ========================================================================
+  // PIÈCES JOINTES
+  // ========================================================================
+
+  const handleFilesSelected = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    setProcessingFiles(true);
+    const newAttachments = [];
+
+    for (const file of files) {
+      try {
+        let processed;
+        if (file.type.startsWith('image/')) {
+          processed = await compressImage(file);
+        } else if (file.type === 'application/pdf') {
+          processed = await readFileAsDataURL(file);
+        } else {
+          alert(`Type de fichier non supporté : ${file.name} (${file.type})`);
+          continue;
+        }
+        newAttachments.push(processed);
+      } catch (err) {
+        console.error('[AIAssistantChat] File error:', err);
+        alert('Erreur sur le fichier ' + file.name + ' : ' + err.message);
+      }
+    }
+
+    setAttachments(prev => [...prev, ...newAttachments]);
+    setProcessingFiles(false);
+
+    // Reset input file pour pouvoir re-sélectionner les mêmes fichiers
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removeAttachment = (idx) => {
+    setAttachments(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  // ========================================================================
   // ENVOI DU MESSAGE
   // ========================================================================
 
   const sendMessage = async () => {
     const text = input.trim();
-    if (!text || loading) return;
+    if ((!text && attachments.length === 0) || loading) return;
 
-    const newMessages = [...messages, { role: 'user', content: text }];
+    const newMessages = [...messages, {
+      role: 'user',
+      content: text || (attachments.length > 0 ? '(pièces jointes uniquement)' : '')
+    }];
     setMessages(newMessages);
+    const currentAttachments = attachments;
     setInput('');
+    setAttachments([]);
     if (inputRef.current) inputRef.current.style.height = 'auto';
     setLoading(true);
 
     try {
       const payload = { messages: newMessages };
       if (context) payload.context = context;
+      if (currentAttachments.length > 0) {
+        payload.attachments = currentAttachments.map(a => ({
+          name: a.name,
+          type: a.type,
+          data: a.data
+        }));
+      }
 
       const res = await fetch('/api/assistant/chat', {
         method: 'POST',
@@ -138,17 +266,15 @@ export default function AIAssistantChat({
   };
 
   // ========================================================================
-  // ENREGISTREMENT VOCAL — HYBRIDE Web Speech + Whisper
+  // VOCAL HYBRIDE
   // ========================================================================
 
   const startRecording = async () => {
     try {
-      // Mémorise le texte déjà tapé avant la dictée
       const currentInput = input;
       setInputBeforeRecord(currentInput);
       setLiveTranscript('');
 
-      // === 1. Démarre MediaRecorder (pour Whisper) ===
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       audioChunksRef.current = [];
@@ -178,7 +304,6 @@ export default function AIAssistantChat({
           const transcript = data.text || data.transcript || '';
 
           if (transcript) {
-            // Remplace le texte temporaire Web Speech par le texte final Whisper
             setInput(prev => {
               const base = inputBeforeRecord || '';
               return base ? base + ' ' + transcript : transcript;
@@ -196,7 +321,6 @@ export default function AIAssistantChat({
         } catch (err) {
           console.error('[AIAssistantChat] Transcription error:', err);
           alert('Erreur de transcription : ' + err.message);
-          // Restaure le texte d'avant si erreur
           setInput(inputBeforeRecord);
         } finally {
           setTranscribing(false);
@@ -207,7 +331,6 @@ export default function AIAssistantChat({
       mediaRecorderRef.current = mr;
       mr.start();
 
-      // === 2. Démarre Web Speech API (pour live transcript) ===
       if (SpeechRecognition) {
         try {
           const recognition = new SpeechRecognition();
@@ -220,30 +343,20 @@ export default function AIAssistantChat({
             let final = '';
             for (let i = event.resultIndex; i < event.results.length; i++) {
               const transcript = event.results[i][0].transcript;
-              if (event.results[i].isFinal) {
-                final += transcript + ' ';
-              } else {
-                interim += transcript;
-              }
+              if (event.results[i].isFinal) final += transcript + ' ';
+              else interim += transcript;
             }
-            // Affiche dans l'input EN DIRECT (texte concatén)
-            setLiveTranscript(prev => {
-              // On recompose le texte courant : base + final déjà accumulé + interim en cours
-              const combined = (final + interim).trim();
-              return combined;
-            });
+            setLiveTranscript(() => (final + interim).trim());
           };
 
           recognition.onerror = (e) => {
             console.warn('[AIAssistantChat] Web Speech error:', e.error);
-            // On ne fait rien : Whisper prendra le relais à l'arrêt
           };
 
           speechRecognitionRef.current = recognition;
           recognition.start();
         } catch (e) {
           console.warn('[AIAssistantChat] Web Speech start failed:', e);
-          // Pas grave, Whisper marchera quand même
         }
       }
 
@@ -255,25 +368,16 @@ export default function AIAssistantChat({
   };
 
   const stopRecording = () => {
-    // Stop Web Speech
     if (speechRecognitionRef.current) {
       try { speechRecognitionRef.current.stop(); } catch (e) {}
       speechRecognitionRef.current = null;
     }
-    // Stop MediaRecorder (déclenchera onstop → Whisper)
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
     setRecording(false);
   };
 
-  // ========================================================================
-  // Affichage : texte d'input combiné (saisi + live transcript en gris)
-  // ========================================================================
-
-  // Calcule ce qui s'affiche dans le textarea
-  // Si en recording : affiche [texte avant] + [live transcript]
-  // Sinon : affiche juste input
   const displayValue = recording
     ? (inputBeforeRecord + (inputBeforeRecord && liveTranscript ? ' ' : '') + liveTranscript)
     : input;
@@ -359,6 +463,7 @@ export default function AIAssistantChat({
                 ) : (
                   <p className="text-xs mt-1">Ex : "Combien de mandats à Paris ?"</p>
                 )}
+                <p className="text-xs mt-3 text-stone-400">Tu peux aussi joindre des PDF ou des photos.</p>
               </div>
             )}
 
@@ -392,6 +497,41 @@ export default function AIAssistantChat({
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Vignettes PJ */}
+          {attachments.length > 0 && (
+            <div className="px-3 pt-2 pb-1 border-t border-stone-100 bg-white flex-shrink-0">
+              <div className="flex gap-2 flex-wrap">
+                {attachments.map((att, idx) => (
+                  <div
+                    key={idx}
+                    className="relative group flex items-center gap-1.5 px-2 py-1 bg-stone-100 rounded-lg text-xs"
+                  >
+                    {att.type.startsWith('image/') ? (
+                      <ImageIcon className="w-3.5 h-3.5 text-stone-500" />
+                    ) : (
+                      <FileText className="w-3.5 h-3.5 text-stone-500" />
+                    )}
+                    <span className="max-w-[140px] truncate" title={att.name}>{att.name}</span>
+                    <span className="text-stone-400">{formatSize(att.compressedSize)}</span>
+                    <button
+                      onClick={() => removeAttachment(idx)}
+                      aria-label="Supprimer cette pièce jointe"
+                      className="ml-1 hover:bg-stone-200 rounded p-0.5"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                {processingFiles && (
+                  <div className="flex items-center gap-1.5 px-2 py-1 text-xs text-stone-500">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Traitement…</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Input */}
           <div className="border-t border-stone-200 bg-white p-3 flex-shrink-0">
             {recording && (
@@ -401,6 +541,24 @@ export default function AIAssistantChat({
               </div>
             )}
             <div className="flex items-end gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="application/pdf,image/*"
+                onChange={handleFilesSelected}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading || recording || transcribing || processingFiles}
+                aria-label="Joindre des fichiers"
+                title="Joindre PDF ou photos"
+                className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-stone-100 text-stone-700 hover:bg-stone-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {processingFiles ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+              </button>
+
               <textarea
                 ref={inputRef}
                 value={displayValue}
@@ -438,9 +596,9 @@ export default function AIAssistantChat({
 
               <button
                 onClick={sendMessage}
-                disabled={!input.trim() || loading || recording || transcribing}
+                disabled={(!input.trim() && attachments.length === 0) || loading || recording || transcribing}
                 aria-label="Envoyer"
-                style={!input.trim() || loading || recording || transcribing ? {} : { backgroundColor: SAGE_DARK }}
+                style={(!input.trim() && attachments.length === 0) || loading || recording || transcribing ? {} : { backgroundColor: SAGE_DARK }}
                 className="w-9 h-9 rounded-lg text-white disabled:bg-stone-200 disabled:text-stone-400 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0 transition-colors hover:opacity-90"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
