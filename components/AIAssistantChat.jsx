@@ -1,14 +1,19 @@
 // components/AIAssistantChat.jsx
 //
-// Assistant Patrimonia - Phase 3 UI Chat
-// Bouton flottant en bas à droite qui ouvre une fenêtre de chat avec :
-// - Conversation avec /api/assistant/chat
-// - Input texte avec auto-resize
-// - Bouton micro (Whisper via /api/transcribe)
-// - Pas de persistance : conversation effacée à chaque fermeture
+// Assistant Patrimonia - Phase 3 UI Chat (v2 contextuel)
 //
-// Pour cette phase, l'IA est en lecture seule (search_mandats, search_clients).
-// Les outils de création arriveront dans la phase suivante.
+// Composant générique utilisable de 2 façons :
+//
+// 1. Mode FLOTTANT (sur fiche mandat ou client)
+//    <AIAssistantChat floating context={{ type: 'mandat', data: mandat }} />
+//    → affiche un bouton flottant ✨ en bas à droite
+//
+// 2. Mode CONTRÔLÉ (déclenché par un bouton dans le menu)
+//    <AIAssistantChat open={open} onOpenChange={setOpen} />
+//    → la fenêtre s'ouvre/se ferme selon la prop open, sans bouton flottant
+//
+// Le `context` est passé au backend pour que l'IA sache de quelle fiche
+// l'utilisateur parle.
 
 'use client';
 
@@ -21,12 +26,10 @@ import { Sparkles, X, Send, Mic, Loader2, Square } from 'lucide-react';
 
 function renderMarkdown(text) {
   if (!text) return '';
-  // Échapper le HTML d'abord pour éviter les injections
   const escaped = text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
-  // Puis appliquer le **gras**
   return escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
 }
 
@@ -34,8 +37,27 @@ function renderMarkdown(text) {
 // Composant principal
 // =========================================================================
 
-export default function AIAssistantChat() {
-  const [open, setOpen] = useState(false);
+export default function AIAssistantChat({
+  floating = false,
+  context = null,
+  open: controlledOpen,
+  onOpenChange
+}) {
+  // État interne pour le mode floating
+  const [internalOpen, setInternalOpen] = useState(false);
+
+  // Détermine si on est en mode contrôlé
+  const isControlled = typeof controlledOpen === 'boolean';
+  const open = isControlled ? controlledOpen : internalOpen;
+
+  const setOpen = (val) => {
+    if (isControlled) {
+      onOpenChange?.(val);
+    } else {
+      setInternalOpen(val);
+    }
+  };
+
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -47,7 +69,7 @@ export default function AIAssistantChat() {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
-  // Auto-scroll vers le bas à chaque nouveau message
+  // Auto-scroll
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -62,14 +84,13 @@ export default function AIAssistantChat() {
     }
   }, [open]);
 
-  // Focus auto sur l'input à l'ouverture
+  // Focus auto à l'ouverture
   useEffect(() => {
     if (open && inputRef.current) {
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [open]);
 
-  // Auto-resize du textarea
   const handleInputChange = (e) => {
     setInput(e.target.value);
     const el = e.target;
@@ -92,10 +113,13 @@ export default function AIAssistantChat() {
     setLoading(true);
 
     try {
+      const payload = { messages: newMessages };
+      if (context) payload.context = context;
+
       const res = await fetch('/api/assistant/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: newMessages })
+        body: JSON.stringify(payload)
       });
 
       if (!res.ok) {
@@ -138,9 +162,7 @@ export default function AIAssistantChat() {
       };
 
       mr.onstop = async () => {
-        // On arrête les pistes du stream
         stream.getTracks().forEach(t => t.stop());
-
         if (audioChunksRef.current.length === 0) return;
 
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
@@ -150,11 +172,7 @@ export default function AIAssistantChat() {
           const formData = new FormData();
           formData.append('audio', blob, 'voice.webm');
 
-          const res = await fetch('/api/transcribe', {
-            method: 'POST',
-            body: formData
-          });
-
+          const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
           if (!res.ok) throw new Error('Transcription échouée');
           const data = await res.json();
           const transcript = data.text || data.transcript || '';
@@ -163,7 +181,6 @@ export default function AIAssistantChat() {
             setInput(prev => (prev ? prev + ' ' + transcript : transcript));
             if (inputRef.current) {
               inputRef.current.focus();
-              // Auto-resize
               inputRef.current.style.height = 'auto';
               inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + 'px';
             }
@@ -193,13 +210,32 @@ export default function AIAssistantChat() {
   };
 
   // =======================================================================
+  // Helpers pour le contexte affiché
+  // =======================================================================
+
+  const getContextLabel = () => {
+    if (!context) return null;
+    if (context.type === 'mandat' && context.data) {
+      return `Mandat : ${context.data.nom || context.data.adresse || 'sans nom'}`;
+    }
+    if (context.type === 'client' && context.data) {
+      const c = context.data;
+      const nom = [c.prenom, c.nom].filter(Boolean).join(' ') || c.societe || 'sans nom';
+      return `Client : ${nom}`;
+    }
+    return null;
+  };
+
+  const contextLabel = getContextLabel();
+
+  // =======================================================================
   // Rendu
   // =======================================================================
 
   return (
     <>
-      {/* Bouton flottant */}
-      {!open && (
+      {/* Bouton flottant (uniquement si floating=true et non ouvert) */}
+      {floating && !open && (
         <button
           onClick={() => setOpen(true)}
           aria-label="Ouvrir l'Assistant Patrimonia"
@@ -223,19 +259,23 @@ export default function AIAssistantChat() {
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-stone-200 bg-stone-50 flex-shrink-0">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-sage-500 to-sage-700 flex items-center justify-center">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-sage-500 to-sage-700 flex items-center justify-center flex-shrink-0">
                 <Sparkles className="w-4 h-4 text-white" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="text-sm font-semibold text-stone-900">Assistant Patrimonia</div>
-                <div className="text-xs text-stone-500">Cherche dans tes mandats et clients</div>
+                {contextLabel ? (
+                  <div className="text-xs text-stone-500 truncate" title={contextLabel}>{contextLabel}</div>
+                ) : (
+                  <div className="text-xs text-stone-500">Cherche dans tes mandats et clients</div>
+                )}
               </div>
             </div>
             <button
               onClick={() => setOpen(false)}
               aria-label="Fermer"
-              className="p-1.5 hover:bg-stone-200 rounded-lg transition-colors"
+              className="p-1.5 hover:bg-stone-200 rounded-lg transition-colors flex-shrink-0"
             >
               <X className="w-4 h-4 text-stone-600" />
             </button>
@@ -247,7 +287,11 @@ export default function AIAssistantChat() {
               <div className="text-center text-stone-400 text-sm mt-12">
                 <Sparkles className="w-6 h-6 mx-auto mb-2 text-stone-300" />
                 <p>Pose-moi une question</p>
-                <p className="text-xs mt-1">Ex : "Combien de mandats à Paris ?"</p>
+                {contextLabel ? (
+                  <p className="text-xs mt-1">Ex : "Donne-moi un résumé"</p>
+                ) : (
+                  <p className="text-xs mt-1">Ex : "Combien de mandats à Paris ?"</p>
+                )}
               </div>
             )}
 
@@ -295,7 +339,6 @@ export default function AIAssistantChat() {
                 style={{ maxHeight: '120px' }}
               />
 
-              {/* Bouton micro */}
               <button
                 onClick={recording ? stopRecording : startRecording}
                 disabled={loading || transcribing}
@@ -315,7 +358,6 @@ export default function AIAssistantChat() {
                 )}
               </button>
 
-              {/* Bouton envoyer */}
               <button
                 onClick={sendMessage}
                 disabled={!input.trim() || loading || recording || transcribing}
