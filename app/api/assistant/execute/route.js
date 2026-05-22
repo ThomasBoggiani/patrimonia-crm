@@ -1,7 +1,7 @@
 // app/api/assistant/execute/route.js
 //
-// Exécute une action APRÈS confirmation utilisateur depuis le chat Assistant.
-// Ce endpoint reçoit une "action" (validée côté UI) et l'exécute en base.
+// Exécute une action APRÈS confirmation utilisateur.
+// Récupère automatiquement l'owner depuis le profile de l'utilisateur authentifié.
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -22,12 +22,31 @@ async function verifyToken(token) {
   return user;
 }
 
+// Récupère les initiales (owner) de l'utilisateur authentifié depuis le profile
+async function getUserInitials(userId) {
+  if (!userId) return null;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .select('initials, prenom, nom')
+      .eq('id', userId)
+      .single();
+    if (error || !data) return null;
+    // Préfère le champ initials s'il existe, sinon calcule depuis prenom + nom
+    if (data.initials) return data.initials;
+    const initials = [data.prenom?.[0], data.nom?.[0]].filter(Boolean).join('').toUpperCase();
+    return initials || null;
+  } catch (e) {
+    console.error('[assistant/execute] getUserInitials error:', e);
+    return null;
+  }
+}
+
 // ==========================================================================
 // ACTIONS
 // ==========================================================================
 
-async function executeCreateMandat(data, userId) {
-  // Préparation des champs avec valeurs par défaut
+async function executeCreateMandat(data, userId, userInitials) {
   const row = {
     nom: data.nom || 'Sans nom',
     adresse: data.adresse || null,
@@ -47,13 +66,14 @@ async function executeCreateMandat(data, userId) {
     description: data.description || null,
     contact: data.contact || null,
     tel: data.tel || null,
+    owner: data.owner || userInitials || 'JD', // priorité : data > userInitials > défaut JD
     created_by: userId || null
   };
 
   const { data: inserted, error } = await supabaseAdmin
     .from('mandats')
     .insert(row)
-    .select('id, nom')
+    .select('id, nom, owner')
     .single();
 
   if (error) {
@@ -84,16 +104,17 @@ export async function POST(req) {
       return NextResponse.json({ ok: false, error: 'action invalide' }, { status: 400 });
     }
 
-    // Vérification token (obligatoire pour les actions de création)
     const user = await verifyToken(token);
     if (!user) {
       return NextResponse.json({ ok: false, error: 'Authentification requise' }, { status: 401 });
     }
 
+    const userInitials = await getUserInitials(user.id);
+
     let result;
     switch (action.type) {
       case 'create_mandat':
-        result = await executeCreateMandat(action.data, user.id);
+        result = await executeCreateMandat(action.data, user.id, userInitials);
         break;
       default:
         return NextResponse.json({ ok: false, error: `Type d'action inconnu : ${action.type}` }, { status: 400 });
