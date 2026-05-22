@@ -3257,7 +3257,7 @@ function ClientDetail({ client, onBack, onEdit, mandats, deals, interactions, re
       )}
 
       {/* ═══ ASSISTANT IA CLIENT ═══ */}
-      {/* <ClientAnalysisPanel client={client} /> */}
+      <AIAssistantChat floating context={{ type: 'client', data: client }} />
     </div>
   );
 }
