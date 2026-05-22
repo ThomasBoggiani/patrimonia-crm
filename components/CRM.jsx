@@ -23,7 +23,6 @@ import AICreateModal from './AICreateModal';
 import AIAssistantChat from './AIAssistantChat';
 import MarkAsSoldModal from './MarkAsSoldModal';
 import CascadeSelectMulti from './CascadeSelectMulti';
-import MandatAIAssistant from './MandatAIAssistant';
 import DocumentsModal from './DocumentsModal';
 import AgendaTab from './AgendaTab';
 import TeamTab from './TeamTab';
