@@ -41,6 +41,8 @@ export async function POST(request) {
     const body = await request.json();
     // Format Supabase Database Webhook : { type, table, record, old_record, schema }
     const mandatId = body?.record?.id || body?.old_record?.id;
+    const record = body?.record || {};
+    const oldRecord = body?.old_record || {};
 
     if (!mandatId) {
       console.warn('[webhook/mandat-updated] Pas d\'id dans le body', body);
@@ -48,6 +50,30 @@ export async function POST(request) {
         status: 400, headers: { 'Content-Type': 'application/json' }
       });
     }
+
+    // Détecte si SEUL plaquette_cached_at a changé (anti-boucle)
+    // On ignore aussi updated_at qui change toujours
+    const IGNORED_FIELDS = new Set(['plaquette_cached_at', 'updated_at']);
+    const changedFields = [];
+    const allKeys = new Set([...Object.keys(record), ...Object.keys(oldRecord)]);
+    for (const key of allKeys) {
+      if (IGNORED_FIELDS.has(key)) continue;
+      // Comparaison simple (les types JSON sont JSON-stringifiés)
+      const a = record[key];
+      const b = oldRecord[key];
+      if (JSON.stringify(a) !== JSON.stringify(b)) {
+        changedFields.push(key);
+      }
+    }
+
+    if (changedFields.length === 0) {
+      console.log(`[webhook/mandat-updated] Skip ${mandatId} (only ignored fields changed)`);
+      return new Response(JSON.stringify({ ok: true, mandatId, skipped: true }), {
+        status: 200, headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    console.log(`[webhook/mandat-updated] Cache invalidation triggered for ${mandatId} by fields: ${changedFields.join(', ')}`);
 
     // Supprime le PDF du cache
     const { error } = await supabaseAdmin.storage
