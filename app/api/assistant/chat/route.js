@@ -36,8 +36,8 @@ RÔLE
 Tu aides Thomas (le fondateur) à naviguer dans son CRM : tu peux chercher des mandats (biens immobiliers à vendre) et des clients (acquéreurs).
 
 CAPACITÉS ACTUELLES (Phase 2.0)
-- search_mandats : chercher dans les mandats par adresse, ville, type, prix, statut, etc.
-- search_clients : chercher dans les clients par nom, ville recherchée, budget, typologie B2B/B2C, etc.
+- search_mandats : chercher dans les mandats par nom, adresse, ville, type, prix, statut, etc.
+- search_clients : chercher dans les clients par nom, société, typologie, budget, etc.
 
 ⚠️ Tu ne peux RIEN créer, modifier ou supprimer pour le moment. Ces capacités arriveront plus tard.
 
@@ -48,18 +48,21 @@ STYLE
 - Mets en gras les noms importants (mandats, clients) avec **double étoiles**.
 - Si tu trouves plusieurs résultats, liste-les de façon concise (1 ligne par item).
 - Si tu ne trouves rien, dis-le clairement et propose une recherche alternative.
+- Si l'utilisateur demande "tous" ou "les derniers" ou "combien", appelle search_mandats ou search_clients SANS filtre, ça retourne par défaut les plus récents.
 
 CONTEXTE MÉTIER
-- "Mandat" = un bien immobilier en vente (immeuble, appartement, local commercial, etc.).
-- "Client" = un acquéreur potentiel (B2C = particulier, B2B = institutionnel comme foncière, family office).
-- "Statut mandat" : Sourcing, Mandat signé, En cours, Vendu, Abandonné.
-- "Maturité client" : Tiède, Chaud, Brûlant.
+- "Mandat" = un bien immobilier en vente (immeuble, appartement, local commercial, etc.). Champ "nom" = titre du mandat (ex: "Immeuble 9 rue Hoche Versailles").
+- "Client" = un acquéreur potentiel.
+- Statut mandat : Sourcing, En cours, Mandat signé, Vendu, Abandonné.
+- Maturité client : valeur dans la table (peut être "Faible", "Moyen", "Élevé", "Chaud", etc. — utilise ce que tu vois dans les résultats).
+- Typologie client : "Foncières", "Family Office", "Particuliers", etc.
+- Marché : "B2B" ou "B2C".
 - Les prix sont en euros, souvent en millions.
+- Owner : initiales du commercial responsable (ex: "TB" = Thomas Boggiani).
 
 UTILISATION DES OUTILS
 - N'hésite pas à appeler plusieurs fois les outils pour raffiner ta recherche.
-- Si Thomas pose une question vague, fais d'abord une recherche large, puis affine.
-- Avant de répondre, vérifie que tu as bien les infos nécessaires en BDD.`;
+- Si Thomas pose une question vague, fais d'abord une recherche large, puis affine.`;
 }
 
 // ==========================================================================
@@ -71,21 +74,25 @@ const tools = [
     type: 'function',
     function: {
       name: 'search_mandats',
-      description: 'Cherche dans la table des mandats (biens immobiliers à vendre). Retourne une liste de mandats correspondant aux critères.',
+      description: 'Cherche dans la table des mandats (biens immobiliers à vendre). Retourne une liste de mandats correspondant aux critères. Si aucun filtre n\'est fourni, retourne les mandats les plus récents.',
       parameters: {
         type: 'object',
         properties: {
           query_text: {
             type: 'string',
-            description: 'Texte libre à chercher dans le titre, l\'adresse, la ville ou la référence du mandat. Optionnel.'
+            description: 'Texte libre à chercher dans le nom, l\'adresse ou la ville du mandat. Optionnel.'
           },
           ville: {
             type: 'string',
-            description: 'Filtre par ville exacte (ex: "Paris", "Versailles"). Optionnel.'
+            description: 'Filtre par ville (ex: "Paris", "Versailles"). Optionnel.'
           },
           statut: {
             type: 'string',
-            description: 'Filtre par statut. Valeurs possibles : "Sourcing", "Mandat signé", "En cours", "Vendu", "Abandonné". Optionnel.'
+            description: 'Filtre par statut. Valeurs possibles : "Sourcing", "En cours", "Mandat signé", "Vendu", "Abandonné". Optionnel.'
+          },
+          type: {
+            type: 'string',
+            description: 'Filtre par type de bien (ex: "Immeubles", "Appartements", "Locaux commerciaux"). Optionnel.'
           },
           prix_min: {
             type: 'number',
@@ -95,9 +102,13 @@ const tools = [
             type: 'number',
             description: 'Prix maximum en euros. Optionnel.'
           },
+          owner: {
+            type: 'string',
+            description: 'Filtre par owner (initiales du commercial). Ex: "TB". Optionnel.'
+          },
           limit: {
             type: 'integer',
-            description: 'Nombre max de résultats. Défaut : 10.'
+            description: 'Nombre max de résultats. Défaut : 10, max 20.'
           }
         },
         required: []
@@ -108,29 +119,45 @@ const tools = [
     type: 'function',
     function: {
       name: 'search_clients',
-      description: 'Cherche dans la table des clients (acquéreurs). Retourne une liste de clients correspondant aux critères.',
+      description: 'Cherche dans la table des clients (acquéreurs). Retourne une liste de clients correspondant aux critères. Si aucun filtre n\'est fourni, retourne les clients les plus récents.',
       parameters: {
         type: 'object',
         properties: {
           query_text: {
             type: 'string',
-            description: 'Texte libre à chercher dans le nom, prénom, société ou email. Optionnel.'
+            description: 'Texte libre à chercher dans nom, prénom, société ou email. Optionnel.'
           },
           typologie: {
             type: 'string',
-            description: 'Filtre par typologie. Valeurs possibles : "B2C", "B2B". Optionnel.'
+            description: 'Filtre par typologie (ex: "Foncières", "Family Office", "Particuliers"). Optionnel.'
+          },
+          marche: {
+            type: 'string',
+            description: 'Filtre par marché. Valeurs possibles : "B2B", "B2C". Optionnel.'
           },
           maturite: {
             type: 'string',
-            description: 'Filtre par maturité. Valeurs possibles : "Tiède", "Chaud", "Brûlant". Optionnel.'
+            description: 'Filtre par maturité. Valeurs typiques : "Faible", "Moyen", "Élevé". Optionnel.'
           },
           statut: {
             type: 'string',
-            description: 'Filtre par statut client. Optionnel.'
+            description: 'Filtre par statut. Ex: "Actif". Optionnel.'
+          },
+          owner: {
+            type: 'string',
+            description: 'Filtre par owner (initiales du commercial). Ex: "TB". Optionnel.'
+          },
+          budget_min: {
+            type: 'number',
+            description: 'Budget min en euros (le client a un budget >= cette valeur). Optionnel.'
+          },
+          budget_max: {
+            type: 'number',
+            description: 'Budget max en euros (le client a un budget <= cette valeur). Optionnel.'
           },
           limit: {
             type: 'integer',
-            description: 'Nombre max de résultats. Défaut : 10.'
+            description: 'Nombre max de résultats. Défaut : 10, max 20.'
           }
         },
         required: []
@@ -144,19 +171,21 @@ const tools = [
 // ==========================================================================
 
 async function executeSearchMandats(args) {
-  const { query_text, ville, statut, prix_min, prix_max, limit = 10 } = args;
+  const { query_text, ville, statut, type, prix_min, prix_max, owner, limit = 10 } = args;
 
   let query = supabaseAdmin
     .from('mandats')
-    .select('id, titre, adresse, ville, statut, prix, surface, type_bien, owner, created_at')
+    .select('id, nom, adresse, ville, statut, prix, surface, type, sous_type, owner, marche, commercialisation, created_at')
     .limit(Math.min(limit, 20));
 
   if (query_text && query_text.trim()) {
     const q = `%${query_text.trim()}%`;
-    query = query.or(`titre.ilike.${q},adresse.ilike.${q},ville.ilike.${q},reference.ilike.${q}`);
+    query = query.or(`nom.ilike.${q},adresse.ilike.${q},ville.ilike.${q}`);
   }
   if (ville) query = query.ilike('ville', `%${ville}%`);
   if (statut) query = query.eq('statut', statut);
+  if (type) query = query.eq('type', type);
+  if (owner) query = query.eq('owner', owner);
   if (typeof prix_min === 'number') query = query.gte('prix', prix_min);
   if (typeof prix_max === 'number') query = query.lte('prix', prix_max);
 
@@ -171,24 +200,27 @@ async function executeSearchMandats(args) {
     count: data?.length || 0,
     results: (data || []).map(m => ({
       id: m.id,
-      titre: m.titre || '(sans titre)',
+      nom: m.nom || '(sans nom)',
       adresse: m.adresse,
       ville: m.ville,
       statut: m.statut,
       prix: m.prix,
       surface: m.surface,
-      type_bien: m.type_bien,
-      owner: m.owner
+      type: m.type,
+      sous_type: m.sous_type,
+      owner: m.owner,
+      marche: m.marche,
+      commercialisation: m.commercialisation
     }))
   };
 }
 
 async function executeSearchClients(args) {
-  const { query_text, typologie, maturite, statut, limit = 10 } = args;
+  const { query_text, typologie, marche, maturite, statut, owner, budget_min, budget_max, limit = 10 } = args;
 
   let query = supabaseAdmin
     .from('clients')
-    .select('id, prenom, nom, societe, email, tel, typologie, maturite, statut, ville_recherche, budget_min, budget_max, owner, created_at')
+    .select('id, prenom, nom, societe, email, tel, typologie, sous_typologie, marche, maturite, statut, budget_min, budget_max, rendement_min, zones, typologies_recherchees, owner, created_at')
     .limit(Math.min(limit, 20));
 
   if (query_text && query_text.trim()) {
@@ -196,8 +228,12 @@ async function executeSearchClients(args) {
     query = query.or(`prenom.ilike.${q},nom.ilike.${q},societe.ilike.${q},email.ilike.${q}`);
   }
   if (typologie) query = query.eq('typologie', typologie);
+  if (marche) query = query.eq('marche', marche);
   if (maturite) query = query.eq('maturite', maturite);
   if (statut) query = query.eq('statut', statut);
+  if (owner) query = query.eq('owner', owner);
+  if (typeof budget_min === 'number') query = query.gte('budget_min', budget_min);
+  if (typeof budget_max === 'number') query = query.lte('budget_max', budget_max);
 
   query = query.order('created_at', { ascending: false });
 
@@ -215,11 +251,15 @@ async function executeSearchClients(args) {
       email: c.email,
       tel: c.tel,
       typologie: c.typologie,
+      sous_typologie: c.sous_typologie,
+      marche: c.marche,
       maturite: c.maturite,
       statut: c.statut,
-      ville_recherche: c.ville_recherche,
       budget_min: c.budget_min,
       budget_max: c.budget_max,
+      rendement_min: c.rendement_min,
+      zones: c.zones,
+      typologies_recherchees: c.typologies_recherchees,
       owner: c.owner
     }))
   };
