@@ -70,11 +70,10 @@ export async function GET(request, { params }) {
     }
 
     // 2. Cache miss → on génère via l'endpoint existant
+    // Note : /api/mandats/[id]/pdf attend le token en query param ?token= et le paramètre ?template=
     console.log(`[plaquette-cached] CACHE MISS for ${mandatId}, generating...`);
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://patrimonia-crm.vercel.app';
-    const genRes = await fetch(`${baseUrl}/api/mandats/${mandatId}/pdf?type=plaquette`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const genRes = await fetch(`${baseUrl}/api/mandats/${mandatId}/pdf?template=plaquette&token=${encodeURIComponent(token)}`);
 
     if (!genRes.ok) {
       const errText = await genRes.text();
