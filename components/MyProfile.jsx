@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   User, TrendingUp, Building2, CheckSquare, Users as UsersIcon,
   Save, Loader2, Phone, Mail, Briefcase, Lock,
@@ -85,7 +85,6 @@ function QuestionnaireSection({ profile, isManager, allProfiles }) {
 
   useEffect(() => {
     (async () => {
-      // Stats du user connecté
       const { data: mySubmissions } = await supabase
         .from('questionnaires')
         .select('id, created_at, statut')
@@ -96,7 +95,6 @@ function QuestionnaireSection({ profile, isManager, allProfiles }) {
       const lastSubmittedAt = mySubmissions?.[0]?.created_at || null;
       setStats({ total, lastSubmittedAt });
 
-      // Si manager : récupère les tokens de toute l'équipe
       if (isManager) {
         const { data: profilesWithTokens } = await supabase
           .from('profiles')
@@ -105,7 +103,6 @@ function QuestionnaireSection({ profile, isManager, allProfiles }) {
           .neq('id', profile.id)
           .order('prenom');
 
-        // Pour chaque collègue, compter ses soumissions
         const enriched = await Promise.all((profilesWithTokens || []).map(async p => {
           const { count } = await supabase
             .from('questionnaires')
@@ -141,7 +138,6 @@ function QuestionnaireSection({ profile, isManager, allProfiles }) {
 
   return (
     <div className="space-y-6">
-      {/* Mon lien */}
       <div className="bg-white rounded-xl border border-cream-dark p-6">
         <div className="flex items-start justify-between mb-4">
           <div>
@@ -164,7 +160,6 @@ function QuestionnaireSection({ profile, isManager, allProfiles }) {
           <button
             onClick={() => {
               navigator.clipboard.writeText(myLink);
-              // Petit toast visuel
               const btn = document.activeElement;
               if (btn) {
                 const original = btn.textContent;
@@ -201,7 +196,6 @@ function QuestionnaireSection({ profile, isManager, allProfiles }) {
         )}
       </div>
 
-      {/* Liens de l'équipe (managers seulement) */}
       {isManager && allTokens.length > 0 && (
         <div className="bg-white rounded-xl border border-cream-dark p-6">
           <h2 className="font-display text-xl font-semibold text-ink mb-4">
@@ -382,22 +376,93 @@ function Field({ label, icon: Icon, required, className = '', children }) {
 }
 
 // ─────────────────────────────────────────────────────────
-// EmailSignatureEditor — éditeur HTML enrichi de signature
+// EmailSignatureEditor V3 - Générateur automatique avec preview live
 // ─────────────────────────────────────────────────────────
+
+const BASE_URL_PROD = 'https://patrimonia-crm.vercel.app';
+const LOGO_URL = `${BASE_URL_PROD}/logo-light.png`;
+
+function buildSignatureHtml({ prenom, nom, fonction, telephone, email, questionnaireToken, includeCta }) {
+  const baseUrl = BASE_URL_PROD;
+  const ctaLink = questionnaireToken ? `${baseUrl}/q/${questionnaireToken}` : '#';
+
+  // HTML inline-styles pour compatibilité maximale clients mail
+  const wrapperStyle = "font-family: Georgia, 'Times New Roman', serif; color: #1c1c1c; font-size: 14px; line-height: 1.5; max-width: 600px;";
+  const tableStyle = "border-collapse: collapse; max-width: 600px;";
+  const logoCellStyle = "vertical-align: top; padding-right: 20px; width: 120px;";
+  const textCellStyle = "vertical-align: top; border-left: 2px solid #5d6e5d; padding-left: 20px;";
+  const nameStyle = "font-size: 19px; font-weight: bold; margin: 0; color: #1c1c1c;";
+  const titleStyle = "font-style: italic; color: #444; margin: 4px 0 14px 0; font-size: 14px;";
+  const contactStyle = "font-size: 13px; color: #333; margin: 3px 0;";
+  const companyBlockStyle = "margin-top: 12px;";
+  const companyNameStyle = "font-weight: bold; color: #5d6e5d; font-size: 14px;";
+  const companyAddrStyle = "font-size: 13px; color: #555; margin-top: 2px;";
+  const ctaBarStyle = "margin-top: 18px; background: #faf9f5; border: 1px solid #5d6e5d; padding: 14px 20px; border-radius: 6px; font-size: 13px;";
+  const ctaTitleStyle = "display: block; margin-bottom: 6px; color: #1c1c1c; font-weight: bold;";
+  const ctaLinkStyle = "color: #5d6e5d; text-decoration: none; font-weight: 600; border-bottom: 1px solid #5d6e5d;";
+
+  const cta = includeCta && questionnaireToken ? `
+<div style="${ctaBarStyle}">
+  <strong style="${ctaTitleStyle}">Vous cherchez à investir dans le patrimonial ?</strong>
+  <a href="${ctaLink}" style="${ctaLinkStyle}">Définissons votre profil en 3 minutes <span style="color: #5d6e5d;">→</span></a>
+</div>` : '';
+
+  return `<div style="${wrapperStyle}">
+<table cellpadding="0" cellspacing="0" border="0" style="${tableStyle}">
+  <tr>
+    <td style="${logoCellStyle}">
+      <a href="${baseUrl}" title="notre site"><img src="${LOGO_URL}" alt="Immeubles & Patrimoine" width="120" height="120" style="display: block; border-radius: 4px; border: 0;"></a>
+    </td>
+    <td style="${textCellStyle}">
+      <p style="${nameStyle}">${prenom || ''} ${nom || ''}</p>
+      <p style="${titleStyle}">${fonction || ''}</p>
+      <p style="${contactStyle}">${telephone || ''}</p>
+      <p style="${contactStyle}">${email || ''}</p>
+      <div style="${companyBlockStyle}">
+        <div style="${companyNameStyle}">Immeubles &amp; Patrimoine</div>
+        <div style="${companyAddrStyle}">7 rue de Penthièvre · 75008 Paris</div>
+      </div>
+    </td>
+  </tr>
+</table>
+${cta}
+</div>`;
+}
+
 function EmailSignatureEditor({ profile, onSaved }) {
-  const [signature, setSignature] = useState(profile.email_signature || '');
+  // Champs éditables (peuvent diverger du profile principal si besoin)
+  const [telephone, setTelephone] = useState(profile.telephone || '');
+  const [fonction, setFonction] = useState(profile.fonction || '');
+  const [includeCta, setIncludeCta] = useState(true);
+
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
   const [error, setError] = useState(null);
-  const [mode, setMode] = useState('preview'); // 'preview' | 'edit-html'
+
+  const signatureHtml = useMemo(() => buildSignatureHtml({
+    prenom: profile.prenom,
+    nom: profile.nom,
+    fonction,
+    telephone,
+    email: profile.email,
+    questionnaireToken: profile.questionnaire_token,
+    includeCta
+  }), [profile.prenom, profile.nom, profile.email, profile.questionnaire_token, fonction, telephone, includeCta]);
 
   const handleSave = async () => {
     setSaving(true);
     setError(null);
     try {
+      // On enregistre le HTML généré dans email_signature
+      // ET on met à jour telephone et fonction du profile si modifiés
+      const updates = {
+        email_signature: signatureHtml,
+        telephone,
+        fonction
+      };
       const { error: updateError } = await supabase
         .from('profiles')
-        .update({ email_signature: signature })
+        .update(updates)
         .eq('id', profile.id);
       if (updateError) throw updateError;
       setSavedAt(Date.now());
@@ -410,89 +475,69 @@ function EmailSignatureEditor({ profile, onSaved }) {
     }
   };
 
-  // Template suggéré pour aider à démarrer
-  const insertTemplate = () => {
-    const template = `<p><strong>${profile.prenom || 'Prénom'} ${profile.nom || 'Nom'}</strong><br>
-${profile.fonction || 'Fonction'}<br>
-<em>Immeubles & Patrimoine</em></p>
-<p>📞 ${profile.telephone || '06 00 00 00 00'}<br>
-✉️ <a href="mailto:${profile.email || 'email@example.com'}">${profile.email || 'email@example.com'}</a><br>
-🌐 <a href="https://www.immeubles-patrimoine.fr">www.immeubles-patrimoine.fr</a></p>`;
-    setSignature(template);
-  };
-
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-xl border border-cream-dark p-6">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h2 className="font-display text-xl font-semibold text-ink mb-1">Ma signature email</h2>
-            <p className="text-sm text-ink/60">
-              Cette signature sera ajoutée automatiquement à la fin des emails créés via "Créer avec l'IA".
-            </p>
-          </div>
+        <div className="mb-4">
+          <h2 className="font-display text-xl font-semibold text-ink mb-1">Ma signature email</h2>
+          <p className="text-sm text-ink/60">
+            Ta signature est générée automatiquement à partir de ton profil. Elle est ajoutée à la fin des emails envoyés par l'Assistant Patrimonia.
+          </p>
         </div>
 
-        {/* Toggle Aperçu / HTML */}
-        <div className="flex gap-1 mb-3">
-          <button
-            onClick={() => setMode('preview')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium ${mode === 'preview' ? 'bg-ink text-white' : 'bg-white border border-cream-dark text-ink hover:bg-cream-50'}`}
-          >
-            👁️ Aperçu
-          </button>
-          <button
-            onClick={() => setMode('edit-html')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium ${mode === 'edit-html' ? 'bg-ink text-white' : 'bg-white border border-cream-dark text-ink hover:bg-cream-50'}`}
-          >
-            {'</>'} Code HTML
-          </button>
-          {!signature && (
-            <button
-              onClick={insertTemplate}
-              className="ml-auto px-3 py-1.5 rounded-lg text-xs font-medium bg-sage-50 text-sage-darker border border-sage-light hover:bg-sage-100"
-            >
-              ✨ Insérer un modèle
-            </button>
+        {/* Champs éditables */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+          <Field label="Téléphone affiché" icon={Phone}>
+            <input
+              type="tel"
+              value={telephone}
+              onChange={e => setTelephone(e.target.value)}
+              placeholder="06 63 64 94 43"
+              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm focus:outline-none focus:border-sage"
+            />
+          </Field>
+          <Field label="Fonction" icon={Briefcase}>
+            <input
+              type="text"
+              value={fonction}
+              onChange={e => setFonction(e.target.value)}
+              placeholder="Directeur du développement"
+              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm focus:outline-none focus:border-sage"
+            />
+          </Field>
+        </div>
+
+        {/* Toggle CTA */}
+        <div className="mb-5">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeCta}
+              onChange={e => setIncludeCta(e.target.checked)}
+              className="w-4 h-4 accent-sage-dark"
+            />
+            <span className="text-sm text-ink">Inclure l'encart questionnaire (CTA)</span>
+          </label>
+          {!profile.questionnaire_token && includeCta && (
+            <p className="text-xs text-amber-700 mt-1 ml-6">⚠️ Pas de token questionnaire — l'encart ne sera pas affiché.</p>
           )}
         </div>
 
-        {/* Mode Aperçu */}
-        {mode === 'preview' && (
-          <div className="border border-cream-dark rounded-lg p-4 bg-cream-50 min-h-[150px]">
-            {signature ? (
-              <div dangerouslySetInnerHTML={{ __html: signature }} />
-            ) : (
-              <div className="text-stone-400 text-sm italic">
-                Aucune signature configurée. Clique sur "Code HTML" pour la créer, ou sur "Insérer un modèle" pour partir d'une base.
-              </div>
-            )}
+        {/* Preview live */}
+        <div className="mb-5">
+          <label className="text-xs text-ink/70 mb-2 block">Aperçu</label>
+          <div className="border border-cream-dark rounded-lg p-4 bg-cream-50">
+            <div dangerouslySetInnerHTML={{ __html: signatureHtml }} />
           </div>
-        )}
-
-        {/* Mode édition HTML */}
-        {mode === 'edit-html' && (
-          <>
-            <textarea
-              value={signature}
-              onChange={e => setSignature(e.target.value)}
-              rows={12}
-              placeholder='<p><strong>Thomas Boggiani</strong><br>Directeur du développement</p>...'
-              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm font-mono focus:outline-none focus:border-sage"
-            />
-            <div className="mt-2 text-xs text-ink/60">
-              💡 Tu peux utiliser du HTML : <code className="bg-cream-100 px-1 rounded">&lt;strong&gt;</code>, <code className="bg-cream-100 px-1 rounded">&lt;em&gt;</code>, <code className="bg-cream-100 px-1 rounded">&lt;br&gt;</code>, <code className="bg-cream-100 px-1 rounded">&lt;a href="..."&gt;</code>, <code className="bg-cream-100 px-1 rounded">&lt;p&gt;</code>, etc.
-            </div>
-          </>
-        )}
+        </div>
 
         {error && (
-          <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
             {error}
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-3 pt-4 mt-4 border-t border-cream-dark">
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-cream-dark">
           {savedAt && (
             <span className="text-xs text-sage-dark">✓ Signature enregistrée</span>
           )}
@@ -509,6 +554,7 @@ ${profile.fonction || 'Fonction'}<br>
     </div>
   );
 }
+
 function Shortcuts({ profile, mandats, todos, clients, onNavigate }) {
   const myMandats = mandats.filter(m => m.pourvoyeurId === profile.id || m.vendeurId === profile.id);
   const myTodos = todos.filter(t => t.assigned_to_user_id === profile.id);
