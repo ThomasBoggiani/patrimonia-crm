@@ -38,9 +38,13 @@ export async function GET(request, { params }) {
       });
     }
 
-    // Vérif authentification (token dans Authorization header)
-    const authHeader = request.headers.get('authorization') || '';
-    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    // Vérif authentification (token dans query param ?token= OU header Authorization)
+    const url = new URL(request.url);
+    let token = url.searchParams.get('token');
+    if (!token) {
+      const authHeader = request.headers.get('authorization') || '';
+      token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    }
     const user = await verifyToken(token);
     if (!user) {
       return new Response(JSON.stringify({ ok: false, error: 'Authentification requise' }), {
