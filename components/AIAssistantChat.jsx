@@ -14,8 +14,11 @@ const SAGE_DARK = '#5d6e5d';
 const SAGE_DARKER = '#3d4d3d';
 
 // Limites de compression image
-const IMAGE_MAX_DIM = 1600;     // max 1600px par côté
-const IMAGE_JPEG_QUALITY = 0.85; // qualité JPEG
+const IMAGE_MAX_DIM = 1280;       // max 1280px par côté
+const IMAGE_JPEG_QUALITY = 0.75;  // qualité JPEG (75%)
+// Limites strictes (Vercel hobby payload max = 4,5 Mo)
+const MAX_FILE_SIZE = 3 * 1024 * 1024;     // 3 Mo max par fichier
+const MAX_TOTAL_PAYLOAD = 4 * 1024 * 1024;  // 4 Mo max total
 
 function renderMarkdown(text) {
   if (!text) return '';
@@ -181,11 +184,30 @@ export default function AIAssistantChat({
         if (file.type.startsWith('image/')) {
           processed = await compressImage(file);
         } else if (file.type === 'application/pdf') {
+          if (file.size > MAX_FILE_SIZE) {
+            alert(`Le PDF "${file.name}" fait ${formatSize(file.size)}, trop volumineux (max ${formatSize(MAX_FILE_SIZE)}). Réduis-le avant d'essayer.`);
+            continue;
+          }
           processed = await readFileAsDataURL(file);
         } else {
           alert(`Type de fichier non supporté : ${file.name} (${file.type})`);
           continue;
         }
+
+        // Vérif taille du fichier compressé
+        if (processed.compressedSize > MAX_FILE_SIZE) {
+          alert(`"${file.name}" reste trop volumineux après compression (${formatSize(processed.compressedSize)}, max ${formatSize(MAX_FILE_SIZE)}).`);
+          continue;
+        }
+
+        // Vérif total payload (existant + en cours d'ajout)
+        const existingSize = attachments.reduce((s, a) => s + a.compressedSize, 0);
+        const newSize = newAttachments.reduce((s, a) => s + a.compressedSize, 0);
+        if (existingSize + newSize + processed.compressedSize > MAX_TOTAL_PAYLOAD) {
+          alert(`Limite totale dépassée (max ${formatSize(MAX_TOTAL_PAYLOAD)} au total). "${file.name}" non ajouté.`);
+          continue;
+        }
+
         newAttachments.push(processed);
       } catch (err) {
         console.error('[AIAssistantChat] File error:', err);
