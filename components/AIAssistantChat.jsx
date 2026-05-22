@@ -42,7 +42,61 @@ function randomKey() {
 // Carte de proposition d'action
 // =========================================================================
 
+// Mapping label → clé data pour les champs éditables
+const FIELD_KEYS = {
+  'Nom': 'nom',
+  'Adresse': 'adresse',
+  'Ville': 'ville',
+  'Type': null, // composé, non éditable directement
+  'Prix': 'prix',
+  'Surface': 'surface',
+  'Statut': 'statut',
+  'Commercialisation': 'commercialisation',
+  'Contact': 'contact',
+  'Téléphone': 'tel'
+};
+
+const NUMERIC_KEYS = new Set(['prix', 'surface', 'loyers_annuels', 'nb_lots', 'nb_pieces', 'nb_chambres', 'etage']);
+
+function parseNumeric(value) {
+  if (typeof value === 'number') return value;
+  if (!value) return 0;
+  // Retire espaces et caractères non numériques (sauf . et ,)
+  const cleaned = String(value).replace(/[€\s]/g, '').replace(',', '.');
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? 0 : n;
+}
+
+function formatFieldValue(key, value) {
+  if (NUMERIC_KEYS.has(key)) {
+    if (typeof value === 'number' && value > 0) {
+      return new Intl.NumberFormat('fr-FR').format(value);
+    }
+    return '';
+  }
+  return value || '';
+}
+
 function ProposalCard({ action, onConfirm, onCancel, executing, executed, executedResult, executedError }) {
+  // État local des données éditables (initialisé depuis action.data)
+  const [editData, setEditData] = useState(() => ({ ...action.data }));
+
+  const updateField = (key, value) => {
+    setEditData(prev => ({
+      ...prev,
+      [key]: NUMERIC_KEYS.has(key) ? parseNumeric(value) : value
+    }));
+  };
+
+  const handleConfirm = () => {
+    onConfirm(editData);
+  };
+
+  // Champs à afficher (utilise action.fields pour l'ordre)
+  const editableFields = action.fields
+    .map(f => ({ label: f.label, key: FIELD_KEYS[f.label] }))
+    .filter(f => f.key);
+
   return (
     <div className="bg-white border border-stone-200 rounded-2xl rounded-bl-sm p-3 max-w-[90%]">
       <div className="text-xs font-medium text-stone-600 mb-2 flex items-center gap-1.5">
@@ -50,14 +104,31 @@ function ProposalCard({ action, onConfirm, onCancel, executing, executed, execut
         {action.summary || 'Action proposée'}
       </div>
 
-      <div className="bg-stone-50 rounded-lg p-2.5 text-xs space-y-1 mb-3">
-        {action.fields.map((f, i) => (
-          <div key={i} className="flex gap-2">
-            <span className="text-stone-500 flex-shrink-0">{f.label} :</span>
-            <span className="text-stone-900 font-medium truncate">{f.value}</span>
-          </div>
-        ))}
-      </div>
+      {!executed ? (
+        <div className="space-y-1.5 mb-3">
+          {editableFields.map((f) => (
+            <div key={f.key} className="flex items-center gap-2 text-xs">
+              <label className="text-stone-500 w-24 flex-shrink-0">{f.label}</label>
+              <input
+                type="text"
+                value={formatFieldValue(f.key, editData[f.key])}
+                onChange={(e) => updateField(f.key, e.target.value)}
+                disabled={executing}
+                className="flex-1 px-2 py-1 border border-stone-200 rounded text-stone-900 focus:outline-none focus:border-stone-400 disabled:bg-stone-50"
+              />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="bg-stone-50 rounded-lg p-2.5 text-xs space-y-1 mb-3">
+          {action.fields.map((f, i) => (
+            <div key={i} className="flex gap-2">
+              <span className="text-stone-500 flex-shrink-0">{f.label} :</span>
+              <span className="text-stone-900 font-medium truncate">{f.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {executed && executedResult && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: '#e8f0e8', color: SAGE_DARKER }}>
@@ -76,7 +147,7 @@ function ProposalCard({ action, onConfirm, onCancel, executing, executed, execut
       {!executed && (
         <div className="flex gap-2">
           <button
-            onClick={onConfirm}
+            onClick={handleConfirm}
             disabled={executing}
             style={{ backgroundColor: SAGE_DARK }}
             className="flex-1 px-3 py-2 rounded-lg text-white text-xs font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
@@ -281,7 +352,7 @@ export default function AIAssistantChat({
   // CONFIRMATION D'UNE ACTION
   // ========================================================================
 
-  const confirmAction = async (msgIdx) => {
+  const confirmAction = async (msgIdx, editData) => {
     const msg = messages[msgIdx];
     if (!msg?.proposed_action) return;
 
@@ -296,11 +367,14 @@ export default function AIAssistantChat({
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token || '';
 
+      // Fusionne data initiale + modifs utilisateur
+      const finalData = { ...msg.proposed_action.data, ...editData };
+
       const res = await fetch('/api/assistant/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: { type: msg.proposed_action.type, data: msg.proposed_action.data },
+          action: { type: msg.proposed_action.type, data: finalData },
           token
         })
       });
@@ -314,6 +388,12 @@ export default function AIAssistantChat({
             ...copy[msgIdx],
             action_state: { executing: false, executed: true, result: data.result }
           };
+          // Émet un event window pour que CRM.jsx puisse recharger ses données
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('patrimonia:action-executed', {
+              detail: { type: msg.proposed_action.type, result: data.result }
+            }));
+          }
         } else {
           copy[msgIdx] = {
             ...copy[msgIdx],
@@ -544,7 +624,7 @@ export default function AIAssistantChat({
                   {hasProposal && (
                     <ProposalCard
                       action={msg.proposed_action}
-                      onConfirm={() => confirmAction(i)}
+                      onConfirm={(editData) => confirmAction(i, editData)}
                       onCancel={() => cancelAction(i)}
                       executing={msg.action_state?.executing}
                       executed={msg.action_state?.executed}
