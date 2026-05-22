@@ -39,6 +39,22 @@ async function getUserInitials(userId) {
   }
 }
 
+async function getUserSignature(userId) {
+  if (!userId) return null;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .select('email_signature')
+      .eq('id', userId)
+      .single();
+    if (error || !data) return null;
+    return data.email_signature || null;
+  } catch (e) {
+    console.error('[assistant/execute] getUserSignature error:', e);
+    return null;
+  }
+}
+
 // ==========================================================================
 // CRÉATION MANDAT
 // ==========================================================================
@@ -249,6 +265,11 @@ async function executeSendEmail(data, userId, userInitials, token) {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://patrimonia-crm.vercel.app';
     // Convertit le body texte en HTML basique
     const bodyHtml = data.body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+
+    // Récupère et ajoute la signature
+    const signature = await getUserSignature(userId);
+    const finalHtml = signature ? `${bodyHtml}<br><br>${signature}` : bodyHtml;
+
     const res = await fetch(`${baseUrl}/api/microsoft/emails`, {
       method: 'POST',
       headers: {
@@ -258,7 +279,7 @@ async function executeSendEmail(data, userId, userInitials, token) {
       body: JSON.stringify({
         to: data.to,
         subject: data.subject,
-        content: bodyHtml,
+        content: finalHtml,
         clientId: data.client_id || null
       })
     });
@@ -298,12 +319,19 @@ async function executeSendPlaquette(data, userId, userInitials, token) {
 
     // Corps HTML (template simple + custom_message si fourni)
     const customLine = data.custom_message ? `<p>${data.custom_message.replace(/\n/g, '<br>')}</p>` : '';
-    const htmlBody = `<p>Bonjour${nomClient ? ' ' + nomClient : ''},</p>
+    // Récupère la signature utilisateur
+    const signature = await getUserSignature(userId);
+
+    const baseHtmlBody = `<p>Bonjour${nomClient ? ' ' + nomClient : ''},</p>
 ${customLine}
 <p>Je vous fais suivre la plaquette de notre dernière opportunité off-market :</p>
 <p><strong>${mandat.nom}</strong>${mandat.adresse ? '<br>' + mandat.adresse : ''}${mandat.ville ? ' — ' + mandat.ville : ''}</p>
-<p>Restant à votre disposition pour échanger.</p>
-<p>Cordialement,<br>Immeubles & Patrimoine</p>`;
+<p>Restant à votre disposition pour échanger.</p>`;
+
+    // Append signature si elle existe, sinon fallback texte
+    const htmlBody = signature
+      ? `${baseHtmlBody}<br>${signature}`
+      : `${baseHtmlBody}<p>Cordialement,<br>Immeubles &amp; Patrimoine</p>`;
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://patrimonia-crm.vercel.app';
     const res = await fetch(`${baseUrl}/api/email-drafts/send-batch`, {
