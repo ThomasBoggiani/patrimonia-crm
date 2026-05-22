@@ -61,6 +61,24 @@ export async function POST(request) {
       console.log(`[webhook/mandat-updated] Cache invalidated for mandat ${mandatId}`);
     }
 
+    // Vérifie si plaquette_cached_at est déjà null pour éviter une boucle de webhooks inutile
+    const { data: current } = await supabaseAdmin
+      .from('mandats')
+      .select('plaquette_cached_at')
+      .eq('id', mandatId)
+      .single();
+
+    if (current?.plaquette_cached_at !== null) {
+      // Set plaquette_cached_at à null pour signaler que le cache n'est plus à jour
+      const { error: updateErr } = await supabaseAdmin
+        .from('mandats')
+        .update({ plaquette_cached_at: null })
+        .eq('id', mandatId);
+      if (updateErr) {
+        console.warn(`[webhook/mandat-updated] Cache timestamp reset failed:`, updateErr.message);
+      }
+    }
+
     return new Response(JSON.stringify({ ok: true, mandatId, message: 'Cache invalidated' }), {
       status: 200, headers: { 'Content-Type': 'application/json' }
     });
