@@ -1,28 +1,16 @@
 // components/AIAssistantChat.jsx
 //
-// Assistant Patrimonia - Phase 3 UI Chat (v2 contextuel)
-//
-// Composant générique utilisable de 2 façons :
-//
-// 1. Mode FLOTTANT (sur fiche mandat ou client)
-//    <AIAssistantChat floating context={{ type: 'mandat', data: mandat }} />
-//    → affiche un bouton flottant ✨ en bas à droite
-//
-// 2. Mode CONTRÔLÉ (déclenché par un bouton dans le menu)
-//    <AIAssistantChat open={open} onOpenChange={setOpen} />
-//    → la fenêtre s'ouvre/se ferme selon la prop open, sans bouton flottant
-//
-// Le `context` est passé au backend pour que l'IA sache de quelle fiche
-// l'utilisateur parle.
+// Assistant Patrimonia - Phase 3 UI Chat (v4)
+// Couleurs en inline style pour garantir le rendu visuel.
 
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
 import { Sparkles, X, Send, Mic, Loader2, Square } from 'lucide-react';
 
-// =========================================================================
-// Helper : formatage markdown léger (gras avec **)
-// =========================================================================
+// Couleurs Patrimonia (sage)
+const SAGE_DARK = '#5d6e5d';
+const SAGE_DARKER = '#3d4d3d';
 
 function renderMarkdown(text) {
   if (!text) return '';
@@ -33,29 +21,18 @@ function renderMarkdown(text) {
   return escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
 }
 
-// =========================================================================
-// Composant principal
-// =========================================================================
-
 export default function AIAssistantChat({
   floating = false,
   context = null,
   open: controlledOpen,
   onOpenChange
 }) {
-  // État interne pour le mode floating
   const [internalOpen, setInternalOpen] = useState(false);
-
-  // Détermine si on est en mode contrôlé
   const isControlled = typeof controlledOpen === 'boolean';
   const open = isControlled ? controlledOpen : internalOpen;
-
   const setOpen = (val) => {
-    if (isControlled) {
-      onOpenChange?.(val);
-    } else {
-      setInternalOpen(val);
-    }
+    if (isControlled) onOpenChange?.(val);
+    else setInternalOpen(val);
   };
 
   const [messages, setMessages] = useState([]);
@@ -69,14 +46,12 @@ export default function AIAssistantChat({
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
-  // Auto-scroll
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, loading]);
 
-  // Reset conversation à chaque fermeture
   useEffect(() => {
     if (!open) {
       setMessages([]);
@@ -84,7 +59,6 @@ export default function AIAssistantChat({
     }
   }, [open]);
 
-  // Focus auto à l'ouverture
   useEffect(() => {
     if (open && inputRef.current) {
       setTimeout(() => inputRef.current?.focus(), 100);
@@ -97,10 +71,6 @@ export default function AIAssistantChat({
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 120) + 'px';
   };
-
-  // =======================================================================
-  // Envoi d'un message
-  // =======================================================================
 
   const sendMessage = async () => {
     const text = input.trim();
@@ -146,10 +116,6 @@ export default function AIAssistantChat({
       sendMessage();
     }
   };
-
-  // =======================================================================
-  // Enregistrement vocal
-  // =======================================================================
 
   const startRecording = async () => {
     try {
@@ -209,10 +175,6 @@ export default function AIAssistantChat({
     setRecording(false);
   };
 
-  // =======================================================================
-  // Helpers pour le contexte affiché
-  // =======================================================================
-
   const getContextLabel = () => {
     if (!context) return null;
     if (context.type === 'mandat' && context.data) {
@@ -228,9 +190,10 @@ export default function AIAssistantChat({
 
   const contextLabel = getContextLabel();
 
-  // =======================================================================
-  // Rendu
-  // =======================================================================
+  // Style du gradient sage (inline pour garantir le rendu)
+  const gradientStyle = {
+    background: `linear-gradient(to bottom right, ${SAGE_DARK}, ${SAGE_DARKER})`
+  };
 
   return (
     <>
@@ -239,7 +202,8 @@ export default function AIAssistantChat({
         <button
           onClick={() => setOpen(true)}
           aria-label="Ouvrir l'Assistant Patrimonia"
-          className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-sage-dark to-sage-darker text-white shadow-luxe-lg hover:scale-105 active:scale-95 transition-transform flex items-center justify-center"
+          style={gradientStyle}
+          className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full text-white shadow-xl hover:scale-105 active:scale-95 transition-transform flex items-center justify-center"
         >
           <Sparkles className="w-6 h-6" />
         </button>
@@ -248,7 +212,7 @@ export default function AIAssistantChat({
       {/* Fenêtre chat */}
       {open && (
         <div
-          className="fixed bottom-6 right-6 z-50 flex flex-col bg-white rounded-2xl shadow-luxe-xl border border-stone-200 overflow-hidden"
+          className="fixed bottom-6 right-6 z-50 flex flex-col bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden"
           style={{
             width: '420px',
             height: '600px',
@@ -260,7 +224,10 @@ export default function AIAssistantChat({
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-stone-200 bg-stone-50 flex-shrink-0">
             <div className="flex items-center gap-2 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-sage-dark to-sage-darker flex items-center justify-center flex-shrink-0">
+              <div
+                style={gradientStyle}
+                className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+              >
                 <Sparkles className="w-4 h-4 text-white" />
               </div>
               <div className="min-w-0">
@@ -301,9 +268,10 @@ export default function AIAssistantChat({
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
+                  style={msg.role === 'user' ? { backgroundColor: SAGE_DARK } : {}}
                   className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed ${
                     msg.role === 'user'
-                      ? 'bg-sage-dark text-white rounded-br-sm'
+                      ? 'text-white rounded-br-sm'
                       : 'bg-white text-stone-900 border border-stone-200 rounded-bl-sm'
                   }`}
                   dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
@@ -335,8 +303,8 @@ export default function AIAssistantChat({
                 placeholder={recording ? 'Enregistrement en cours…' : (transcribing ? 'Transcription…' : 'Tape ou parle…')}
                 disabled={loading || recording || transcribing}
                 rows={1}
-                className="flex-1 resize-none px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-sage-dark disabled:bg-stone-50 disabled:text-stone-400 min-h-[36px]"
                 style={{ maxHeight: '120px' }}
+                className="flex-1 resize-none px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 disabled:bg-stone-50 disabled:text-stone-400 min-h-[36px]"
               />
 
               <button
@@ -362,7 +330,8 @@ export default function AIAssistantChat({
                 onClick={sendMessage}
                 disabled={!input.trim() || loading || recording || transcribing}
                 aria-label="Envoyer"
-                className="w-9 h-9 rounded-lg bg-sage-dark text-white hover:bg-sage-darker disabled:bg-stone-200 disabled:text-stone-400 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0 transition-colors"
+                style={!input.trim() || loading || recording || transcribing ? {} : { backgroundColor: SAGE_DARK }}
+                className="w-9 h-9 rounded-lg text-white disabled:bg-stone-200 disabled:text-stone-400 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0 transition-colors hover:opacity-90"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               </button>
