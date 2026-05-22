@@ -62,6 +62,27 @@ export async function GET(request, { params }) {
     if (cachedFile && !downloadErr) {
       // Cache hit ! On retourne le PDF direct
       console.log(`[plaquette-cached] CACHE HIT for ${mandatId}`);
+
+      // Sécurité : on s'assure que plaquette_cached_at est bien set en BDD
+      // (cas où le PDF existe dans le bucket mais la colonne est null)
+      supabaseAdmin
+        .from('mandats')
+        .select('plaquette_cached_at')
+        .eq('id', mandatId)
+        .single()
+        .then(({ data: current }) => {
+          if (current && current.plaquette_cached_at === null) {
+            supabaseAdmin
+              .from('mandats')
+              .update({ plaquette_cached_at: new Date().toISOString() })
+              .eq('id', mandatId)
+              .then(({ error }) => {
+                if (error) console.warn(`[plaquette-cached] Cache timestamp sync failed:`, error.message);
+                else console.log(`[plaquette-cached] Cache timestamp synced for ${mandatId}`);
+              });
+          }
+        });
+
       const buffer = Buffer.from(await cachedFile.arrayBuffer());
       return new Response(buffer, {
         status: 200,
