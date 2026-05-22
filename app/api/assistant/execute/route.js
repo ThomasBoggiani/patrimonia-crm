@@ -306,7 +306,7 @@ async function executeSendPlaquette(data, userId, userInitials, token) {
     // Récupère l'email du client + son nom + le nom du mandat
     const [clientRes, mandatRes] = await Promise.all([
       supabaseAdmin.from('clients').select('email, prenom, nom, societe').eq('id', data.client_id).single(),
-      supabaseAdmin.from('mandats').select('nom, adresse, ville').eq('id', data.mandat_id).single()
+      supabaseAdmin.from('mandats').select('nom, adresse, ville, type, sous_type').eq('id', data.mandat_id).single()
     ]);
     if (clientRes.error || !clientRes.data) return { ok: false, error: 'Client introuvable' };
     if (mandatRes.error || !mandatRes.data) return { ok: false, error: 'Mandat introuvable' };
@@ -329,16 +329,30 @@ async function executeSendPlaquette(data, userId, userInitials, token) {
     const senderFirstName = senderProfile?.prenom || 'Thomas';
 
     // Détecte le type de bien et choisit le bon article (l' / le / la)
-    // On retourne directement l'article + le mot pour gérer correctement les voyelles
-    const typeMap = {
-      'Immeubles': "l'immeuble",
-      'Appartements': "l'appartement",
-      'Locaux commerciaux': 'le local commercial',
-      'Maisons': 'la maison',
-      'Terrains': 'le terrain',
-      'Bureaux': 'le bureau'
-    };
-    const articleEtType = typeMap[mandat.type] || 'le bien';
+    // Priorité : sous_type (plus précis) > type > fallback
+    // Le mapping est flexible (insensitive à la casse, gère pluriel/singulier)
+    function getArticleEtType(rawValue) {
+      if (!rawValue) return null;
+      const lower = String(rawValue).toLowerCase().trim();
+      // Mapping par mots-clés
+      if (lower.includes('studio')) return 'le studio';
+      if (lower.includes('appartement')) return "l'appartement";
+      if (lower.includes('immeuble')) return "l'immeuble";
+      if (lower.includes('maison')) return 'la maison';
+      if (lower.includes('villa')) return 'la villa';
+      if (lower.includes('local')) return 'le local commercial';
+      if (lower.includes('bureau')) return 'le bureau';
+      if (lower.includes('terrain')) return 'le terrain';
+      if (lower.includes('hôtel') || lower.includes('hotel')) return "l'hôtel";
+      if (lower.includes('entrepôt') || lower.includes('entrepot')) return "l'entrepôt";
+      if (lower.includes('résidentiel') || lower.includes('residentiel')) return 'le bien résidentiel';
+      if (lower.includes('commercial')) return 'le bien commercial';
+      return null;
+    }
+    const articleEtType =
+      getArticleEtType(mandat.sous_type) ||
+      getArticleEtType(mandat.type) ||
+      'le bien';
 
     // Bloc personnalisable (intégré au début si custom_message fourni)
     const customParagraph = data.custom_message
