@@ -315,7 +315,7 @@ async function executeSendPlaquette(data, userId, userInitials, token) {
     if (!client.email) return { ok: false, error: 'Le client n\'a pas d\'email renseigné' };
 
     const nomClient = [client.prenom, client.nom].filter(Boolean).join(' ') || client.societe || '';
-    const subject = `Opportunité off-market : ${mandat.nom}`;
+    const subject = mandat.nom;
 
     // Corps HTML (template simple + custom_message si fourni)
     const customLine = data.custom_message ? `<p>${data.custom_message.replace(/\n/g, '<br>')}</p>` : '';
@@ -328,17 +328,17 @@ async function executeSendPlaquette(data, userId, userInitials, token) {
     const signature = senderProfile?.email_signature || null;
     const senderFirstName = senderProfile?.prenom || 'Thomas';
 
-    // Détecte le type de bien depuis le mandat (appartement, immeuble, local, etc.)
-    // On utilise le type stocké ("Immeubles", "Appartements", "Locaux commerciaux") et on met au singulier minuscule
+    // Détecte le type de bien et choisit le bon article (l' / le / la)
+    // On retourne directement l'article + le mot pour gérer correctement les voyelles
     const typeMap = {
-      'Immeubles': 'immeuble',
-      'Appartements': 'appartement',
-      'Locaux commerciaux': 'local commercial',
-      'Maisons': 'maison',
-      'Terrains': 'terrain',
-      'Bureaux': 'bureau'
+      'Immeubles': "l'immeuble",
+      'Appartements': "l'appartement",
+      'Locaux commerciaux': 'le local commercial',
+      'Maisons': 'la maison',
+      'Terrains': 'le terrain',
+      'Bureaux': 'le bureau'
     };
-    const typeBien = typeMap[mandat.type] || (mandat.type ? mandat.type.toLowerCase().replace(/s$/, '') : 'bien');
+    const articleEtType = typeMap[mandat.type] || 'le bien';
 
     // Bloc personnalisable (intégré au début si custom_message fourni)
     const customParagraph = data.custom_message
@@ -348,7 +348,7 @@ async function executeSendPlaquette(data, userId, userInitials, token) {
     const baseHtmlBody = `<p>Bonjour${nomClient ? ' ' + nomClient : ''},</p>
 <p>Merci pour votre intérêt.</p>
 ${customParagraph}
-<p>Vous trouverez ci-joint la plaquette commerciale de l'${typeBien}.</p>
+<p>Vous trouverez ci-joint la plaquette commerciale de ${articleEtType}.</p>
 <p>Si vous recherchez un bien à usage d'habitation, je vous laisse en prendre connaissance et revenir vers moi si le bien correspond à votre projet. Je reste bien entendu disponible pour échanger, répondre à vos questions ou organiser une visite.</p>
 <p>Si vous êtes un professionnel de l'immobilier ou un investisseur à la recherche d'opportunités, notamment off-market, je vous invite à compléter le questionnaire présent dans ma signature. Cela nous permettra de mieux comprendre vos critères et de vous adresser des opportunités plus ciblées.</p>
 <p>Plus votre recherche sera précise, plus les biens proposés seront pertinents.</p>
