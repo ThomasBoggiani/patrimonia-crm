@@ -86,7 +86,7 @@ export async function GET(request, { params }) {
     const pdfBuffer = Buffer.from(await genRes.arrayBuffer());
 
     // 3. Stocke dans le bucket (en arrière-plan, on n'attend pas que ce soit fini)
-    // On utilise upsert=true au cas où le fichier existerait déjà
+    // Puis met à jour plaquette_cached_at sur le mandat pour signaler que le cache est frais
     supabaseAdmin.storage
       .from(BUCKET)
       .upload(storagePath, pdfBuffer, {
@@ -98,7 +98,15 @@ export async function GET(request, { params }) {
         if (uploadErr) {
           console.warn(`[plaquette-cached] Cache save failed for ${mandatId}:`, uploadErr.message);
         } else {
-          console.log(`[plaquette-cached] Cached saved for ${mandatId}`);
+          console.log(`[plaquette-cached] Cache saved for ${mandatId}`);
+          // Marque le mandat comme ayant une plaquette en cache fraîche
+          supabaseAdmin
+            .from('mandats')
+            .update({ plaquette_cached_at: new Date().toISOString() })
+            .eq('id', mandatId)
+            .then(({ error }) => {
+              if (error) console.warn(`[plaquette-cached] Cache timestamp save failed:`, error.message);
+            });
         }
       });
 
