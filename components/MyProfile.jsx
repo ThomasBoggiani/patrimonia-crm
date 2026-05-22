@@ -179,7 +179,6 @@ function QuestionnaireSection({ profile, isManager, allProfiles }) {
           >
             <Eye className="w-3.5 h-3.5" /> Aperçu
           </a>
-          <a
         </div>
 
         {stats.lastSubmittedAt && (
