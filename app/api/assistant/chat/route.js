@@ -127,11 +127,14 @@ CONTEXTE MÉTIER
 - Les prix sont en euros. Convertis "2,5 M€" en 2500000.
 
 UTILISATION DES OUTILS
+- Pour rechercher : PRIVILÉGIE query_text (recherche large sur nom + adresse + ville) plutôt que des filtres précis comme ville='Paris 17e'. Les villes peuvent être stockées de plusieurs façons ("PARIS", "Paris", "Paris 17e", etc.).
+- Si une recherche ne donne rien, RETENTE avec une requête PLUS LARGE (juste un mot-clé important comme "Acacias" au lieu de "rue des Acacias Paris 17"), PUIS sans filtre du tout pour voir tous les mandats avant d'abandonner.
 - Si Thomas demande de "créer un X" : utilise propose_create_*. Mets des défauts sensés si manque d'info.
 - Si Thomas demande de "modifier" et qu'on est dans un contexte : utilise propose_update_* avec l'id du contexte.
 - Pour modifier sans contexte : d'abord search pour trouver l'id, puis propose_update_*.
 - Pour envoyer plaquette : d'abord search_mandats pour trouver le mandat, et search_clients pour trouver le destinataire, puis propose_send_plaquette avec les ids.
-- N'hésite pas à appeler plusieurs outils en cascade.${contextBlock}${pdfBlock}`;
+- N'hésite pas à appeler plusieurs outils en cascade.
+- Si l'utilisateur demande de faire 2-3 choses en cascade (créer un client PUIS envoyer plaquette), enchaîne les outils. Si une étape nécessite confirmation, propose-la ; Thomas la validera, et au tour suivant tu pourras enchaîner le reste.${contextBlock}${pdfBlock}`;
 }
 
 // ==========================================================================
