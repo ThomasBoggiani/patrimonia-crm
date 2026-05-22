@@ -20,6 +20,7 @@ import { matchMandatsForClient } from '@/lib/matching';
 import { computeRendementsAuto, totalLoyerMensuel, totalLoyerMensuelOptimise, totalSurface, comptageStatuts } from '@/lib/rendements';
 import { getPriceTTC, getPriceNV, isNVEstimated, getCommission, isCommissionEstimated } from '@/lib/priceDisplay';
 import AICreateModal from './AICreateModal';
+import AIAssistantChat from './AIAssistantChat';
 import MarkAsSoldModal from './MarkAsSoldModal';
 import CascadeSelectMulti from './CascadeSelectMulti';
 import MandatAIAssistant from './MandatAIAssistant';
@@ -541,6 +542,7 @@ export default function CRM() {
           setTimeout(() => setImportToast(null), 10000);
         }}
       />
+      <AIAssistantChat />
     </div>
   );
 }
