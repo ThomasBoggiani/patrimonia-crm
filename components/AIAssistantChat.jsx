@@ -1,7 +1,11 @@
 // components/AIAssistantChat.jsx
 //
-// Assistant Patrimonia - Phase 3 UI Chat (v4)
-// Couleurs en inline style pour garantir le rendu visuel.
+// Assistant Patrimonia - Phase 3 UI Chat (v6)
+// Dictée vocale hybride : Web Speech (direct) + Whisper (qualité finale)
+//
+// - Click micro → démarre Web Speech (live transcript en gris) + MediaRecorder (audio pour Whisper)
+// - Click stop → arrête les deux, envoie l'audio à Whisper, remplace le texte gris par le texte noir net
+// - Auto-envoi DÉSACTIVÉ : Thomas relit avant d'envoyer
 
 'use client';
 
@@ -9,7 +13,6 @@ import { useState, useRef, useEffect } from 'react';
 import { Sparkles, X, Send, Mic, Loader2, Square } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
-// Couleurs Patrimonia (sage)
 const SAGE_DARK = '#5d6e5d';
 const SAGE_DARKER = '#3d4d3d';
 
@@ -21,6 +24,11 @@ function renderMarkdown(text) {
     .replace(/>/g, '&gt;');
   return escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
 }
+
+// Check Web Speech API support
+const SpeechRecognition = typeof window !== 'undefined'
+  ? (window.SpeechRecognition || window.webkitSpeechRecognition)
+  : null;
 
 export default function AIAssistantChat({
   floating = false,
@@ -41,11 +49,16 @@ export default function AIAssistantChat({
   const [loading, setLoading] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  // Texte en cours de dictée (Web Speech, gris, non confirmé)
+  const [liveTranscript, setLiveTranscript] = useState('');
+  // Texte de base avant la dictée (à conserver)
+  const [inputBeforeRecord, setInputBeforeRecord] = useState('');
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const speechRecognitionRef = useRef(null);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -57,6 +70,8 @@ export default function AIAssistantChat({
     if (!open) {
       setMessages([]);
       setInput('');
+      setLiveTranscript('');
+      setInputBeforeRecord('');
     }
   }, [open]);
 
@@ -72,6 +87,10 @@ export default function AIAssistantChat({
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 120) + 'px';
   };
+
+  // ========================================================================
+  // ENVOI DU MESSAGE
+  // ========================================================================
 
   const sendMessage = async () => {
     const text = input.trim();
@@ -118,8 +137,18 @@ export default function AIAssistantChat({
     }
   };
 
+  // ========================================================================
+  // ENREGISTREMENT VOCAL — HYBRIDE Web Speech + Whisper
+  // ========================================================================
+
   const startRecording = async () => {
     try {
+      // Mémorise le texte déjà tapé avant la dictée
+      const currentInput = input;
+      setInputBeforeRecord(currentInput);
+      setLiveTranscript('');
+
+      // === 1. Démarre MediaRecorder (pour Whisper) ===
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       audioChunksRef.current = [];
@@ -136,7 +165,6 @@ export default function AIAssistantChat({
         setTranscribing(true);
 
         try {
-          // Récupère le token Supabase pour l'authentification
           const { data: { session } } = await supabase.auth.getSession();
           const token = session?.access_token || '';
 
@@ -150,23 +178,75 @@ export default function AIAssistantChat({
           const transcript = data.text || data.transcript || '';
 
           if (transcript) {
-            setInput(prev => (prev ? prev + ' ' + transcript : transcript));
+            // Remplace le texte temporaire Web Speech par le texte final Whisper
+            setInput(prev => {
+              const base = inputBeforeRecord || '';
+              return base ? base + ' ' + transcript : transcript;
+            });
             if (inputRef.current) {
               inputRef.current.focus();
-              inputRef.current.style.height = 'auto';
-              inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + 'px';
+              setTimeout(() => {
+                if (inputRef.current) {
+                  inputRef.current.style.height = 'auto';
+                  inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + 'px';
+                }
+              }, 0);
             }
           }
         } catch (err) {
           console.error('[AIAssistantChat] Transcription error:', err);
           alert('Erreur de transcription : ' + err.message);
+          // Restaure le texte d'avant si erreur
+          setInput(inputBeforeRecord);
         } finally {
           setTranscribing(false);
+          setLiveTranscript('');
         }
       };
 
       mediaRecorderRef.current = mr;
       mr.start();
+
+      // === 2. Démarre Web Speech API (pour live transcript) ===
+      if (SpeechRecognition) {
+        try {
+          const recognition = new SpeechRecognition();
+          recognition.lang = 'fr-FR';
+          recognition.continuous = true;
+          recognition.interimResults = true;
+
+          recognition.onresult = (event) => {
+            let interim = '';
+            let final = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              const transcript = event.results[i][0].transcript;
+              if (event.results[i].isFinal) {
+                final += transcript + ' ';
+              } else {
+                interim += transcript;
+              }
+            }
+            // Affiche dans l'input EN DIRECT (texte concatén)
+            setLiveTranscript(prev => {
+              // On recompose le texte courant : base + final déjà accumulé + interim en cours
+              const combined = (final + interim).trim();
+              return combined;
+            });
+          };
+
+          recognition.onerror = (e) => {
+            console.warn('[AIAssistantChat] Web Speech error:', e.error);
+            // On ne fait rien : Whisper prendra le relais à l'arrêt
+          };
+
+          speechRecognitionRef.current = recognition;
+          recognition.start();
+        } catch (e) {
+          console.warn('[AIAssistantChat] Web Speech start failed:', e);
+          // Pas grave, Whisper marchera quand même
+        }
+      }
+
       setRecording(true);
     } catch (err) {
       console.error('[AIAssistantChat] Mic error:', err);
@@ -175,11 +255,28 @@ export default function AIAssistantChat({
   };
 
   const stopRecording = () => {
+    // Stop Web Speech
+    if (speechRecognitionRef.current) {
+      try { speechRecognitionRef.current.stop(); } catch (e) {}
+      speechRecognitionRef.current = null;
+    }
+    // Stop MediaRecorder (déclenchera onstop → Whisper)
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
     setRecording(false);
   };
+
+  // ========================================================================
+  // Affichage : texte d'input combiné (saisi + live transcript en gris)
+  // ========================================================================
+
+  // Calcule ce qui s'affiche dans le textarea
+  // Si en recording : affiche [texte avant] + [live transcript]
+  // Sinon : affiche juste input
+  const displayValue = recording
+    ? (inputBeforeRecord + (inputBeforeRecord && liveTranscript ? ' ' : '') + liveTranscript)
+    : input;
 
   const getContextLabel = () => {
     if (!context) return null;
@@ -196,14 +293,12 @@ export default function AIAssistantChat({
 
   const contextLabel = getContextLabel();
 
-  // Style du gradient sage (inline pour garantir le rendu)
   const gradientStyle = {
     background: `linear-gradient(to bottom right, ${SAGE_DARK}, ${SAGE_DARKER})`
   };
 
   return (
     <>
-      {/* Bouton flottant (uniquement si floating=true et non ouvert) */}
       {floating && !open && (
         <button
           onClick={() => setOpen(true)}
@@ -215,7 +310,6 @@ export default function AIAssistantChat({
         </button>
       )}
 
-      {/* Fenêtre chat */}
       {open && (
         <div
           className="fixed bottom-6 right-6 z-50 flex flex-col bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden"
@@ -300,17 +394,27 @@ export default function AIAssistantChat({
 
           {/* Input */}
           <div className="border-t border-stone-200 bg-white p-3 flex-shrink-0">
+            {recording && (
+              <div className="flex items-center gap-2 mb-2 text-xs text-red-600">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                <span>Je t'écoute…{!SpeechRecognition && ' (visualisation directe indisponible sur ce navigateur)'}</span>
+              </div>
+            )}
             <div className="flex items-end gap-2">
               <textarea
                 ref={inputRef}
-                value={input}
+                value={displayValue}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                placeholder={recording ? 'Enregistrement en cours…' : (transcribing ? 'Transcription…' : 'Tape ou parle…')}
+                placeholder={recording ? 'Parle, je t\'écoute…' : (transcribing ? 'Transcription en cours…' : 'Tape ou parle…')}
                 disabled={loading || recording || transcribing}
                 rows={1}
-                style={{ maxHeight: '120px' }}
-                className="flex-1 resize-none px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 disabled:bg-stone-50 disabled:text-stone-400 min-h-[36px]"
+                style={{
+                  maxHeight: '120px',
+                  color: recording ? '#888' : undefined,
+                  fontStyle: recording ? 'italic' : undefined
+                }}
+                className="flex-1 resize-none px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 disabled:bg-stone-50 min-h-[36px]"
               />
 
               <button
