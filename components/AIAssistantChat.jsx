@@ -7,6 +7,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Sparkles, X, Send, Mic, Loader2, Square } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 // Couleurs Patrimonia (sage)
 const SAGE_DARK = '#5d6e5d';
@@ -135,8 +136,13 @@ export default function AIAssistantChat({
         setTranscribing(true);
 
         try {
+          // Récupère le token Supabase pour l'authentification
+          const { data: { session } } = await supabase.auth.getSession();
+          const token = session?.access_token || '';
+
           const formData = new FormData();
           formData.append('audio', blob, 'voice.webm');
+          formData.append('token', token);
 
           const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
           if (!res.ok) throw new Error('Transcription échouée');
