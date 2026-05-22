@@ -319,19 +319,45 @@ async function executeSendPlaquette(data, userId, userInitials, token) {
 
     // Corps HTML (template simple + custom_message si fourni)
     const customLine = data.custom_message ? `<p>${data.custom_message.replace(/\n/g, '<br>')}</p>` : '';
-    // Récupère la signature utilisateur
-    const signature = await getUserSignature(userId);
+    // Récupère le profile complet de l'envoyeur (signature + prenom pour signature texte)
+    const { data: senderProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('prenom, email_signature')
+      .eq('id', userId)
+      .single();
+    const signature = senderProfile?.email_signature || null;
+    const senderFirstName = senderProfile?.prenom || 'Thomas';
+
+    // Détecte le type de bien depuis le mandat (appartement, immeuble, local, etc.)
+    // On utilise le type stocké ("Immeubles", "Appartements", "Locaux commerciaux") et on met au singulier minuscule
+    const typeMap = {
+      'Immeubles': 'immeuble',
+      'Appartements': 'appartement',
+      'Locaux commerciaux': 'local commercial',
+      'Maisons': 'maison',
+      'Terrains': 'terrain',
+      'Bureaux': 'bureau'
+    };
+    const typeBien = typeMap[mandat.type] || (mandat.type ? mandat.type.toLowerCase().replace(/s$/, '') : 'bien');
+
+    // Bloc personnalisable (intégré au début si custom_message fourni)
+    const customParagraph = data.custom_message
+      ? `<p>${data.custom_message.replace(/\n/g, '<br>')}</p>`
+      : '';
 
     const baseHtmlBody = `<p>Bonjour${nomClient ? ' ' + nomClient : ''},</p>
-${customLine}
-<p>Je vous fais suivre la plaquette de notre dernière opportunité off-market :</p>
-<p><strong>${mandat.nom}</strong>${mandat.adresse ? '<br>' + mandat.adresse : ''}${mandat.ville ? ' — ' + mandat.ville : ''}</p>
-<p>Restant à votre disposition pour échanger.</p>`;
+<p>Merci pour votre intérêt.</p>
+${customParagraph}
+<p>Vous trouverez ci-joint la plaquette commerciale de l'${typeBien}.</p>
+<p>Si vous recherchez un bien à usage d'habitation, je vous laisse en prendre connaissance et revenir vers moi si le bien correspond à votre projet. Je reste bien entendu disponible pour échanger, répondre à vos questions ou organiser une visite.</p>
+<p>Si vous êtes un professionnel de l'immobilier ou un investisseur à la recherche d'opportunités, notamment off-market, je vous invite à compléter le questionnaire présent dans ma signature. Cela nous permettra de mieux comprendre vos critères et de vous adresser des opportunités plus ciblées.</p>
+<p>Plus votre recherche sera précise, plus les biens proposés seront pertinents.</p>
+<p>Au plaisir d'échanger,<br>${senderFirstName}</p>`;
 
-    // Append signature si elle existe, sinon fallback texte
+    // Append signature si elle existe
     const htmlBody = signature
       ? `${baseHtmlBody}<br>${signature}`
-      : `${baseHtmlBody}<p>Cordialement,<br>Immeubles &amp; Patrimoine</p>`;
+      : baseHtmlBody;
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://patrimonia-crm.vercel.app';
     const res = await fetch(`${baseUrl}/api/email-drafts/send-batch`, {
