@@ -239,7 +239,7 @@ export default function AIAssistantChat({
         <button
           onClick={() => setOpen(true)}
           aria-label="Ouvrir l'Assistant Patrimonia"
-          className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-sage-500 to-sage-700 text-white shadow-luxe-lg hover:scale-105 active:scale-95 transition-transform flex items-center justify-center"
+          className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-sage-dark to-sage-darker text-white shadow-luxe-lg hover:scale-105 active:scale-95 transition-transform flex items-center justify-center"
         >
           <Sparkles className="w-6 h-6" />
         </button>
@@ -260,7 +260,7 @@ export default function AIAssistantChat({
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-stone-200 bg-stone-50 flex-shrink-0">
             <div className="flex items-center gap-2 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-sage-500 to-sage-700 flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-sage-dark to-sage-darker flex items-center justify-center flex-shrink-0">
                 <Sparkles className="w-4 h-4 text-white" />
               </div>
               <div className="min-w-0">
