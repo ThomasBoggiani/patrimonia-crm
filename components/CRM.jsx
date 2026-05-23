@@ -2580,6 +2580,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           <button onClick={() => document.getElementById('stats')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📊 Stats</button>
           <button onClick={() => document.getElementById('locatif')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🏢 Locatif</button>
           <button onClick={() => document.getElementById('mandant')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">👤 Mandant</button>
+          <button onClick={() => document.getElementById('diffusion')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📡 Diffusion</button>
           <button onClick={() => setOpenModal('visite')} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors flex items-center gap-1">
             👁️ Visite
             {(mandat.visiteInfo || mandat.visite_info) && Object.values(mandat.visiteInfo || mandat.visite_info).some(v => v) && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>}
