@@ -112,22 +112,27 @@ export async function POST(request, { params }) {
       });
     }
 
-    // 2. Construire les URLs externes
+    // 2. URLs externes (sauf cadastre qu'on construit après la parcelle)
     const satelliteExtUrl = googleSatelliteUrl({ lat: geo.lat, lng: geo.lng });
-    const cadastreExtUrl = cadastreUrl({ lat: geo.lat, lng: geo.lng });
-
-    // 2bis. URLs Google
     const streetViewExtUrl = googleStreetViewUrl({ lat: geo.lat, lng: geo.lng, width: 640, height: 400 });
     const mapStaticExtUrl = googleMapStaticUrl({ lat: geo.lat, lng: geo.lng, width: 640, height: 400, zoom: 15, mapType: 'roadmap' });
 
-    // 3. Télécharger + uploader en parallèle (sauf transports/parcelle qui sont du JSON)
     console.log('[refresh-assets] Street View URL:', streetViewExtUrl?.slice(0, 200));
-    const [satelliteUrl, cadastreUrl_, streetViewUrl, mapStaticUrl, parcelle, transports] = await Promise.all([
+
+    // 2bis. Récupérer la parcelle d'abord pour avoir sa bbox et cadrer le cadastre
+    const parcelle = await getCadastreParcelle({ lat: geo.lat, lng: geo.lng });
+    const cadastreExtUrl = cadastreUrl({
+      lat: geo.lat,
+      lng: geo.lng,
+      bbox: parcelle?.bbox || null,
+    });
+
+    // 3. Télécharger + uploader en parallèle
+    const [satelliteUrl, cadastreUrl_, streetViewUrl, mapStaticUrl, transports] = await Promise.all([
       fetchAndUpload(satelliteExtUrl, `${mandatId}/satellite.jpg`, 'image/jpeg'),
       fetchAndUpload(cadastreExtUrl, `${mandatId}/cadastre.png`, 'image/png'),
       fetchAndUpload(streetViewExtUrl, `${mandatId}/streetview.jpg`, 'image/jpeg'),
       fetchAndUpload(mapStaticExtUrl, `${mandatId}/map-static.png`, 'image/png'),
-      getCadastreParcelle({ lat: geo.lat, lng: geo.lng }),
       getNearbyTransports({ lat: geo.lat, lng: geo.lng, radius: 500 }),
     ]);
 
