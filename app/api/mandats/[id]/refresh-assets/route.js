@@ -11,7 +11,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { createClient } from '@supabase/supabase-js';
-import { geocodeAddress, googleSatelliteUrl, cadastreUrl, googleStreetViewUrl, googleMapStaticUrl, getCadastreParcelle, getNearbyTransports } from '@/lib/maps';
+import { geocodeAddress, googleSatelliteUrl, cadastreUrl, googleStreetViewUrl, googleMapStaticUrl, getCadastreParcelle, getNearbyTransports, getNearbyAmenities, getRisquesNaturels } from '@/lib/maps';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -130,13 +130,15 @@ export async function POST(request, { params }) {
       bbox: parcelle?.bbox || null,
     });
 
-    // 3. Télécharger + uploader en parallèle
-    const [satelliteUrl, cadastreUrl_, streetViewUrl, mapStaticUrl, transports] = await Promise.all([
+    // 3. Télécharger + uploader + commodités quartier + risques en parallèle
+    const [satelliteUrl, cadastreUrl_, streetViewUrl, mapStaticUrl, transports, quartier, risques] = await Promise.all([
       fetchAndUpload(satelliteExtUrl, `${mandatId}/satellite.jpg`, 'image/jpeg'),
       fetchAndUpload(cadastreExtUrl, `${mandatId}/cadastre.png`, 'image/png'),
       fetchAndUpload(streetViewExtUrl, `${mandatId}/streetview.jpg`, 'image/jpeg'),
       fetchAndUpload(mapStaticExtUrl, `${mandatId}/map-static.png`, 'image/png'),
       getNearbyTransports({ lat: geo.lat, lng: geo.lng, radius: 1000 }),
+      getNearbyAmenities({ lat: geo.lat, lng: geo.lng, radius: 500 }),
+      getRisquesNaturels({ lat: geo.lat, lng: geo.lng }),
     ]);
 
     // 4. Update mandat avec les URLs et données
@@ -149,6 +151,8 @@ export async function POST(request, { params }) {
         map_static_image_url: mapStaticUrl,
         parcelle_data: parcelle,
         transports_data: transports,
+        quartier_data: quartier,
+        risques_data: risques,
         assets_generated_at: new Date().toISOString(),
       })
       .eq('id', mandatId);
@@ -172,6 +176,8 @@ export async function POST(request, { params }) {
       map_static_image_url: mapStaticUrl,
       parcelle_data: parcelle,
       transports_data: transports,
+      quartier_data: quartier,
+      risques_data: risques,
       assets_generated_at: new Date().toISOString(),
     }), {
       status: 200, headers: { 'Content-Type': 'application/json' }
