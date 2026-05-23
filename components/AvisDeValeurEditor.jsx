@@ -203,7 +203,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
         return;
       }
 
-      const response = await fetch('/api/avis-valeur/generate', {
+      const response = await fetch('/api/avis-valeur/generate-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mandatId: mandat.id }),
@@ -211,7 +211,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        alert('Erreur generation PPTX : ' + (errData.error || response.statusText) + 
+        alert('Erreur generation PDF : ' + (errData.error || response.statusText) + 
               (errData.details ? '\n' + errData.details : ''));
         setGenerating(false);
         return;
@@ -223,7 +223,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
       link.href = url;
       const cd = response.headers.get('Content-Disposition') || '';
       const match = cd.match(/filename="([^"]+)"/);
-      link.download = match ? match[1] : `Avis_de_valeur_${mandat.id}.pptx`;
+      link.download = match ? match[1] : `Avis_de_valeur_${mandat.id}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -773,10 +773,10 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
             </button>
             <button onClick={handleGenerate} disabled={saving || generating}
               className="flex items-center gap-2 px-4 py-2 bg-sage-dark text-white rounded-lg text-sm hover:bg-sage-darker disabled:opacity-50"
-              title="Sauvegarde + generation du PPTX"
+              title="Sauvegarde + generation du PDF"
             >
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
-              {generating ? 'Generation...' : 'Generer PPTX'}
+              {generating ? 'Generation...' : 'Generer PDF'}
             </button>
           </div>
         </div>
