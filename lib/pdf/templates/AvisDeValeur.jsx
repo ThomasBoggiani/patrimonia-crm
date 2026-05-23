@@ -1,35 +1,16 @@
 // ═══════════════════════════════════════════════════════════════════
-// lib/pdf/templates/AvisDeValeur.jsx — v1
-// Avis de valeur PDF React-PDF · A4 paysage · 18 slides hybride
-//
-// Structure :
-//  1.  Couverture (placeholder fixe)
-//  2.  Avant-propos
-//  3.  Qui sommes-nous (placeholder fixe)
-//  4.  Notre équipe (placeholder fixe)
-//  5.  Nos valeurs (placeholder fixe)
-//  6.  Nos dernières ventes (placeholder fixe)
-//  7.  Le marché en 2026 (placeholder fixe)
-//  8.  Présentation de l'actif (transition)
-//  9.  Localisation (DYNAMIQUE)
-// 10.  Caractéristiques (DYNAMIQUE)
-// 11.  Analyse SWOT (DYNAMIQUE)
-// 12.  Portfolio photos (DYNAMIQUE)
-// 13.  Plans (DYNAMIQUE)
-// 14.  Comparables marché (DYNAMIQUE)
-// 15.  Méthode d'évaluation (DYNAMIQUE)
-// 16.  Estimation finale (DYNAMIQUE)
-// 17.  Recommandations stratégiques (DYNAMIQUE)
-// 18.  Notre équipe (DYNAMIQUE style plaquette)
-//
-// Les données dynamiques sont stockées dans mandat.avis_valeur (JSONB)
+// lib/pdf/templates/AvisDeValeur.jsx — v2
+// Avis de valeur PDF React-PDF · A4 paysage
+// Lit le schéma JSONB mandat.avis_valeur tel que défini dans AvisDeValeurEditor :
+//   localisation, situation_locative, caracteristiques, comparables,
+//   swot, methode_m2, methode_capi, reconversion, preconisation
 // ═══════════════════════════════════════════════════════════════════
 
 import React from 'react';
 import { Document, Page, View, Text, Image } from '@react-pdf/renderer';
 import { LOGO_IP_BASE64 } from '../logo-base64';
 
-// ─── PALETTE I&P ───────────────────────────────────────────────────
+// ─── PALETTE ───────────────────────────────────────────────────────
 const SAGE = '#5d6e5d';
 const SAGE_DARK = '#3d4d3d';
 const CREAM = '#f5f0e8';
@@ -97,14 +78,14 @@ function safeText(v, fallback = '') {
 function formatPrix(n) {
   if (n === null || n === undefined || n === '') return '—';
   const num = parseFloat(n);
-  if (isNaN(num)) return '—';
+  if (isNaN(num) || num === 0) return '—';
   return num.toLocaleString('fr-FR').replace(/[\u00A0\u202F]/g, ' ') + ' €';
 }
 
 function formatNum(n) {
   if (n === null || n === undefined || n === '') return '—';
   const num = parseFloat(n);
-  if (isNaN(num)) return '—';
+  if (isNaN(num) || num === 0) return '—';
   return num.toLocaleString('fr-FR').replace(/[\u00A0\u202F]/g, ' ');
 }
 
@@ -136,7 +117,7 @@ function chunkArray(arr, size) {
   return out;
 }
 
-// ─── ÉQUIPE (réutilise la logique plaquette) ───────────────────────
+// ─── ÉQUIPE ────────────────────────────────────────────────────────
 function buildTeamForAvis({ mandat, sender, allMembers }) {
   const BOSS_INITIALS = 'TE';
   const ownerInitials = (mandat?.ownerInitials || '').toUpperCase();
@@ -185,8 +166,8 @@ function TeamCard({ member, compact = false }) {
   );
 }
 
-// ─── HEADER / FOOTER COMMUNS ───────────────────────────────────────
-function SlideHeader({ mandat, slideTitle }) {
+// ─── HEADER / FOOTER ──────────────────────────────────────────────
+function SlideHeader({ mandat }) {
   return (
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8, borderBottomWidth: 0.5, borderBottomColor: BORDER, marginBottom: 12 }}>
       <View style={{ width: 26, height: 26, backgroundColor: SAGE, borderRadius: 4, alignItems: 'center', justifyContent: 'center' }}>
@@ -214,11 +195,11 @@ function SlideTitle({ chapter, title }) {
   );
 }
 
-function SlideFooter({ pageNum, totalPages }) {
+function SlideFooter({ pageNum }) {
   return (
     <View style={{ position: 'absolute', bottom: 18, left: 28, right: 28, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
       <Text style={{ fontSize: 7, color: TEXT_HINT }}>www.immeubles-patrimoine.fr</Text>
-      <Text style={{ fontSize: 7, color: TEXT_HINT }}>{pageNum}{totalPages ? ` / ${totalPages}` : ''}</Text>
+      <Text style={{ fontSize: 7, color: TEXT_HINT }}>{pageNum}</Text>
     </View>
   );
 }
@@ -231,54 +212,34 @@ const PAGE_PAYSAGE = { size: 'A4', orientation: 'landscape', paddingTop: 22, pad
 // ═════════════════════════════════════════════════════════════════════
 export default function AvisDeValeur({
   mandat,
-  avisData = {},        // mandat.avis_valeur (JSONB)
+  avisData = {},
   conseiller,
   teamMembers,
 }) {
+  const av = avisData || {};
+
+  // Sections du schéma
+  const localisation = av.localisation || {};
+  const situationLocative = av.situation_locative || {};
+  const caracteristiques = av.caracteristiques || {};
+  const comparables = av.comparables || {};
+  const swot = av.swot || { forces: [], opportunites: [], facteurs_limitatifs: [], menaces: [] };
+  const methodeM2 = av.methode_m2 || {};
+  const methodeCapi = av.methode_capi || { hypotheses: [] };
+  const reconversion = av.reconversion || { usages: [], profils_acquereurs: [] };
+  const preconisation = av.preconisation || {};
+
   const photos = normalizePhotos(mandat);
-  const photoChunks = chunkArray(photos, 6); // 6 photos par slide A4 paysage
+  const photoChunks = chunkArray(photos, 6);
 
   const team = buildTeamForAvis({ mandat, sender: conseiller, allMembers: teamMembers || {} });
-  const dossier = team.filter(m => m.position === 'left' || m.position === 'right' || m.position === 'fallback' || m.position === 'center');
+  const dossier = team;
 
-  // Données dynamiques depuis avisData
-  const av = {
-    proprietaire: avisData.proprietaire || '',
-    date: avisData.date || new Date().toLocaleDateString('fr-FR'),
-    avant_propos: avisData.avant_propos || '',
-    forces: avisData.forces || [],
-    faiblesses: avisData.faiblesses || [],
-    opportunites: avisData.opportunites || [],
-    menaces: avisData.menaces || [],
-    comparables_prix_moyen: avisData.comparables_prix_moyen || null,
-    comparables_prix_min: avisData.comparables_prix_min || null,
-    comparables_prix_max: avisData.comparables_prix_max || null,
-    comparables_rendement: avisData.comparables_rendement || '',
-    comparables_transactions: avisData.comparables_transactions || [],
-    methode_m2_basse: avisData.methode_m2_basse || null,
-    methode_m2_centrale: avisData.methode_m2_centrale || null,
-    methode_m2_haute: avisData.methode_m2_haute || null,
-    methode_capi: avisData.methode_capi || [],
-    prix_coup_coeur: avisData.prix_coup_coeur || null,
-    prix_marche: avisData.prix_marche || null,
-    prix_plancher: avisData.prix_plancher || null,
-    recommandation: avisData.recommandation || '',
-    strategie_bloc: avisData.strategie_bloc || '',
-    strategie_decoupe: avisData.strategie_decoupe || '',
-    ...avisData,
-  };
-
-  const surface = parseFloat(mandat?.surface) || 0;
   const adresseFull = [safeText(mandat?.adresse), safeText(mandat?.ville)].filter(Boolean).join(', ');
 
   // Assets externes (Phase B)
-  const streetViewSrc = mandat?.street_view_image_url || null;
   const mapStaticSrc = mandat?.map_static_image_url || null;
-  const aerialSrc = mandat?.satellite_image_url || null;
-  const cadastreSrc = mandat?.cadastre_image_url || null;
   const transports = mandat?.transports_data || null;
-
-  // Top stations
   const topStations = transports ? (() => {
     const all = [];
     (transports.metro || []).forEach(s => all.push({ ...s, mode: 'metro' }));
@@ -287,89 +248,68 @@ export default function AvisDeValeur({
     return all.sort((a, b) => a.distance - b.distance).slice(0, 6);
   })() : [];
 
-  let pageNum = 0;
+  // État locatif depuis le mandat
+  const lots = Array.isArray(mandat?.etat_locatif) ? mandat.etat_locatif : [];
+  const sumLoyer = lots.reduce((s, l) => s + (parseFloat(l.loyer) || 0), 0);
+  const sumPotentiel = lots.reduce((s, l) => {
+    const p = parseFloat(l.loyer_potentiel) || 0;
+    return s + (p > 0 ? p : (parseFloat(l.loyer) || 0));
+  }, 0);
+  const caActuel = sumLoyer * 12;
+  const caPotentiel = sumPotentiel * 12;
 
   return (
     <Document title={`Avis de valeur — ${safeText(mandat?.nom, 'Mandat')}`} author="Immeubles & Patrimoine">
 
-      {/* ─────────────────────────────────────────────────────────── */}
-      {/* SLIDE 1 · COUVERTURE                                         */}
-      {/* ─────────────────────────────────────────────────────────── */}
+      {/* ─── 1. COUVERTURE ─── */}
       <Page {...PAGE_PAYSAGE} style={{ ...PAGE_PAYSAGE, backgroundColor: CREAM }}>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Image src={LOGO_IP_BASE64} style={{ width: 110, height: 110, marginBottom: 40, objectFit: 'contain' }} />
+          <Image src={LOGO_IP_BASE64} style={{ width: 110, height: 110, marginBottom: 30, objectFit: 'contain' }} />
           {photos[0] ? (
-            <Image src={photos[0]} style={{ width: '70%', height: 280, objectFit: 'cover', marginBottom: 30, borderRadius: 4 }} />
+            <Image src={photos[0]} style={{ width: '70%', height: 260, objectFit: 'cover', marginBottom: 24, borderRadius: 4 }} />
           ) : (
-            <View style={{ width: '70%', height: 280, backgroundColor: CREAM_LIGHT, marginBottom: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 4 }}>
+            <View style={{ width: '70%', height: 260, backgroundColor: CREAM_LIGHT, marginBottom: 24, alignItems: 'center', justifyContent: 'center', borderRadius: 4 }}>
               <Text style={{ fontSize: 12, color: TEXT_HINT, fontFamily: 'Helvetica-Oblique' }}>Photo principale du bien</Text>
             </View>
           )}
-          <Text style={{ fontSize: 12, color: SAGE, letterSpacing: 4, fontFamily: 'Helvetica-Bold', marginBottom: 14 }}>
+          <Text style={{ fontSize: 12, color: SAGE, letterSpacing: 4, fontFamily: 'Helvetica-Bold', marginBottom: 12 }}>
             AVIS DE VALEUR
           </Text>
-          <Text style={{ fontSize: 26, fontFamily: 'Times-Roman', color: TEXT_PRIMARY, marginBottom: 8, textAlign: 'center' }}>
+          <Text style={{ fontSize: 26, fontFamily: 'Times-Roman', color: TEXT_PRIMARY, marginBottom: 6, textAlign: 'center' }}>
             {safeText(mandat?.nom, 'Bien à évaluer').toUpperCase()}
           </Text>
-          <Text style={{ fontSize: 12, color: TEXT_MUTED, marginBottom: 30 }}>
+          <Text style={{ fontSize: 12, color: TEXT_MUTED, marginBottom: 24 }}>
             {adresseFull}
           </Text>
           <Text style={{ fontSize: 9, color: TEXT_HINT, fontStyle: 'italic' }}>
-            Préparé pour {safeText(av.proprietaire, '—')} · {av.date}
+            {av.date_estimation || new Date().toLocaleDateString('fr-FR')} · Validité : {av.validite_mois || 1} mois
           </Text>
         </View>
       </Page>
 
-      {/* ─────────────────────────────────────────────────────────── */}
-      {/* SLIDE 2 · AVANT-PROPOS                                       */}
-      {/* ─────────────────────────────────────────────────────────── */}
+      {/* ─── 2. AVANT-PROPOS / TRANSITION ─── */}
       <Page {...PAGE_PAYSAGE}>
         <SlideHeader mandat={mandat} />
-        <SlideTitle chapter="" title="Avant-propos" />
+        <SlideTitle title="Avant-propos" />
         <View style={{ marginTop: 16, paddingHorizontal: 40 }}>
           <Text style={{ fontSize: 11, color: TEXT_PRIMARY, lineHeight: 1.7, textAlign: 'justify' }}>
-            {av.avant_propos || `Madame, Monsieur ${av.proprietaire},\n\nNous vous remercions de la confiance que vous nous accordez pour la valorisation de votre bien situé ${adresseFull}.\n\nLe présent avis de valeur a pour objectif de vous éclairer sur la valeur de marché de cet actif, à l'appui de nos analyses, comparables récents et méthodes d'évaluation reconnues.\n\nNous restons à votre entière disposition pour échanger sur les éléments de ce document.`}
+            Cher Mandant,{'\n\n'}
+            Nous vous remercions de la confiance que vous nous accordez pour la valorisation de votre bien situé {adresseFull}.{'\n\n'}
+            Le présent avis de valeur a pour objectif de vous éclairer sur la valeur de marché de cet actif, à l'appui de nos analyses, comparables récents et méthodes d'évaluation reconnues.{'\n\n'}
+            Nous restons à votre entière disposition pour échanger sur les éléments de ce document.
           </Text>
         </View>
-        <View style={{ marginTop: 'auto', alignItems: 'flex-end', paddingRight: 40 }}>
+        <View style={{ marginTop: 'auto', alignItems: 'flex-end', paddingRight: 40, marginBottom: 28 }}>
           <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: SAGE }}>L'équipe Immeubles & Patrimoine</Text>
-          <Text style={{ fontSize: 8, color: TEXT_HINT }}>{av.date}</Text>
+          <Text style={{ fontSize: 8, color: TEXT_HINT }}>{av.date_estimation || new Date().toLocaleDateString('fr-FR')}</Text>
         </View>
         <SlideFooter pageNum={2} />
       </Page>
 
-      {/* ─────────────────────────────────────────────────────────── */}
-      {/* SLIDES 3 à 8 · CONTENU MARKETING FIXE (placeholders)         */}
-      {/* À remplacer par les images PNG extraites du PPTX             */}
-      {/* ─────────────────────────────────────────────────────────── */}
-      {[
-        { num: 3, title: 'Qui sommes-nous', subtitle: 'Slide marketing à intégrer depuis le PPTX' },
-        { num: 4, title: 'Notre équipe', subtitle: 'Slide marketing à intégrer depuis le PPTX' },
-        { num: 5, title: 'Nos valeurs', subtitle: 'Slide marketing à intégrer depuis le PPTX' },
-        { num: 6, title: 'Nos dernières ventes', subtitle: 'Slide marketing à intégrer depuis le PPTX' },
-        { num: 7, title: 'Le marché en 2026', subtitle: 'Slide marketing à intégrer depuis le PPTX' },
-        { num: 8, title: 'Présentation de l\'actif', subtitle: 'Slide de transition' },
-      ].map(slide => (
-        <Page key={`fixe-${slide.num}`} {...PAGE_PAYSAGE} style={{ ...PAGE_PAYSAGE, backgroundColor: CREAM }}>
-          <SlideHeader mandat={mandat} />
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ fontSize: 30, fontFamily: 'Times-Roman', color: SAGE, marginBottom: 12, textAlign: 'center' }}>
-              {slide.title}
-            </Text>
-            <Text style={{ fontSize: 10, color: TEXT_HINT, fontStyle: 'italic' }}>
-              [{slide.subtitle}]
-            </Text>
-          </View>
-          <SlideFooter pageNum={slide.num} />
-        </Page>
-      ))}
-
-      {/* ─────────────────────────────────────────────────────────── */}
-      {/* SLIDE 9 · LOCALISATION (DYNAMIQUE)                           */}
-      {/* ─────────────────────────────────────────────────────────── */}
+      {/* ─── 3. LOCALISATION ─── */}
       <Page {...PAGE_PAYSAGE}>
         <SlideHeader mandat={mandat} />
-        <SlideTitle chapter="CHAPITRE 1" title="Localisation" />
+        <SlideTitle chapter="CHAPITRE 1" title="Localisation & accessibilité" />
         <View style={{ flexDirection: 'row', gap: 14 }}>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>PLAN DE SITUATION</Text>
@@ -382,11 +322,22 @@ export default function AvisDeValeur({
             )}
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>ENVIRONNEMENT</Text>
-            <Text style={{ fontSize: 9, color: TEXT_MUTED, lineHeight: 1.6, marginBottom: 12 }}>
-              {av.environnement_description || `Bien situé au ${adresseFull}.`}
-            </Text>
-            {topStations.length > 0 && (
+            {localisation.commentaire && (
+              <>
+                <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>ENVIRONNEMENT</Text>
+                <Text style={{ fontSize: 9, color: TEXT_PRIMARY, lineHeight: 1.6, marginBottom: 12 }}>
+                  {localisation.commentaire}
+                </Text>
+              </>
+            )}
+
+            {/* Transports : prioriser le texte saisi, sinon les stations OSM */}
+            {localisation.transports ? (
+              <>
+                <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>TRANSPORTS & ACCESSIBILITÉ</Text>
+                <Text style={{ fontSize: 9, color: TEXT_PRIMARY, lineHeight: 1.6 }}>{localisation.transports}</Text>
+              </>
+            ) : topStations.length > 0 ? (
               <>
                 <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 6 }}>TRANSPORTS À PROXIMITÉ</Text>
                 {topStations.map((s, i) => {
@@ -402,124 +353,238 @@ export default function AvisDeValeur({
                   );
                 })}
               </>
-            )}
+            ) : null}
           </View>
         </View>
-        <SlideFooter pageNum={9} />
+        <SlideFooter pageNum={3} />
       </Page>
 
-      {/* ─────────────────────────────────────────────────────────── */}
-      {/* SLIDE 10 · CARACTÉRISTIQUES (DYNAMIQUE)                      */}
-      {/* ─────────────────────────────────────────────────────────── */}
+      {/* ─── 4. SITUATION LOCATIVE ─── */}
+      {lots.length > 0 && (
+        <Page {...PAGE_PAYSAGE}>
+          <SlideHeader mandat={mandat} />
+          <SlideTitle chapter="CHAPITRE 2" title="Situation locative" />
+
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+            <View style={{ flex: 1, backgroundColor: CREAM, padding: 10 }}>
+              <Text style={{ fontSize: 7, color: SAGE, textTransform: 'uppercase' }}>CA actuel HT/an</Text>
+              <Text style={{ fontSize: 17, fontFamily: 'Times-Roman', color: SAGE_DARK, marginTop: 2 }}>
+                {caActuel > 0 ? formatPrix(caActuel) : '—'}
+              </Text>
+            </View>
+            <View style={{ flex: 1, backgroundColor: '#FAEEDA', padding: 10 }}>
+              <Text style={{ fontSize: 7, color: '#854F0B', textTransform: 'uppercase' }}>CA potentiel HT/an</Text>
+              <Text style={{ fontSize: 17, fontFamily: 'Times-Roman', color: '#412402', marginTop: 2 }}>
+                {caPotentiel > 0 ? formatPrix(caPotentiel) : '—'}
+              </Text>
+            </View>
+            <View style={{ flex: 1, backgroundColor: CREAM_LIGHT, padding: 10 }}>
+              <Text style={{ fontSize: 7, color: TEXT_HINT, textTransform: 'uppercase' }}>Lots</Text>
+              <Text style={{ fontSize: 17, fontFamily: 'Times-Roman', color: TEXT_PRIMARY, marginTop: 2 }}>{lots.length}</Text>
+            </View>
+          </View>
+
+          <View style={{ borderTopWidth: 0.5, borderTopColor: BORDER }}>
+            <View style={{ flexDirection: 'row', backgroundColor: CREAM_LIGHT, paddingVertical: 4, paddingHorizontal: 6 }}>
+              <Text style={{ flex: 0.5, fontSize: 7, color: TEXT_MUTED, fontFamily: 'Helvetica-Bold' }}>LOT</Text>
+              <Text style={{ flex: 2, fontSize: 7, color: TEXT_MUTED, fontFamily: 'Helvetica-Bold' }}>TYPE</Text>
+              <Text style={{ flex: 1, fontSize: 7, color: TEXT_MUTED, fontFamily: 'Helvetica-Bold', textAlign: 'right' }}>SURFACE</Text>
+              <Text style={{ flex: 1.2, fontSize: 7, color: TEXT_MUTED, fontFamily: 'Helvetica-Bold', textAlign: 'right' }}>LOYER</Text>
+              <Text style={{ flex: 1.2, fontSize: 7, color: TEXT_MUTED, fontFamily: 'Helvetica-Bold', textAlign: 'right' }}>POTENTIEL</Text>
+            </View>
+            {lots.slice(0, 14).map((lot, i) => (
+              <View key={i} style={{ flexDirection: 'row', paddingVertical: 4, paddingHorizontal: 6, borderBottomWidth: 0.3, borderBottomColor: BORDER_LIGHT }}>
+                <Text style={{ flex: 0.5, fontSize: 8, fontFamily: 'Helvetica-Bold' }}>{lot.numero || (i + 1)}</Text>
+                <Text style={{ flex: 2, fontSize: 8 }}>{lot.type || lot.nature || '—'}</Text>
+                <Text style={{ flex: 1, fontSize: 8, textAlign: 'right' }}>{lot.surface ? `${lot.surface} m²` : '—'}</Text>
+                <Text style={{ flex: 1.2, fontSize: 8, textAlign: 'right' }}>{lot.loyer ? formatPrix(lot.loyer) : '—'}</Text>
+                <Text style={{ flex: 1.2, fontSize: 8, textAlign: 'right', color: '#854F0B' }}>{lot.loyer_potentiel ? formatPrix(lot.loyer_potentiel) : '—'}</Text>
+              </View>
+            ))}
+          </View>
+
+          {situationLocative.commentaire && (
+            <View style={{ marginTop: 12, padding: 10, backgroundColor: CREAM_LIGHT, borderLeftWidth: 2, borderLeftColor: SAGE }}>
+              <Text style={{ fontSize: 9, color: TEXT_PRIMARY, lineHeight: 1.6 }}>{situationLocative.commentaire}</Text>
+            </View>
+          )}
+
+          <SlideFooter pageNum={4} />
+        </Page>
+      )}
+
+      {/* ─── 5. CARACTÉRISTIQUES ─── */}
       <Page {...PAGE_PAYSAGE}>
         <SlideHeader mandat={mandat} />
-        <SlideTitle chapter="CHAPITRE 2" title="Caractéristiques du bien" />
+        <SlideTitle chapter="CHAPITRE 3" title="Caractéristiques & atouts" />
         <View style={{ flexDirection: 'row', gap: 14 }}>
           <View style={{ flex: 1.4 }}>
             <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>DESCRIPTION</Text>
             <Text style={{ fontSize: 9, color: TEXT_PRIMARY, lineHeight: 1.6 }}>
-              {safeText(mandat?.description, 'Description non renseignée.')}
+              {safeText(mandat?.description, caracteristiques.commentaire || 'Description non renseignée.')}
             </Text>
+
+            {caracteristiques.distribution && (
+              <>
+                <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginTop: 12, marginBottom: 4 }}>DISTRIBUTION PAR NIVEAU</Text>
+                <Text style={{ fontSize: 9, color: TEXT_PRIMARY, lineHeight: 1.6 }}>{caracteristiques.distribution}</Text>
+              </>
+            )}
+
+            {Array.isArray(caracteristiques.atouts_distinctifs) && caracteristiques.atouts_distinctifs.length > 0 && (
+              <>
+                <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginTop: 12, marginBottom: 4 }}>ATOUTS DISTINCTIFS</Text>
+                {caracteristiques.atouts_distinctifs.map((a, i) => (
+                  <Text key={i} style={{ fontSize: 9, color: TEXT_PRIMARY, lineHeight: 1.6 }}>• {a}</Text>
+                ))}
+              </>
+            )}
           </View>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 6 }}>CARACTÉRISTIQUES</Text>
-            <View style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
               {mandat?.surface && (
                 <View style={{ width: '48%', backgroundColor: CREAM, padding: 8 }}>
                   <Text style={{ fontSize: 7, color: TEXT_HINT, letterSpacing: 0.5, textTransform: 'uppercase' }}>Surface</Text>
-                  <Text style={{ fontSize: 14, fontFamily: 'Times-Roman', color: SAGE, marginTop: 2 }}>{formatSurface(mandat.surface)}</Text>
+                  <Text style={{ fontSize: 13, fontFamily: 'Times-Roman', color: SAGE, marginTop: 2 }}>{formatSurface(mandat.surface)}</Text>
                 </View>
               )}
               {mandat?.type && (
                 <View style={{ width: '48%', backgroundColor: CREAM, padding: 8 }}>
                   <Text style={{ fontSize: 7, color: TEXT_HINT, letterSpacing: 0.5, textTransform: 'uppercase' }}>Type</Text>
-                  <Text style={{ fontSize: 13, fontFamily: 'Times-Roman', color: SAGE, marginTop: 2 }}>{safeText(mandat.type, '—')}</Text>
+                  <Text style={{ fontSize: 12, fontFamily: 'Times-Roman', color: SAGE, marginTop: 2 }}>{safeText(mandat.type, '—')}</Text>
                 </View>
               )}
               {mandat?.nb_lots && (
                 <View style={{ width: '48%', backgroundColor: CREAM, padding: 8 }}>
                   <Text style={{ fontSize: 7, color: TEXT_HINT, letterSpacing: 0.5, textTransform: 'uppercase' }}>Nombre de lots</Text>
-                  <Text style={{ fontSize: 14, fontFamily: 'Times-Roman', color: SAGE, marginTop: 2 }}>{mandat.nb_lots}</Text>
+                  <Text style={{ fontSize: 13, fontFamily: 'Times-Roman', color: SAGE, marginTop: 2 }}>{mandat.nb_lots}</Text>
                 </View>
               )}
-              {mandat?.annee_construction && (
+              {caracteristiques.annee_construction && (
                 <View style={{ width: '48%', backgroundColor: CREAM, padding: 8 }}>
                   <Text style={{ fontSize: 7, color: TEXT_HINT, letterSpacing: 0.5, textTransform: 'uppercase' }}>Construction</Text>
-                  <Text style={{ fontSize: 14, fontFamily: 'Times-Roman', color: SAGE, marginTop: 2 }}>{mandat.annee_construction}</Text>
+                  <Text style={{ fontSize: 13, fontFamily: 'Times-Roman', color: SAGE, marginTop: 2 }}>{caracteristiques.annee_construction}</Text>
                 </View>
               )}
-              {mandat?.rendement && (
+              {caracteristiques.architecte && (
                 <View style={{ width: '48%', backgroundColor: CREAM, padding: 8 }}>
-                  <Text style={{ fontSize: 7, color: TEXT_HINT, letterSpacing: 0.5, textTransform: 'uppercase' }}>Rendement</Text>
-                  <Text style={{ fontSize: 14, fontFamily: 'Times-Roman', color: SAGE, marginTop: 2 }}>{parseFloat(mandat.rendement).toFixed(1).replace('.', ',')}%</Text>
+                  <Text style={{ fontSize: 7, color: TEXT_HINT, letterSpacing: 0.5, textTransform: 'uppercase' }}>Architecte</Text>
+                  <Text style={{ fontSize: 11, fontFamily: 'Times-Roman', color: SAGE, marginTop: 2 }}>{caracteristiques.architecte}</Text>
                 </View>
               )}
               {mandat?.dpe_consommation && (
                 <View style={{ width: '48%', backgroundColor: CREAM, padding: 8 }}>
                   <Text style={{ fontSize: 7, color: TEXT_HINT, letterSpacing: 0.5, textTransform: 'uppercase' }}>DPE</Text>
-                  <Text style={{ fontSize: 14, fontFamily: 'Times-Roman', color: SAGE, marginTop: 2 }}>{mandat.dpe_consommation}</Text>
+                  <Text style={{ fontSize: 13, fontFamily: 'Times-Roman', color: SAGE, marginTop: 2 }}>{mandat.dpe_consommation}</Text>
                 </View>
               )}
             </View>
           </View>
         </View>
-        <SlideFooter pageNum={10} />
+        <SlideFooter pageNum={5} />
       </Page>
 
-      {/* ─────────────────────────────────────────────────────────── */}
-      {/* SLIDE 11 · ANALYSE SWOT (DYNAMIQUE)                          */}
-      {/* ─────────────────────────────────────────────────────────── */}
+      {/* ─── 6. COMPARABLES MARCHÉ ─── */}
       <Page {...PAGE_PAYSAGE}>
         <SlideHeader mandat={mandat} />
-        <SlideTitle chapter="CHAPITRE 3" title="Analyse de l'actif" />
+        <SlideTitle chapter="CHAPITRE 4" title="Comparables & données marché" />
+
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+          <View style={{ flex: 1, backgroundColor: CREAM_LIGHT, padding: 10 }}>
+            <Text style={{ fontSize: 7, color: TEXT_HINT, letterSpacing: 1, textTransform: 'uppercase' }}>Prix zone min</Text>
+            <Text style={{ fontSize: 15, fontFamily: 'Times-Roman', color: SAGE, marginTop: 2 }}>
+              {comparables.prix_zone_min ? `${formatNum(comparables.prix_zone_min)} €/m²` : '—'}
+            </Text>
+          </View>
+          <View style={{ flex: 1, backgroundColor: CREAM_LIGHT, padding: 10 }}>
+            <Text style={{ fontSize: 7, color: TEXT_HINT, letterSpacing: 1, textTransform: 'uppercase' }}>Prix zone max</Text>
+            <Text style={{ fontSize: 15, fontFamily: 'Times-Roman', color: SAGE, marginTop: 2 }}>
+              {comparables.prix_zone_max ? `${formatNum(comparables.prix_zone_max)} €/m²` : '—'}
+            </Text>
+          </View>
+          <View style={{ flex: 1, backgroundColor: CREAM_LIGHT, padding: 10 }}>
+            <Text style={{ fontSize: 7, color: TEXT_HINT, letterSpacing: 1, textTransform: 'uppercase' }}>Rdt zone min</Text>
+            <Text style={{ fontSize: 15, fontFamily: 'Times-Roman', color: SAGE, marginTop: 2 }}>
+              {comparables.rendement_zone_min ? `${comparables.rendement_zone_min}%` : '—'}
+            </Text>
+          </View>
+          <View style={{ flex: 1, backgroundColor: CREAM_LIGHT, padding: 10 }}>
+            <Text style={{ fontSize: 7, color: TEXT_HINT, letterSpacing: 1, textTransform: 'uppercase' }}>Rdt zone max</Text>
+            <Text style={{ fontSize: 15, fontFamily: 'Times-Roman', color: SAGE, marginTop: 2 }}>
+              {comparables.rendement_zone_max ? `${comparables.rendement_zone_max}%` : '—'}
+            </Text>
+          </View>
+        </View>
+
+        {comparables.transactions_recentes && (
+          <>
+            <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 6 }}>
+              TRANSACTIONS RÉCENTES
+            </Text>
+            <View style={{ padding: 10, backgroundColor: CREAM_LIGHT, borderRadius: 3 }}>
+              <Text style={{ fontSize: 8, color: TEXT_PRIMARY, lineHeight: 1.7, fontFamily: 'Courier' }}>
+                {comparables.transactions_recentes}
+              </Text>
+            </View>
+          </>
+        )}
+
+        {comparables.commentaire && (
+          <View style={{ marginTop: 10, padding: 10, backgroundColor: CREAM_LIGHT, borderLeftWidth: 2, borderLeftColor: SAGE }}>
+            <Text style={{ fontSize: 9, color: TEXT_PRIMARY, lineHeight: 1.6 }}>{comparables.commentaire}</Text>
+          </View>
+        )}
+
+        <SlideFooter pageNum={6} />
+      </Page>
+
+      {/* ─── 7. ANALYSE SWOT ─── */}
+      <Page {...PAGE_PAYSAGE}>
+        <SlideHeader mandat={mandat} />
+        <SlideTitle chapter="CHAPITRE 5" title="Analyse SWOT" />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-          {/* FORCES */}
           <View style={{ width: '48%', backgroundColor: COLOR_FORCE_BG, padding: 12, borderRadius: 3 }}>
             <Text style={{ fontSize: 9, color: COLOR_FORCE_BORDER, letterSpacing: 1.5, fontFamily: 'Helvetica-Bold', marginBottom: 8 }}>
               ▲  FORCES
             </Text>
-            {(av.forces.length > 0 ? av.forces : ['(à compléter)']).map((f, i) => (
+            {((swot.forces && swot.forces.length > 0) ? swot.forces : ['(à compléter)']).map((f, i) => (
               <Text key={i} style={{ fontSize: 9, color: COLOR_FORCE_TEXT, lineHeight: 1.6, marginBottom: 2 }}>• {f}</Text>
             ))}
           </View>
-          {/* OPPORTUNITÉS */}
           <View style={{ width: '48%', backgroundColor: COLOR_OPP_BG, padding: 12, borderRadius: 3 }}>
             <Text style={{ fontSize: 9, color: COLOR_OPP_BORDER, letterSpacing: 1.5, fontFamily: 'Helvetica-Bold', marginBottom: 8 }}>
               ○  OPPORTUNITÉS
             </Text>
-            {(av.opportunites.length > 0 ? av.opportunites : ['(à compléter)']).map((f, i) => (
+            {((swot.opportunites && swot.opportunites.length > 0) ? swot.opportunites : ['(à compléter)']).map((f, i) => (
               <Text key={i} style={{ fontSize: 9, color: COLOR_OPP_TEXT, lineHeight: 1.6, marginBottom: 2 }}>• {f}</Text>
             ))}
           </View>
-          {/* FAIBLESSES */}
           <View style={{ width: '48%', backgroundColor: COLOR_FAIB_BG, padding: 12, borderRadius: 3 }}>
             <Text style={{ fontSize: 9, color: COLOR_FAIB_BORDER, letterSpacing: 1.5, fontFamily: 'Helvetica-Bold', marginBottom: 8 }}>
-              ▼  FAIBLESSES
+              ▼  FACTEURS LIMITATIFS
             </Text>
-            {(av.faiblesses.length > 0 ? av.faiblesses : ['(à compléter)']).map((f, i) => (
+            {((swot.facteurs_limitatifs && swot.facteurs_limitatifs.length > 0) ? swot.facteurs_limitatifs : ['(à compléter)']).map((f, i) => (
               <Text key={i} style={{ fontSize: 9, color: COLOR_FAIB_TEXT, lineHeight: 1.6, marginBottom: 2 }}>• {f}</Text>
             ))}
           </View>
-          {/* MENACES */}
           <View style={{ width: '48%', backgroundColor: COLOR_MEN_BG, padding: 12, borderRadius: 3 }}>
             <Text style={{ fontSize: 9, color: COLOR_MEN_BORDER, letterSpacing: 1.5, fontFamily: 'Helvetica-Bold', marginBottom: 8 }}>
               ⚠  MENACES
             </Text>
-            {(av.menaces.length > 0 ? av.menaces : ['(à compléter)']).map((f, i) => (
+            {((swot.menaces && swot.menaces.length > 0) ? swot.menaces : ['(à compléter)']).map((f, i) => (
               <Text key={i} style={{ fontSize: 9, color: COLOR_MEN_TEXT, lineHeight: 1.6, marginBottom: 2 }}>• {f}</Text>
             ))}
           </View>
         </View>
-        <SlideFooter pageNum={11} />
+        <SlideFooter pageNum={7} />
       </Page>
 
-      {/* ─────────────────────────────────────────────────────────── */}
-      {/* SLIDE 12 · PORTFOLIO PHOTOS (DYNAMIQUE)                      */}
-      {/* ─────────────────────────────────────────────────────────── */}
-      {photoChunks.length > 0 && photoChunks.map((chunk, i) => (
+      {/* ─── 8. PHOTOS ─── */}
+      {photoChunks.map((chunk, i) => (
         <Page key={`photos-${i}`} {...PAGE_PAYSAGE}>
           <SlideHeader mandat={mandat} />
-          <SlideTitle chapter="CHAPITRE 4" title={i === 0 ? 'Portfolio photos' : 'Portfolio photos (suite)'} />
+          <SlideTitle chapter="" title={i === 0 ? 'Portfolio photos' : 'Portfolio photos (suite)'} />
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {chunk.map((url, j) => (
               <View key={j} style={{ width: '32%', height: 165 }}>
@@ -527,230 +592,203 @@ export default function AvisDeValeur({
               </View>
             ))}
           </View>
-          <SlideFooter pageNum={12 + i} />
+          <SlideFooter pageNum={8 + i} />
         </Page>
       ))}
 
-      {/* ─────────────────────────────────────────────────────────── */}
-      {/* SLIDE 13 · PLANS (DYNAMIQUE)                                 */}
-      {/* ─────────────────────────────────────────────────────────── */}
+      {/* ─── 9. PLANS ─── */}
       {(mandat?.plans || []).length > 0 && mandat.plans.map((plan, i) => (
         <Page key={`plans-${i}`} {...PAGE_PAYSAGE}>
           <SlideHeader mandat={mandat} />
-          <SlideTitle chapter="" title={i === 0 ? 'Plans' : 'Plans (suite)'} />
+          <SlideTitle title={i === 0 ? 'Plans' : 'Plans (suite)'} />
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
             <Image src={plan.url || plan} style={{ width: '90%', height: 350, objectFit: 'contain' }} />
             {plan.caption && (
               <Text style={{ fontSize: 9, color: TEXT_MUTED, marginTop: 8, fontStyle: 'italic' }}>{plan.caption}</Text>
             )}
           </View>
-          <SlideFooter pageNum={13 + i} />
+          <SlideFooter pageNum={9 + i} />
         </Page>
       ))}
 
-      {/* ─────────────────────────────────────────────────────────── */}
-      {/* SLIDE 14 · COMPARABLES MARCHÉ (DYNAMIQUE)                    */}
-      {/* ─────────────────────────────────────────────────────────── */}
-      <Page {...PAGE_PAYSAGE}>
-        <SlideHeader mandat={mandat} />
-        <SlideTitle chapter="CHAPITRE 5" title="Comparables marché" />
-        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-          <View style={{ flex: 1, backgroundColor: CREAM_LIGHT, padding: 12 }}>
-            <Text style={{ fontSize: 7, color: TEXT_HINT, letterSpacing: 1, textTransform: 'uppercase' }}>Prix moyen zone</Text>
-            <Text style={{ fontSize: 17, fontFamily: 'Times-Roman', color: SAGE, marginTop: 2 }}>
-              {av.comparables_prix_moyen ? `${formatNum(av.comparables_prix_moyen)} €/m²` : '—'}
-            </Text>
-            <Text style={{ fontSize: 7, color: TEXT_HINT, marginTop: 4 }}>Sources : MeilleursAgents, SeLoger</Text>
-          </View>
-          <View style={{ flex: 1, backgroundColor: CREAM_LIGHT, padding: 12 }}>
-            <Text style={{ fontSize: 7, color: TEXT_HINT, letterSpacing: 1, textTransform: 'uppercase' }}>Fourchette</Text>
-            <Text style={{ fontSize: 14, fontFamily: 'Times-Roman', color: TEXT_PRIMARY, marginTop: 2 }}>
-              {av.comparables_prix_min ? formatNum(av.comparables_prix_min) : '—'}
-              <Text style={{ fontSize: 9 }}> – </Text>
-              {av.comparables_prix_max ? formatNum(av.comparables_prix_max) : '—'}
-            </Text>
-            <Text style={{ fontSize: 7, color: TEXT_HINT, marginTop: 4 }}>€/m² selon état</Text>
-          </View>
-          <View style={{ flex: 1, backgroundColor: CREAM_LIGHT, padding: 12 }}>
-            <Text style={{ fontSize: 7, color: TEXT_HINT, letterSpacing: 1, textTransform: 'uppercase' }}>Rendement brut zone</Text>
-            <Text style={{ fontSize: 17, fontFamily: 'Times-Roman', color: SAGE, marginTop: 2 }}>
-              {av.comparables_rendement || '—'}
-            </Text>
-            <Text style={{ fontSize: 7, color: TEXT_HINT, marginTop: 4 }}>Selon segment</Text>
-          </View>
-        </View>
-        <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 6 }}>
-          TRANSACTIONS RÉCENTES
-        </Text>
-        <View style={{ borderTopWidth: 0.5, borderTopColor: BORDER }}>
-          <View style={{ flexDirection: 'row', backgroundColor: CREAM_LIGHT, paddingVertical: 4, paddingHorizontal: 6 }}>
-            <Text style={{ flex: 3, fontSize: 7, color: TEXT_MUTED, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase' }}>Adresse</Text>
-            <Text style={{ flex: 1, fontSize: 7, color: TEXT_MUTED, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', textAlign: 'right' }}>Surface</Text>
-            <Text style={{ flex: 1.5, fontSize: 7, color: TEXT_MUTED, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', textAlign: 'right' }}>Prix net</Text>
-            <Text style={{ flex: 1, fontSize: 7, color: TEXT_MUTED, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', textAlign: 'right' }}>€/m²</Text>
-            <Text style={{ flex: 1, fontSize: 7, color: TEXT_MUTED, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', textAlign: 'center' }}>Date</Text>
-          </View>
-          {(av.comparables_transactions.length > 0 ? av.comparables_transactions : [{ adresse: '(à compléter)' }]).slice(0, 6).map((t, i) => (
-            <View key={i} style={{ flexDirection: 'row', paddingVertical: 4, paddingHorizontal: 6, borderBottomWidth: 0.3, borderBottomColor: BORDER_LIGHT }}>
-              <Text style={{ flex: 3, fontSize: 8 }}>{t.adresse || '—'}</Text>
-              <Text style={{ flex: 1, fontSize: 8, textAlign: 'right' }}>{t.surface ? `${t.surface} m²` : '—'}</Text>
-              <Text style={{ flex: 1.5, fontSize: 8, textAlign: 'right' }}>{t.prix ? formatPrix(t.prix) : '—'}</Text>
-              <Text style={{ flex: 1, fontSize: 8, textAlign: 'right', fontFamily: 'Helvetica-Bold' }}>{t.prix_m2 ? `${formatNum(t.prix_m2)} €` : '—'}</Text>
-              <Text style={{ flex: 1, fontSize: 7, textAlign: 'center', color: TEXT_HINT }}>{t.date || '—'}</Text>
-            </View>
-          ))}
-        </View>
-        <SlideFooter pageNum={14} />
-      </Page>
-
-      {/* ─────────────────────────────────────────────────────────── */}
-      {/* SLIDE 15 · MÉTHODE D'ÉVALUATION (DYNAMIQUE)                  */}
-      {/* ─────────────────────────────────────────────────────────── */}
+      {/* ─── 10. MÉTHODE M² ─── */}
       <Page {...PAGE_PAYSAGE}>
         <SlideHeader mandat={mandat} />
         <SlideTitle chapter="CHAPITRE 6" title="Méthodologie d'évaluation" />
+
         <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 6 }}>
           MÉTHODE 1 · COMPARAISON AU M²
         </Text>
         <View style={{ flexDirection: 'row', gap: 6, marginBottom: 14 }}>
-          <View style={{ flex: 1, backgroundColor: CREAM_LIGHT, padding: 10, borderLeftWidth: 2, borderLeftColor: BORDER }}>
-            <Text style={{ fontSize: 7, color: TEXT_HINT }}>Valeur basse</Text>
-            <Text style={{ fontSize: 13, fontFamily: 'Times-Roman', color: TEXT_HINT, marginTop: 2 }}>
-              {av.methode_m2_basse ? `${formatNum(av.methode_m2_basse)} €/m²` : '—'}
-            </Text>
-            <Text style={{ fontSize: 12, fontFamily: 'Times-Roman', color: TEXT_PRIMARY, marginTop: 4 }}>
-              {(av.methode_m2_basse && surface) ? formatPrix(av.methode_m2_basse * surface) : '—'}
-            </Text>
-            <Text style={{ fontSize: 6, color: TEXT_HINT, marginTop: 4 }}>Travaux importants à prévoir</Text>
-          </View>
-          <View style={{ flex: 1, backgroundColor: CREAM, padding: 10, borderLeftWidth: 2, borderLeftColor: SAGE }}>
-            <Text style={{ fontSize: 7, color: SAGE, fontFamily: 'Helvetica-Bold' }}>VALEUR CENTRALE</Text>
-            <Text style={{ fontSize: 13, fontFamily: 'Times-Roman', color: SAGE, marginTop: 2 }}>
-              {av.methode_m2_centrale ? `${formatNum(av.methode_m2_centrale)} €/m²` : '—'}
-            </Text>
-            <Text style={{ fontSize: 13, fontFamily: 'Times-Roman', color: SAGE_DARK, marginTop: 4, fontFamily: 'Helvetica-Bold' }}>
-              {(av.methode_m2_centrale && surface) ? formatPrix(av.methode_m2_centrale * surface) : '—'}
-            </Text>
-            <Text style={{ fontSize: 6, color: SAGE, marginTop: 4 }}>État actuel, prix de marché</Text>
-          </View>
-          <View style={{ flex: 1, backgroundColor: CREAM_LIGHT, padding: 10, borderLeftWidth: 2, borderLeftColor: BORDER }}>
-            <Text style={{ fontSize: 7, color: TEXT_HINT }}>Valeur haute</Text>
-            <Text style={{ fontSize: 13, fontFamily: 'Times-Roman', color: TEXT_HINT, marginTop: 2 }}>
-              {av.methode_m2_haute ? `${formatNum(av.methode_m2_haute)} €/m²` : '—'}
-            </Text>
-            <Text style={{ fontSize: 12, fontFamily: 'Times-Roman', color: TEXT_PRIMARY, marginTop: 4 }}>
-              {(av.methode_m2_haute && surface) ? formatPrix(av.methode_m2_haute * surface) : '—'}
-            </Text>
-            <Text style={{ fontSize: 6, color: TEXT_HINT, marginTop: 4 }}>Bien rénové, exception</Text>
-          </View>
+          {[
+            { key: 'valeur_basse', label: 'Valeur basse', highlight: false },
+            { key: 'valeur_centrale', label: 'Valeur centrale', highlight: true },
+            { key: 'valeur_haute', label: 'Valeur haute', highlight: false },
+          ].map((v) => {
+            const item = methodeM2[v.key] || {};
+            return (
+              <View key={v.key} style={{
+                flex: 1,
+                backgroundColor: v.highlight ? CREAM : CREAM_LIGHT,
+                padding: 10,
+                borderLeftWidth: 2,
+                borderLeftColor: v.highlight ? SAGE : BORDER
+              }}>
+                <Text style={{ fontSize: 7, color: v.highlight ? SAGE : TEXT_HINT, fontFamily: v.highlight ? 'Helvetica-Bold' : 'Helvetica' }}>
+                  {v.label.toUpperCase()}
+                </Text>
+                <Text style={{ fontSize: 13, fontFamily: 'Times-Roman', color: v.highlight ? SAGE : TEXT_HINT, marginTop: 2 }}>
+                  {item.prix_m2 ? `${formatNum(item.prix_m2)} €/m²` : '—'}
+                </Text>
+                <Text style={{ fontSize: 12, fontFamily: 'Times-Roman', color: v.highlight ? SAGE_DARK : TEXT_PRIMARY, marginTop: 4, fontFamily: v.highlight ? 'Helvetica-Bold' : 'Times-Roman' }}>
+                  {item.valeur_totale ? formatPrix(item.valeur_totale) : '—'}
+                </Text>
+                {item.commentaire && (
+                  <Text style={{ fontSize: 6, color: v.highlight ? SAGE : TEXT_HINT, marginTop: 4 }}>{item.commentaire}</Text>
+                )}
+              </View>
+            );
+          })}
         </View>
 
-        {av.methode_capi.length > 0 && (
+        {Array.isArray(methodeCapi.hypotheses) && methodeCapi.hypotheses.length > 0 && (
           <>
             <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 6 }}>
               MÉTHODE 2 · CAPITALISATION DES LOYERS
+              {methodeCapi.ca_base ? ` · CA base : ${formatPrix(methodeCapi.ca_base)}` : ''}
             </Text>
             <View style={{ borderTopWidth: 0.5, borderTopColor: BORDER }}>
               <View style={{ flexDirection: 'row', backgroundColor: CREAM_LIGHT, paddingVertical: 4, paddingHorizontal: 6 }}>
-                <Text style={{ flex: 1, fontSize: 7, color: TEXT_MUTED, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase' }}>Hypothèse rendement</Text>
-                <Text style={{ flex: 1, fontSize: 7, color: TEXT_MUTED, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', textAlign: 'right' }}>Valeur acte</Text>
-                <Text style={{ flex: 2, fontSize: 7, color: TEXT_MUTED, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase' }}>Lecture</Text>
+                <Text style={{ flex: 1, fontSize: 7, color: TEXT_MUTED, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase' }}>Rendement</Text>
+                <Text style={{ flex: 1.5, fontSize: 7, color: TEXT_MUTED, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', textAlign: 'right' }}>Valeur acte</Text>
+                <Text style={{ flex: 3, fontSize: 7, color: TEXT_MUTED, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase' }}>Lecture marché</Text>
               </View>
-              {av.methode_capi.map((c, i) => (
+              {methodeCapi.hypotheses.map((h, i) => (
                 <View key={i} style={{ flexDirection: 'row', paddingVertical: 4, paddingHorizontal: 6, borderBottomWidth: 0.3, borderBottomColor: BORDER_LIGHT }}>
-                  <Text style={{ flex: 1, fontSize: 8 }}>{c.rendement || '—'}</Text>
-                  <Text style={{ flex: 1, fontSize: 8, fontFamily: 'Helvetica-Bold', textAlign: 'right' }}>{c.valeur ? formatPrix(c.valeur) : '—'}</Text>
-                  <Text style={{ flex: 2, fontSize: 8, color: TEXT_MUTED }}>{c.lecture || ''}</Text>
+                  <Text style={{ flex: 1, fontSize: 8 }}>{h.rendement_pct ? `${h.rendement_pct}%` : '—'}</Text>
+                  <Text style={{ flex: 1.5, fontSize: 8, fontFamily: 'Helvetica-Bold', textAlign: 'right' }}>{h.valeur_acte ? formatPrix(h.valeur_acte) : '—'}</Text>
+                  <Text style={{ flex: 3, fontSize: 8, color: TEXT_MUTED }}>{h.lecture || '—'}</Text>
                 </View>
               ))}
             </View>
+            {methodeCapi.zone_atterrissage && (
+              <View style={{ marginTop: 10, padding: 10, backgroundColor: CREAM_LIGHT, borderLeftWidth: 2, borderLeftColor: SAGE }}>
+                <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>ZONE D'ATTERRISSAGE</Text>
+                <Text style={{ fontSize: 9, color: TEXT_PRIMARY, lineHeight: 1.6 }}>{methodeCapi.zone_atterrissage}</Text>
+              </View>
+            )}
           </>
         )}
-        <SlideFooter pageNum={15} />
+
+        <SlideFooter pageNum={10} />
       </Page>
 
-      {/* ─────────────────────────────────────────────────────────── */}
-      {/* SLIDE 16 · ESTIMATION FINALE (DYNAMIQUE)                     */}
-      {/* ─────────────────────────────────────────────────────────── */}
+      {/* ─── 11. RECONVERSION ─── */}
+      {(reconversion.usages?.length > 0 || reconversion.bilan_financier || reconversion.profils_acquereurs?.length > 0) && (
+        <Page {...PAGE_PAYSAGE}>
+          <SlideHeader mandat={mandat} />
+          <SlideTitle chapter="CHAPITRE 7" title="Potentiel de reconversion" />
+
+          {Array.isArray(reconversion.usages) && reconversion.usages.length > 0 && (
+            <View style={{ marginBottom: 12 }}>
+              <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 6 }}>
+                USAGES ALTERNATIFS ENVISAGEABLES
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {reconversion.usages.map((u, i) => (
+                  <View key={i} style={{ width: '48%', backgroundColor: CREAM_LIGHT, padding: 10, borderRadius: 3 }}>
+                    <Text style={{ fontSize: 10, color: SAGE_DARK, fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>
+                      {u.titre || `Usage ${i + 1}`}
+                    </Text>
+                    {u.description && (
+                      <Text style={{ fontSize: 8, color: TEXT_PRIMARY, lineHeight: 1.6 }}>{u.description}</Text>
+                    )}
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {reconversion.bilan_financier && (
+            <View style={{ marginBottom: 10, padding: 10, backgroundColor: CREAM, borderLeftWidth: 2, borderLeftColor: SAGE }}>
+              <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>BILAN FINANCIER INDICATIF</Text>
+              <Text style={{ fontSize: 9, color: TEXT_PRIMARY, lineHeight: 1.7, fontFamily: 'Courier' }}>{reconversion.bilan_financier}</Text>
+            </View>
+          )}
+
+          {Array.isArray(reconversion.profils_acquereurs) && reconversion.profils_acquereurs.length > 0 && (
+            <View>
+              <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 6 }}>PROFILS D'ACQUÉREURS CIBLÉS</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                {reconversion.profils_acquereurs.map((p, i) => (
+                  <View key={i} style={{ backgroundColor: CREAM, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 3 }}>
+                    <Text style={{ fontSize: 9, color: SAGE_DARK }}>{p}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          <SlideFooter pageNum={11} />
+        </Page>
+      )}
+
+      {/* ─── 12. PRÉCONISATION + 3 PRIX ─── */}
       <Page {...PAGE_PAYSAGE}>
         <SlideHeader mandat={mandat} />
-        <SlideTitle chapter="CHAPITRE 7" title="Estimation finale" />
-        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
+        <SlideTitle chapter="CHAPITRE 8" title="Préconisation & estimation" />
+
+        {preconisation.recommandation && (
+          <View style={{ marginBottom: 14, padding: 12, backgroundColor: CREAM_LIGHT, borderLeftWidth: 2, borderLeftColor: SAGE }}>
+            <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>NOTRE RECOMMANDATION</Text>
+            <Text style={{ fontSize: 10, color: TEXT_PRIMARY, lineHeight: 1.65 }}>{preconisation.recommandation}</Text>
+          </View>
+        )}
+
+        <View style={{ flexDirection: 'row', gap: 10 }}>
           <View style={{ flex: 1, backgroundColor: CREAM, padding: 14, borderRadius: 3, alignItems: 'center', borderWidth: 1.5, borderColor: SAGE }}>
             <Text style={{ fontSize: 8, color: SAGE, letterSpacing: 1.5, fontFamily: 'Helvetica-Bold' }}>PRIX COUP DE CŒUR</Text>
             <Text style={{ fontSize: 19, fontFamily: 'Times-Roman', color: SAGE_DARK, marginTop: 10, fontFamily: 'Helvetica-Bold' }}>
-              {av.prix_coup_coeur ? `${formatPrix(av.prix_coup_coeur)} FAI` : '—'}
+              {preconisation.prix_coup_de_coeur ? `${formatPrix(preconisation.prix_coup_de_coeur)} FAI` : '—'}
             </Text>
-            <Text style={{ fontSize: 9, color: SAGE, marginTop: 4 }}>
-              {(av.prix_coup_coeur && surface) ? `${formatNum(Math.round(av.prix_coup_coeur / surface))} €/m²` : ''}
-            </Text>
+            <Text style={{ fontSize: 8, color: SAGE, marginTop: 4 }}>Acquéreur convaincu</Text>
           </View>
           <View style={{ flex: 1, backgroundColor: CREAM_LIGHT, padding: 14, borderRadius: 3, alignItems: 'center' }}>
             <Text style={{ fontSize: 8, color: TEXT_HINT, letterSpacing: 1.5, fontFamily: 'Helvetica-Bold' }}>PRIX DE MARCHÉ</Text>
             <Text style={{ fontSize: 19, fontFamily: 'Times-Roman', color: TEXT_PRIMARY, marginTop: 10 }}>
-              {av.prix_marche ? `${formatPrix(av.prix_marche)} FAI` : '—'}
+              {preconisation.prix_marche ? `${formatPrix(preconisation.prix_marche)} FAI` : '—'}
             </Text>
-            <Text style={{ fontSize: 9, color: TEXT_HINT, marginTop: 4 }}>
-              {(av.prix_marche && surface) ? `${formatNum(Math.round(av.prix_marche / surface))} €/m²` : ''}
-            </Text>
+            <Text style={{ fontSize: 8, color: TEXT_HINT, marginTop: 4 }}>Recommandé</Text>
           </View>
           <View style={{ flex: 1, backgroundColor: CREAM_LIGHT, padding: 14, borderRadius: 3, alignItems: 'center' }}>
             <Text style={{ fontSize: 8, color: TEXT_HINT, letterSpacing: 1.5, fontFamily: 'Helvetica-Bold' }}>PRIX PLANCHER</Text>
             <Text style={{ fontSize: 19, fontFamily: 'Times-Roman', color: TEXT_PRIMARY, marginTop: 10 }}>
-              {av.prix_plancher ? `${formatPrix(av.prix_plancher)} FAI` : '—'}
+              {preconisation.prix_plancher ? `${formatPrix(preconisation.prix_plancher)} FAI` : '—'}
             </Text>
-            <Text style={{ fontSize: 9, color: TEXT_HINT, marginTop: 4 }}>
-              {(av.prix_plancher && surface) ? `${formatNum(Math.round(av.prix_plancher / surface))} €/m²` : ''}
-            </Text>
+            <Text style={{ fontSize: 8, color: TEXT_HINT, marginTop: 4 }}>Base négociation</Text>
           </View>
         </View>
-        {av.recommandation && (
-          <View style={{ marginTop: 4, padding: 12, backgroundColor: CREAM_LIGHT, borderLeftWidth: 2, borderLeftColor: SAGE }}>
-            <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>NOTRE RECOMMANDATION</Text>
-            <Text style={{ fontSize: 9, color: TEXT_PRIMARY, lineHeight: 1.6 }}>{av.recommandation}</Text>
+
+        <Text style={{ marginTop: 14, fontSize: 7, color: TEXT_HINT, fontStyle: 'italic', textAlign: 'center' }}>
+          Honoraires d'agence inclus {preconisation.honoraires_pct ? `${preconisation.honoraires_pct}%` : ''} · Validité de l'avis : {av.validite_mois || 1} mois
+        </Text>
+
+        {preconisation.avis_client && (
+          <View style={{ marginTop: 12, padding: 10, backgroundColor: CREAM, borderLeftWidth: 2, borderLeftColor: SAGE }}>
+            <Text style={{ fontSize: 7, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>TÉMOIGNAGE CLIENT</Text>
+            <Text style={{ fontSize: 9, color: TEXT_PRIMARY, lineHeight: 1.6, fontStyle: 'italic' }}>« {preconisation.avis_client} »</Text>
           </View>
         )}
-        <Text style={{ marginTop: 12, fontSize: 7, color: TEXT_HINT, fontStyle: 'italic', textAlign: 'center' }}>
-          Honoraires d'agence inclus · Validité de l'avis : 1 mois
-        </Text>
-        <SlideFooter pageNum={16} />
+
+        <SlideFooter pageNum={12} />
       </Page>
 
-      {/* ─────────────────────────────────────────────────────────── */}
-      {/* SLIDE 17 · RECOMMANDATIONS STRATÉGIQUES (DYNAMIQUE)          */}
-      {/* ─────────────────────────────────────────────────────────── */}
+      {/* ─── 13. NOTRE ÉQUIPE ─── */}
       <Page {...PAGE_PAYSAGE}>
         <SlideHeader mandat={mandat} />
-        <SlideTitle chapter="CHAPITRE 8" title="Recommandations stratégiques" />
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          <View style={{ flex: 1, backgroundColor: CREAM, padding: 14, borderRadius: 3 }}>
-            <Text style={{ fontSize: 8, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 8 }}>
-              STRATÉGIE 1 · VENTE EN BLOC
-            </Text>
-            <Text style={{ fontSize: 10, color: TEXT_PRIMARY, lineHeight: 1.65 }}>
-              {av.strategie_bloc || '(à compléter)'}
-            </Text>
-          </View>
-          <View style={{ flex: 1, backgroundColor: CREAM_LIGHT, padding: 14, borderRadius: 3 }}>
-            <Text style={{ fontSize: 8, color: SAGE, letterSpacing: 1, fontFamily: 'Helvetica-Bold', marginBottom: 8 }}>
-              STRATÉGIE 2 · VENTE À LA DÉCOUPE
-            </Text>
-            <Text style={{ fontSize: 10, color: TEXT_PRIMARY, lineHeight: 1.65 }}>
-              {av.strategie_decoupe || '(à compléter)'}
-            </Text>
-          </View>
-        </View>
-        <SlideFooter pageNum={17} />
-      </Page>
-
-      {/* ─────────────────────────────────────────────────────────── */}
-      {/* SLIDE 18 · NOTRE ÉQUIPE (DYNAMIQUE style plaquette)          */}
-      {/* ─────────────────────────────────────────────────────────── */}
-      <Page {...PAGE_PAYSAGE}>
-        <SlideHeader mandat={mandat} />
-        <SlideTitle chapter="" title="Notre équipe" />
-        {dossier.length > 0 && (
-          <View style={{ marginTop: 20 }}>
+        <SlideTitle title="Notre équipe à votre service" />
+        {dossier.length > 0 ? (
+          <View style={{ marginTop: 16 }}>
             <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: SAGE, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 16, textAlign: 'center' }}>
               Pour ce dossier
             </Text>
@@ -760,8 +798,12 @@ export default function AvisDeValeur({
               ))}
             </View>
           </View>
+        ) : (
+          <View style={{ alignItems: 'center', marginTop: 40 }}>
+            <Text style={{ fontSize: 10, color: TEXT_HINT, fontStyle: 'italic' }}>Équipe non chargée</Text>
+          </View>
         )}
-        <SlideFooter pageNum={18} />
+        <SlideFooter pageNum={13} />
       </Page>
     </Document>
   );
