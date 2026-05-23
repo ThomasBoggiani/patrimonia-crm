@@ -13,6 +13,82 @@
 'use client';
 
 import { useState } from 'react';
+// Couleurs officielles des lignes RATP/SNCF
+const RATP_COLORS = {
+  // Métro
+  'M1': { bg: '#FFCD00', fg: '#000' },
+  'M2': { bg: '#0064B0', fg: '#fff' },
+  'M3': { bg: '#9F9825', fg: '#fff' },
+  'M3bis': { bg: '#98D4E2', fg: '#000' },
+  'M4': { bg: '#C04191', fg: '#fff' },
+  'M5': { bg: '#F28E42', fg: '#fff' },
+  'M6': { bg: '#83C491', fg: '#000' },
+  'M7': { bg: '#F3A4BA', fg: '#000' },
+  'M7bis': { bg: '#83C491', fg: '#000' },
+  'M8': { bg: '#CEADD2', fg: '#000' },
+  'M9': { bg: '#D5C900', fg: '#000' },
+  'M10': { bg: '#E3B32A', fg: '#000' },
+  'M11': { bg: '#8D5E2A', fg: '#fff' },
+  'M12': { bg: '#00814F', fg: '#fff' },
+  'M13': { bg: '#98D4E2', fg: '#000' },
+  'M14': { bg: '#662483', fg: '#fff' },
+  'M15': { bg: '#B90845', fg: '#fff' },
+  'M16': { bg: '#F3A4BA', fg: '#000' },
+  'M17': { bg: '#D5C900', fg: '#000' },
+  'M18': { bg: '#00A88F', fg: '#fff' },
+  // RER
+  'A': { bg: '#E2231A', fg: '#fff' },
+  'B': { bg: '#427DBD', fg: '#fff' },
+  'C': { bg: '#FCD946', fg: '#000' },
+  'D': { bg: '#00643C', fg: '#fff' },
+  'E': { bg: '#C9910D', fg: '#fff' },
+  // Tram (sample)
+  'T1': { bg: '#0064B0', fg: '#fff' },
+  'T2': { bg: '#B90845', fg: '#fff' },
+  'T3a': { bg: '#FF7E2E', fg: '#fff' },
+  'T3b': { bg: '#FF7E2E', fg: '#fff' },
+  'T4': { bg: '#E2231A', fg: '#fff' },
+  'T5': { bg: '#662483', fg: '#fff' },
+  'T6': { bg: '#9F9825', fg: '#fff' },
+  'T7': { bg: '#9F9825', fg: '#fff' },
+  'T8': { bg: '#0064B0', fg: '#fff' },
+  'T9': { bg: '#B90845', fg: '#fff' },
+  'T11': { bg: '#00814F', fg: '#fff' },
+  'T13': { bg: '#FF7E2E', fg: '#fff' },
+};
+
+function parseLines(linesStr) {
+  if (!linesStr) return [];
+  return String(linesStr).split(/[,;\s|]/).map(s => s.trim()).filter(Boolean);
+}
+
+function getLineBadgeStyle(line, mode) {
+  // Métro : on tente "M{numero}"
+  if (mode === 'metro') {
+    const key = `M${line}`;
+    if (RATP_COLORS[key]) return RATP_COLORS[key];
+  }
+  if (mode === 'rer') {
+    if (RATP_COLORS[line]) return RATP_COLORS[line];
+  }
+  if (mode === 'tram') {
+    const key = line.startsWith('T') ? line : `T${line}`;
+    if (RATP_COLORS[key]) return RATP_COLORS[key];
+  }
+  return { bg: '#888', fg: '#fff' };
+}
+
+function formatDistance(meters) {
+  if (meters < 1000) return `${meters} m`;
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
+function walkingTime(meters) {
+  // ~80m/min en marche normale
+  const min = Math.round(meters / 80);
+  if (min < 1) return '< 1 min';
+  return `${min} min`;
+}
 import { MapPin, RefreshCw, Image as ImageIcon, Layers, Train, CheckCircle2, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
