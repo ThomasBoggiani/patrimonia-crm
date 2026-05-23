@@ -1315,6 +1315,10 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
                 url.searchParams.set('tab', 'mandats');
                 url.searchParams.set('open', editedMandat.id);
                 window.history.pushState({ tab: 'mandats', open: editedMandat.id }, '', url.toString());
+                setTimeout(() => {
+                  if (updateMandatLocal) updateMandatLocal(editedMandat.id);
+                  else reload();
+                }, 1500);
               }, 0);
             }
           }}
