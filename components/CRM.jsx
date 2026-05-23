@@ -1315,9 +1315,12 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
                 url.searchParams.set('tab', 'mandats');
                 url.searchParams.set('open', editedMandat.id);
                 window.history.pushState({ tab: 'mandats', open: editedMandat.id }, '', url.toString());
+                // Reload BDD après 1.5s (laisse le webhook finir)
+                // updateMandatLocal met juste à jour le mandat sans casser selectedMandat
                 setTimeout(() => {
-                  if (updateMandatLocal) updateMandatLocal(editedMandat.id);
-                  else reload();
+                  if (updateMandatLocal) {
+                    updateMandatLocal(editedMandat.id);
+                  }
                 }, 1500);
               }, 0);
             }
