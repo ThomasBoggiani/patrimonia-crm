@@ -11,7 +11,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { createClient } from '@supabase/supabase-js';
-import { geocodeAddress, cadastreUrl, googleStreetViewUrl, googleMapStaticUrl, getCadastreParcelle, getNearbyTransports } from '@/lib/maps';
+import { geocodeAddress, googleSatelliteUrl, cadastreUrl, googleStreetViewUrl, googleMapStaticUrl, getCadastreParcelle, getNearbyTransports } from '@/lib/maps';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -115,8 +115,8 @@ export async function POST(request, { params }) {
     }
 
     // 2. URLs externes (sauf cadastre qu'on construit après la parcelle)
-    // Satellite : on utilise Google Maps Static "hybrid" (satellite + noms de rues + marker rouge)
-    const satelliteExtUrl = googleMapStaticUrl({ lat: geo.lat, lng: geo.lng, width: 640, height: 400, zoom: 18, mapType: 'hybrid' });
+    // Satellite : Maptiler haute résolution (marker overlay côté UI/PDF)
+    const satelliteExtUrl = googleSatelliteUrl({ lat: geo.lat, lng: geo.lng });
     const streetViewExtUrl = googleStreetViewUrl({ lat: geo.lat, lng: geo.lng, width: 640, height: 400 });
     const mapStaticExtUrl = googleMapStaticUrl({ lat: geo.lat, lng: geo.lng, width: 640, height: 400, zoom: 15, mapType: 'roadmap' });
 
