@@ -308,8 +308,26 @@ export async function GET(request, { params }) {
       const mandatEnriched = { ...mandat, ownerInitials };
 
       // Fetch les images de localisation (vue satellite + cadastre)
-      let locationImages = { satellite: null, cadastre: null, geocode: null };
-      if (mandat.adresse) {
+      // Utiliser les assets stockés si disponibles (cache), sinon les régénérer
+      let locationImages = { satellite: null, cadastre: null, parcelle: null, transports: null, geocode: null };
+
+      if (mandat.satellite_image_url || mandat.cadastre_image_url || mandat.parcelle_data || mandat.transports_data) {
+        // Cache hit : on télécharge les URLs stockées en base64
+        console.log('[PDF] Using cached assets for mandat', mandatId);
+        const [satellite, cadastre] = await Promise.all([
+          mandat.satellite_image_url ? (await fetch(mandat.satellite_image_url).then(r => r.ok ? r.arrayBuffer() : null).then(b => b ? `data:image/jpeg;base64,${Buffer.from(b).toString('base64')}` : null).catch(() => null)) : null,
+          mandat.cadastre_image_url ? (await fetch(mandat.cadastre_image_url).then(r => r.ok ? r.arrayBuffer() : null).then(b => b ? `data:image/png;base64,${Buffer.from(b).toString('base64')}` : null).catch(() => null)) : null,
+        ]);
+        locationImages = {
+          satellite,
+          cadastre,
+          parcelle: mandat.parcelle_data,
+          transports: mandat.transports_data,
+          geocode: null,
+        };
+      } else if (mandat.adresse) {
+        // Cache miss : on génère à la volée
+        console.log('[PDF] Cache MISS, fetching live for mandat', mandatId);
         try {
           locationImages = await getLocationImages(mandat.adresse);
           console.log('[PDF] Location images:', {
