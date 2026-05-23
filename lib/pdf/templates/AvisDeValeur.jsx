@@ -9,6 +9,7 @@
 import React from 'react';
 import { Document, Page, View, Text, Image } from '@react-pdf/renderer';
 import { LOGO_IP_BASE64 } from '../logo-base64';
+import { normalizePhotos } from '../helpers';
 
 // ─── PALETTE ───────────────────────────────────────────────────────
 const SAGE = '#5d6e5d';
@@ -100,15 +101,6 @@ function walkingTime(meters) {
   if (!m) return '';
   const min = Math.round(m / 80);
   return min < 1 ? '< 1 min' : `${min} min`;
-}
-
-function normalizePhotos(mandat) {
-  if (!mandat) return [];
-  const arr = mandat.medias || mandat.photos || [];
-  return arr
-    .filter(p => p && (typeof p === 'string' || p.url))
-    .map(p => typeof p === 'string' ? p : p.url)
-    .filter(Boolean);
 }
 
 function chunkArray(arr, size) {
