@@ -86,7 +86,7 @@ export async function POST(request, { params }) {
     // Récupérer le mandat
     const { data: mandat, error: mErr } = await supabaseAdmin
       .from('mandats')
-      .select('id, adresse')
+      .select('id, adresse, ville, code_postal')
       .eq('id', mandatId)
       .maybeSingle();
 
@@ -102,10 +102,12 @@ export async function POST(request, { params }) {
       });
     }
 
-    console.log(`[refresh-assets] Starting refresh for mandat ${mandatId} - "${mandat.adresse}"`);
+    // Construire l'adresse complète pour un géocodage précis
+    const fullAddress = [mandat.adresse, mandat.code_postal, mandat.ville].filter(Boolean).join(', ');
+    console.log(`[refresh-assets] Starting refresh for mandat ${mandatId} - "${fullAddress}"`);
 
     // 1. Géocodage
-    const geo = await geocodeAddress(mandat.adresse);
+    const geo = await geocodeAddress(fullAddress);
     if (!geo) {
       return new Response(JSON.stringify({ ok: false, error: 'Adresse non géocodable' }), {
         status: 400, headers: { 'Content-Type': 'application/json' }
