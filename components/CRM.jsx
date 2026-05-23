@@ -41,6 +41,7 @@ import ContactsImportModal from './ContactsImportModal';
 import PdfExportButtons from '@/components/PdfExportButtons';
 import DiffusionInline from './DiffusionInline';
 import MandatStatsInline from './MandatStatsInline';
+import RapportMandantModal from './RapportMandantModal';
 import { VisiteModal, MandantModal } from './MandatModals';
 import CascadeSelect from './CascadeSelect';
 import MediasModal from './MediasModal'; 
@@ -2484,6 +2485,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
   const [aiAnalyzeOpen, setAiAnalyzeOpen] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [showAvisValeur, setShowAvisValeur] = useState(false);
+  const [showRapportMandant, setShowRapportMandant] = useState(false);
   const mandatDeals = deals.filter(d => d.mandatId === mandat.id);
   const alerts = mandat.alerts || [];
   const highlights = mandat.highlights || [];
@@ -2598,6 +2600,9 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           <PdfExportButtons mandatId={mandat.id} mandatNom={mandat.nom} isOffMarket={mandat.isOffMarket} plaquetteCachedAt={mandat.plaquetteCachedAt} />
           <button onClick={() => setShowAvisValeur(true)} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Avis de valeur PPTX">
             📊 Avis de valeur
+          </button>
+          <button onClick={() => setShowRapportMandant(true)} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Rapport d'activité mandant">
+            📈 Rapport mandant
           </button>
           <button onClick={() => onOpenEmailDrafts?.(mandat.id)} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Préparer mails personnalisés aux acquéreurs">
             📧 Préparer mails clients
@@ -3013,7 +3018,9 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
     </div>
   );
 }
-
+{showRapportMandant && (
+        <RapportMandantModal mandat={mandat} onClose={() => setShowRapportMandant(false)} />
+      )}
 // Composant : sélecteur de responsable (dropdown réassignable)
 // Fonctionne pour mandats ET clients via la prop `entity` ('mandat' | 'client')
 function OwnerSelector({ mandat, client, entity = 'mandat', reload }) {
