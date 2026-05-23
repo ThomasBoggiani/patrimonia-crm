@@ -96,13 +96,21 @@ export default function AssetsMandatInline({ mandat, reload }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const satellite = mandat?.satelliteImageUrl || mandat?.satellite_image_url;
-  const cadastre = mandat?.cadastreImageUrl || mandat?.cadastre_image_url;
-  const streetView = mandat?.streetViewImageUrl || mandat?.street_view_image_url;
-  const mapStatic = mandat?.mapStaticImageUrl || mandat?.map_static_image_url;
+  const generatedAt = mandat?.assetsGeneratedAt || mandat?.assets_generated_at;
+  // Cache-busting via le timestamp de génération (force rechargement après refresh)
+  const cacheBuster = generatedAt ? `?v=${new Date(generatedAt).getTime()}` : '';
+
+  const satRaw = mandat?.satelliteImageUrl || mandat?.satellite_image_url;
+  const cadRaw = mandat?.cadastreImageUrl || mandat?.cadastre_image_url;
+  const svRaw = mandat?.streetViewImageUrl || mandat?.street_view_image_url;
+  const mapRaw = mandat?.mapStaticImageUrl || mandat?.map_static_image_url;
+
+  const satellite = satRaw ? satRaw + cacheBuster : null;
+  const cadastre = cadRaw ? cadRaw + cacheBuster : null;
+  const streetView = svRaw ? svRaw + cacheBuster : null;
+  const mapStatic = mapRaw ? mapRaw + cacheBuster : null;
   const parcelle = mandat?.parcelleData || mandat?.parcelle_data;
   const transports = mandat?.transportsData || mandat?.transports_data;
-  const generatedAt = mandat?.assetsGeneratedAt || mandat?.assets_generated_at;
 
   const hasAnyAsset = !!(satellite || cadastre || parcelle || transports);
   const transportsCount = transports ?
