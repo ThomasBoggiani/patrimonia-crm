@@ -41,6 +41,7 @@ import ContactsImportModal from './ContactsImportModal';
 import PdfExportButtons from '@/components/PdfExportButtons';
 import DiffusionInline from './DiffusionInline';
 import MandatStatsInline from './MandatStatsInline';
+import AssetsMandatInline from './AssetsMandatInline';
 import RapportMandantModal from './RapportMandantModal';
 import { VisiteModal, MandantModal } from './MandatModals';
 import CascadeSelect from './CascadeSelect';
@@ -2584,6 +2585,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           <button onClick={() => document.getElementById('locatif')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🏢 Locatif</button>
           <button onClick={() => document.getElementById('mandant')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">👤 Mandant</button>
           <button onClick={() => document.getElementById('diffusion')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📡 Diffusion</button>
+          <button onClick={() => document.getElementById('assets')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🗺️ Vues</button>
           <button onClick={() => setOpenModal('visite')} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors flex items-center gap-1">
             👁️ Visite
             {(mandat.visiteInfo || mandat.visite_info) && Object.values(mandat.visiteInfo || mandat.visite_info).some(v => v) && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>}
@@ -2711,6 +2713,8 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           <DiffusionInline mandat={mandat} reload={reload} />
           {/* ═══ BLOC STATS D'ACTIVITÉ ═══ */}
           <MandatStatsInline mandat={mandat} deals={deals} clients={clients} />
+          {/* ═══ BLOC ASSETS EXTERNES ═══ */}
+          <AssetsMandatInline mandat={mandat} reload={reload} />
           {/* ═══ BLOC TECHNIQUE ═══ */}
             <div id="technique" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
               <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
