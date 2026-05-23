@@ -11,7 +11,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { createClient } from '@supabase/supabase-js';
-import { geocodeAddress, googleSatelliteUrl, cadastreUrl, getCadastreParcelle, getNearbyTransports } from '@/lib/maps';
+import { geocodeAddress, googleSatelliteUrl, cadastreUrl, googleStreetViewUrl, googleMapStaticUrl, getCadastreParcelle, getNearbyTransports } from '@/lib/maps';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -115,10 +115,16 @@ export async function POST(request, { params }) {
     const satelliteExtUrl = googleSatelliteUrl({ lat: geo.lat, lng: geo.lng });
     const cadastreExtUrl = cadastreUrl({ lat: geo.lat, lng: geo.lng });
 
+    // 2bis. URLs Google
+    const streetViewExtUrl = googleStreetViewUrl({ lat: geo.lat, lng: geo.lng, width: 640, height: 400 });
+    const mapStaticExtUrl = googleMapStaticUrl({ lat: geo.lat, lng: geo.lng, width: 640, height: 400, zoom: 15, mapType: 'roadmap' });
+
     // 3. Télécharger + uploader en parallèle (sauf transports/parcelle qui sont du JSON)
-    const [satelliteUrl, cadastreUrl_, parcelle, transports] = await Promise.all([
+    const [satelliteUrl, cadastreUrl_, streetViewUrl, mapStaticUrl, parcelle, transports] = await Promise.all([
       fetchAndUpload(satelliteExtUrl, `${mandatId}/satellite.jpg`, 'image/jpeg'),
       fetchAndUpload(cadastreExtUrl, `${mandatId}/cadastre.png`, 'image/png'),
+      fetchAndUpload(streetViewExtUrl, `${mandatId}/streetview.jpg`, 'image/jpeg'),
+      fetchAndUpload(mapStaticExtUrl, `${mandatId}/map-static.png`, 'image/png'),
       getCadastreParcelle({ lat: geo.lat, lng: geo.lng }),
       getNearbyTransports({ lat: geo.lat, lng: geo.lng, radius: 500 }),
     ]);
@@ -129,6 +135,8 @@ export async function POST(request, { params }) {
       .update({
         satellite_image_url: satelliteUrl,
         cadastre_image_url: cadastreUrl_,
+        street_view_image_url: streetViewUrl,
+        map_static_image_url: mapStaticUrl,
         parcelle_data: parcelle,
         transports_data: transports,
         assets_generated_at: new Date().toISOString(),
@@ -150,6 +158,8 @@ export async function POST(request, { params }) {
       geocode: geo,
       satellite_image_url: satelliteUrl,
       cadastre_image_url: cadastreUrl_,
+      street_view_image_url: streetViewUrl,
+      map_static_image_url: mapStaticUrl,
       parcelle_data: parcelle,
       transports_data: transports,
       assets_generated_at: new Date().toISOString(),
