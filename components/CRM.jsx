@@ -1022,7 +1022,7 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
     const currentMandat = mandats.find(m => m.id === selectedMandat.id) || selectedMandat;
     return (
       <>
-        <MandatDetail mandat={currentMandat} onBack={() => setSelectedMandat(null)} onEdit={() => { setEditingMandat(currentMandat); }} deals={deals} clients={clients} reload={() => updateMandatLocal?.(currentMandat.id) || reload()} todos={todos} annonces={annonces} allProfiles={allProfiles} onOpenMatching={onOpenMatching} onOpenEmailDrafts={onOpenEmailDrafts} />
+        onBack={() => { setSelectedMandat(null); const url = new URL(window.location.href); url.searchParams.set('tab', 'mandats'); url.searchParams.delete('open'); window.history.pushState({ tab: 'mandats' }, '', url.toString()); }} clients={clients} reload={() => updateMandatLocal?.(currentMandat.id) || reload()} todos={todos} annonces={annonces} allProfiles={allProfiles} onOpenMatching={onOpenMatching} onOpenEmailDrafts={onOpenEmailDrafts} />
         {editingMandat && (
           <MandatForm
             mandat={editingMandat}
@@ -1168,7 +1168,7 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
             {[...filtered].sort((a, b) => (parseFloat(a.prix) || Number.MAX_SAFE_INTEGER) - (parseFloat(b.prix) || Number.MAX_SAFE_INTEGER)).map(m => {
               const photoUrl = getCoverPhoto(m);
               return (
-                <tr key={m.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer group" onClick={() => setSelectedMandat(m)}>
+                <tr key={m.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer group" onClick={() => { setSelectedMandat(m); const url = new URL(window.location.href); url.searchParams.set('tab', 'mandats'); url.searchParams.set('open', m.id); window.history.pushState({ tab: 'mandats', open: m.id }, '', url.toString()); }}>
                   <td className="px-3 py-2">
                     <div className="w-32 h-20 rounded-lg overflow-hidden bg-cream-100 flex-shrink-0">
                       {photoUrl ? (
@@ -1309,7 +1309,13 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
             setShowNew(false);
             // setSelectedMandat APR\u00c8S pour que le rendu se fasse sur la fiche
             if (editedMandat) {
-              setTimeout(() => setSelectedMandat(editedMandat), 0);
+              setTimeout(() => {
+                setSelectedMandat(editedMandat);
+                const url = new URL(window.location.href);
+                url.searchParams.set('tab', 'mandats');
+                url.searchParams.set('open', editedMandat.id);
+                window.history.pushState({ tab: 'mandats', open: editedMandat.id }, '', url.toString());
+              }, 0);
             }
           }}
           clients={clients}
