@@ -203,9 +203,19 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
         return;
       }
 
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        alert('Session expirée, reconnecte-toi');
+        setGenerating(false);
+        return;
+      }
+
       const response = await fetch('/api/avis-valeur/generate-pdf', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({ mandatId: mandat.id }),
       });
 
