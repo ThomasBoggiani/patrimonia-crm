@@ -121,10 +121,10 @@ export async function POST(request, { params }) {
     const mapStaticExtUrl = googleMapStaticUrl({ lat: geo.lat, lng: geo.lng, width: 640, height: 400, zoom: 15, mapType: 'roadmap' });
 
     // 3. Télécharger + uploader en parallèle (sauf transports/parcelle qui sont du JSON)
+    console.log('[refresh-assets] Street View URL:', streetViewExtUrl?.slice(0, 200));
     const [satelliteUrl, cadastreUrl_, streetViewUrl, mapStaticUrl, parcelle, transports] = await Promise.all([
       fetchAndUpload(satelliteExtUrl, `${mandatId}/satellite.jpg`, 'image/jpeg'),
       fetchAndUpload(cadastreExtUrl, `${mandatId}/cadastre.png`, 'image/png'),
-      console.log('[refresh-assets] Street View URL:', streetViewExtUrl?.slice(0, 200));
       fetchAndUpload(streetViewExtUrl, `${mandatId}/streetview.jpg`, 'image/jpeg'),
       fetchAndUpload(mapStaticExtUrl, `${mandatId}/map-static.png`, 'image/png'),
       getCadastreParcelle({ lat: geo.lat, lng: geo.lng }),
