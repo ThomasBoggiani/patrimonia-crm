@@ -8,7 +8,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Broadcast } from 'lucide-react';
+import { Radio } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 // Liste des plateformes (système, évolutive)
@@ -109,7 +109,7 @@ export default function DiffusionInline({ mandat, reload }) {
     <div id="diffusion" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-display text-xl font-semibold text-stone-900 flex items-center gap-2">
-          <Broadcast className="w-5 h-5 text-sage-dark" />
+          <Radio className="w-5 h-5 text-sage-dark" />
           Diffusion
         </h2>
         <span className="text-sm text-stone-500">
