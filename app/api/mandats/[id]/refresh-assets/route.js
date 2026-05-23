@@ -136,7 +136,7 @@ export async function POST(request, { params }) {
       fetchAndUpload(cadastreExtUrl, `${mandatId}/cadastre.png`, 'image/png'),
       fetchAndUpload(streetViewExtUrl, `${mandatId}/streetview.jpg`, 'image/jpeg'),
       fetchAndUpload(mapStaticExtUrl, `${mandatId}/map-static.png`, 'image/png'),
-      getNearbyTransports({ lat: geo.lat, lng: geo.lng, radius: 800 }),
+      getNearbyTransports({ lat: geo.lat, lng: geo.lng, radius: 1000 }),
     ]);
 
     // 4. Update mandat avec les URLs et données
