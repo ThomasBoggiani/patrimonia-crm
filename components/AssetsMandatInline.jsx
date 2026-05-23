@@ -202,12 +202,31 @@ export default function AssetsMandatInline({ mandat, reload }) {
           imageUrl={mapStatic}
         />
 
-        {/* Vue satellite */}
-        <AssetCard
-          title="Vue satellite"
-          icon={<ImageIcon className="w-4 h-4" />}
-          imageUrl={satellite}
-        />
+        {/* Vue satellite avec marker overlay */}
+        <div className="border border-cream-dark rounded-lg overflow-hidden bg-cream-50">
+          <div className="flex items-center gap-1.5 text-stone-500 text-[10px] uppercase tracking-wide font-semibold p-2 border-b border-cream-dark">
+            <ImageIcon className="w-4 h-4" />
+            Vue satellite
+            {satellite ? <CheckCircle2 className="w-3 h-3 text-emerald-600" /> : <AlertCircle className="w-3 h-3 text-stone-300" />}
+          </div>
+          <div className="relative aspect-square bg-stone-100 flex items-center justify-center">
+            {satellite ? (
+              <>
+                <img src={satellite} alt="Vue satellite" className="w-full h-full object-cover" />
+                {/* Marker rouge centré (pin Tailwind) */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-full pointer-events-none">
+                  <div className="relative">
+                    <div className="w-6 h-6 bg-red-600 border-2 border-white rounded-full rotate-45 origin-bottom-left shadow-lg" style={{ borderRadius: '50% 50% 50% 0', transform: 'translateX(-3px) translateY(-12px) rotate(-45deg)' }}>
+                      <div className="absolute top-1/2 left-1/2 w-2 h-2 bg-white rounded-full" style={{ transform: 'translate(-50%, -50%) rotate(45deg)' }}></div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <span className="text-[11px] text-stone-400 italic">Non générée</span>
+            )}
+          </div>
+        </div>
 
         {/* Cadastre */}
         <AssetCard
