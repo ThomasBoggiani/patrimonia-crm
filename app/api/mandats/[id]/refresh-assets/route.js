@@ -86,7 +86,7 @@ export async function POST(request, { params }) {
     // Récupérer le mandat
     const { data: mandat, error: mErr } = await supabaseAdmin
       .from('mandats')
-      .select('id, adresse, ville, code_postal')
+      .select('id, adresse, ville')
       .eq('id', mandatId)
       .maybeSingle();
 
@@ -103,7 +103,7 @@ export async function POST(request, { params }) {
     }
 
     // Construire l'adresse complète pour un géocodage précis
-    const fullAddress = [mandat.adresse, mandat.code_postal, mandat.ville].filter(Boolean).join(', ');
+    const fullAddress = [mandat.adresse, mandat.ville].filter(Boolean).join(', ');
     console.log(`[refresh-assets] Starting refresh for mandat ${mandatId} - "${fullAddress}"`);
 
     // 1. Géocodage
