@@ -36,7 +36,8 @@ async function fetchAndUpload(imageUrl, storagePath, contentType = 'image/jpeg')
   try {
     const res = await fetch(imageUrl);
     if (!res.ok) {
-      console.warn(`[refresh-assets] HTTP ${res.status} for ${imageUrl.slice(0, 80)}`);
+      const errBody = await res.text().catch(() => '');
+      console.warn(`[refresh-assets] HTTP ${res.status} for ${imageUrl.slice(0, 80)} - body:`, errBody.slice(0, 300));
       return null;
     }
     const buffer = Buffer.from(await res.arrayBuffer());
@@ -123,6 +124,7 @@ export async function POST(request, { params }) {
     const [satelliteUrl, cadastreUrl_, streetViewUrl, mapStaticUrl, parcelle, transports] = await Promise.all([
       fetchAndUpload(satelliteExtUrl, `${mandatId}/satellite.jpg`, 'image/jpeg'),
       fetchAndUpload(cadastreExtUrl, `${mandatId}/cadastre.png`, 'image/png'),
+      console.log('[refresh-assets] Street View URL:', streetViewExtUrl?.slice(0, 200));
       fetchAndUpload(streetViewExtUrl, `${mandatId}/streetview.jpg`, 'image/jpeg'),
       fetchAndUpload(mapStaticExtUrl, `${mandatId}/map-static.png`, 'image/png'),
       getCadastreParcelle({ lat: geo.lat, lng: geo.lng }),
