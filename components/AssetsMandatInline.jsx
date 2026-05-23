@@ -235,12 +235,49 @@ export default function AssetsMandatInline({ mandat, reload }) {
             {transportsCount > 0 ? <CheckCircle2 className="w-3 h-3 text-emerald-600" /> : <AlertCircle className="w-3 h-3 text-stone-300" />}
           </div>
           {transports && transportsCount > 0 ? (
-            <div className="text-[11px] space-y-1">
-              {transports.metro?.length > 0 && <div><span className="text-stone-500">Métro :</span> <span className="font-medium">{transports.metro.length}</span></div>}
-              {transports.rer?.length > 0 && <div><span className="text-stone-500">RER :</span> <span className="font-medium">{transports.rer.length}</span></div>}
-              {transports.tram?.length > 0 && <div><span className="text-stone-500">Tram :</span> <span className="font-medium">{transports.tram.length}</span></div>}
-              {transports.bus?.length > 0 && <div><span className="text-stone-500">Bus :</span> <span className="font-medium">{transports.bus.length}</span></div>}
-            </div>
+            <>
+              {/* Compteurs */}
+              <div className="text-[11px] space-y-1 mb-3">
+                {transports.metro?.length > 0 && <div><span className="text-stone-500">Métro :</span> <span className="font-medium">{transports.metro.length}</span></div>}
+                {transports.rer?.length > 0 && <div><span className="text-stone-500">RER :</span> <span className="font-medium">{transports.rer.length}</span></div>}
+                {transports.tram?.length > 0 && <div><span className="text-stone-500">Tram :</span> <span className="font-medium">{transports.tram.length}</span></div>}
+                {transports.bus?.length > 0 && <div><span className="text-stone-500">Bus :</span> <span className="font-medium">{transports.bus.length}</span></div>}
+              </div>
+
+              {/* Liste détaillée stations les plus proches */}
+              <div className="border-t border-cream pt-2 space-y-1.5 max-h-[260px] overflow-y-auto">
+                {(() => {
+                  const stations = [];
+                  (transports.metro || []).forEach(s => stations.push({ ...s, mode: 'metro' }));
+                  (transports.rer || []).forEach(s => stations.push({ ...s, mode: 'rer' }));
+                  (transports.tram || []).forEach(s => stations.push({ ...s, mode: 'tram' }));
+                  stations.sort((a, b) => a.distance - b.distance);
+                  return stations.slice(0, 8).map((s, i) => {
+                    const lines = parseLines(s.lines);
+                    return (
+                      <div key={i} className="flex items-center gap-1.5 text-[10px]">
+                        <div className="flex gap-0.5 flex-shrink-0">
+                          {lines.length > 0 ? lines.slice(0, 4).map((l, j) => {
+                            const c = getLineBadgeStyle(l, s.mode);
+                            return (
+                              <span key={j} style={{ backgroundColor: c.bg, color: c.fg }} className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded font-bold text-[9px]">
+                                {l}
+                              </span>
+                            );
+                          }) : (
+                            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded font-bold text-[9px] bg-stone-300 text-stone-700">
+                              {s.mode === 'metro' ? 'M' : s.mode === 'rer' ? 'R' : 'T'}
+                            </span>
+                          )}
+                        </div>
+                        <span className="font-medium text-stone-700 truncate flex-1">{s.name}</span>
+                        <span className="text-stone-500 flex-shrink-0">{walkingTime(s.distance)}</span>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </>
           ) : (
             <div className="text-[11px] text-stone-400 italic">Non générés</div>
           )}
