@@ -22,6 +22,8 @@ export default function AssetsMandatInline({ mandat, reload }) {
 
   const satellite = mandat?.satelliteImageUrl || mandat?.satellite_image_url;
   const cadastre = mandat?.cadastreImageUrl || mandat?.cadastre_image_url;
+  const streetView = mandat?.streetViewImageUrl || mandat?.street_view_image_url;
+  const mapStatic = mandat?.mapStaticImageUrl || mandat?.map_static_image_url;
   const parcelle = mandat?.parcelleData || mandat?.parcelle_data;
   const transports = mandat?.transportsData || mandat?.transports_data;
   const generatedAt = mandat?.assetsGeneratedAt || mandat?.assets_generated_at;
@@ -101,7 +103,21 @@ export default function AssetsMandatInline({ mandat, reload }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {/* Street View - façade depuis la rue */}
+        <AssetCard
+          title="Façade (Street View)"
+          icon={<ImageIcon className="w-4 h-4" />}
+          imageUrl={streetView}
+        />
+
+        {/* Plan de situation - carte du quartier */}
+        <AssetCard
+          title="Plan de situation"
+          icon={<MapPin className="w-4 h-4" />}
+          imageUrl={mapStatic}
+        />
+
         {/* Vue satellite */}
         <AssetCard
           title="Vue satellite"
