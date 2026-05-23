@@ -39,6 +39,7 @@ import QuestionnaireResponseModal from './QuestionnaireResponseModal';
 import ClientMatches from './ClientMatches';
 import ContactsImportModal from './ContactsImportModal';
 import PdfExportButtons from '@/components/PdfExportButtons';
+import DiffusionInline from './DiffusionInline';
 import { VisiteModal, MandantModal } from './MandatModals';
 import CascadeSelect from './CascadeSelect';
 import MediasModal from './MediasModal'; 
@@ -2699,6 +2700,8 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
                 </div>
               </div>
             </div>
+          {/* ═══ BLOC DIFFUSION ═══ */}
+          <DiffusionInline mandat={mandat} reload={reload} />
           {/* ═══ BLOC TECHNIQUE ═══ */}
             <div id="technique" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
               <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
