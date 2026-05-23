@@ -1022,7 +1022,7 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
     const currentMandat = mandats.find(m => m.id === selectedMandat.id) || selectedMandat;
     return (
       <>
-        onBack={() => { setSelectedMandat(null); const url = new URL(window.location.href); url.searchParams.set('tab', 'mandats'); url.searchParams.delete('open'); window.history.pushState({ tab: 'mandats' }, '', url.toString()); }} clients={clients} reload={() => updateMandatLocal?.(currentMandat.id) || reload()} todos={todos} annonces={annonces} allProfiles={allProfiles} onOpenMatching={onOpenMatching} onOpenEmailDrafts={onOpenEmailDrafts} />
+        <MandatDetail mandat={currentMandat} onBack={() => { setSelectedMandat(null); const url = new URL(window.location.href); url.searchParams.set('tab', 'mandats'); url.searchParams.delete('open'); window.history.pushState({ tab: 'mandats' }, '', url.toString()); }} onEdit={() => { setEditingMandat(currentMandat); }} deals={deals} clients={clients} reload={() => updateMandatLocal?.(currentMandat.id) || reload()} todos={todos} annonces={annonces} allProfiles={allProfiles} onOpenMatching={onOpenMatching} onOpenEmailDrafts={onOpenEmailDrafts} /> reload={() => updateMandatLocal?.(currentMandat.id) || reload()} todos={todos} annonces={annonces} allProfiles={allProfiles} onOpenMatching={onOpenMatching} onOpenEmailDrafts={onOpenEmailDrafts} />
         {editingMandat && (
           <MandatForm
             mandat={editingMandat}
