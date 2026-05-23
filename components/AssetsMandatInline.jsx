@@ -1,21 +1,17 @@
 // ═══════════════════════════════════════════════════════════════════
-// components/AssetsMandatInline.jsx — v1
-// Section "Assets externes" sur la fiche mandat :
-// - Vue satellite (Maptiler)
-// - Vue cadastre (IGN)
-// - Parcelle cadastrale
-// - Transports à proximité
-//
-// Permet de régénérer en cliquant sur le bouton "Régénérer les assets".
-// Les assets sont stockés sur le mandat pour être réutilisés sur tous les documents.
+// components/AssetsMandatInline.jsx — v2
+// Section "Vues du bien (cache)" sur la fiche mandat :
+// - 6 vues : Street View, Plan situation, Satellite (+marker), Cadastre, Parcelle, Transports
+// - Section quartier : commerces, écoles, parcs, santé, culture
+// - Section risques : risques naturels Géorisques
 // ═══════════════════════════════════════════════════════════════════
 
 'use client';
 
 import { useState } from 'react';
+
 // Couleurs officielles des lignes RATP/SNCF
 const RATP_COLORS = {
-  // Métro
   'M1': { bg: '#FFCD00', fg: '#000' },
   'M2': { bg: '#0064B0', fg: '#fff' },
   'M3': { bg: '#9F9825', fg: '#fff' },
@@ -36,13 +32,11 @@ const RATP_COLORS = {
   'M16': { bg: '#F3A4BA', fg: '#000' },
   'M17': { bg: '#D5C900', fg: '#000' },
   'M18': { bg: '#00A88F', fg: '#fff' },
-  // RER
   'A': { bg: '#E2231A', fg: '#fff' },
   'B': { bg: '#427DBD', fg: '#fff' },
   'C': { bg: '#FCD946', fg: '#000' },
   'D': { bg: '#00643C', fg: '#fff' },
   'E': { bg: '#C9910D', fg: '#fff' },
-  // Tram (sample)
   'T1': { bg: '#0064B0', fg: '#fff' },
   'T2': { bg: '#B90845', fg: '#fff' },
   'T3a': { bg: '#FF7E2E', fg: '#fff' },
@@ -63,7 +57,6 @@ function parseLines(linesStr) {
 }
 
 function getLineBadgeStyle(line, mode) {
-  // Métro : on tente "M{numero}"
   if (mode === 'metro') {
     const key = `M${line}`;
     if (RATP_COLORS[key]) return RATP_COLORS[key];
@@ -78,26 +71,67 @@ function getLineBadgeStyle(line, mode) {
   return { bg: '#888', fg: '#fff' };
 }
 
-function formatDistance(meters) {
-  if (meters < 1000) return `${meters} m`;
-  return `${(meters / 1000).toFixed(1)} km`;
-}
-
 function walkingTime(meters) {
-  // ~80m/min en marche normale
   const min = Math.round(meters / 80);
   if (min < 1) return '< 1 min';
   return `${min} min`;
 }
-import { MapPin, RefreshCw, Image as ImageIcon, Layers, Train, CheckCircle2, AlertCircle } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+
+// Icônes pour les catégories de commodités
+const AMENITY_LABELS = {
+  commerces: { label: 'Commerces', icon: '🛍️' },
+  restaurants: { label: 'Restaurants & cafés', icon: '🍽️' },
+  ecoles: { label: 'Écoles', icon: '🎓' },
+  sante: { label: 'Santé', icon: '⚕️' },
+  culture: { label: 'Culture', icon: '🎭' },
+  parcs: { label: 'Espaces verts', icon: '🌳' },
+};
+
+// Traductions des types OSM en FR
+const TYPE_FR = {
+  // Shops
+  supermarket: 'Supermarché',
+  convenience: 'Épicerie',
+  bakery: 'Boulangerie',
+  butcher: 'Boucherie',
+  greengrocer: 'Primeur',
+  clothes: 'Vêtements',
+  hairdresser: 'Coiffeur',
+  florist: 'Fleuriste',
+  optician: 'Opticien',
+  jewelry: 'Bijouterie',
+  shoes: 'Chaussures',
+  books: 'Librairie',
+  bicycle: 'Vélo',
+  // Amenity
+  restaurant: 'Restaurant',
+  cafe: 'Café',
+  bar: 'Bar',
+  fast_food: 'Restauration rapide',
+  school: 'École',
+  kindergarten: 'Crèche',
+  college: 'Collège',
+  university: 'Université',
+  pharmacy: 'Pharmacie',
+  hospital: 'Hôpital',
+  clinic: 'Clinique',
+  doctors: 'Médecin',
+  dentist: 'Dentiste',
+  cinema: 'Cinéma',
+  theatre: 'Théâtre',
+  library: 'Bibliothèque',
+  arts_centre: 'Centre culturel',
+  museum: 'Musée',
+  park: 'Parc',
+  garden: 'Jardin',
+  playground: 'Aire de jeux',
+};
 
 export default function AssetsMandatInline({ mandat, reload }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const generatedAt = mandat?.assetsGeneratedAt || mandat?.assets_generated_at;
-  // Cache-busting via le timestamp de génération (force rechargement après refresh)
   const cacheBuster = generatedAt ? `?v=${new Date(generatedAt).getTime()}` : '';
 
   const satRaw = mandat?.satelliteImageUrl || mandat?.satellite_image_url;
@@ -111,6 +145,8 @@ export default function AssetsMandatInline({ mandat, reload }) {
   const mapStatic = mapRaw ? mapRaw + cacheBuster : null;
   const parcelle = mandat?.parcelleData || mandat?.parcelle_data;
   const transports = mandat?.transportsData || mandat?.transports_data;
+  const quartier = mandat?.quartierData || mandat?.quartier_data;
+  const risques = mandat?.risquesData || mandat?.risques_data;
 
   const hasAnyAsset = !!(satellite || cadastre || parcelle || transports);
   const transportsCount = transports ?
@@ -118,10 +154,15 @@ export default function AssetsMandatInline({ mandat, reload }) {
     (transports.tram?.length || 0) + (transports.bus?.length || 0)
     : 0;
 
+  const quartierTotalCount = quartier ?
+    Object.values(quartier).reduce((s, arr) => s + (Array.isArray(arr) ? arr.length : 0), 0)
+    : 0;
+
   async function regenerate() {
     setLoading(true);
     setError(null);
     try {
+      const { supabase } = await import('@/lib/supabase');
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
         setError('Session expirée');
@@ -154,8 +195,7 @@ export default function AssetsMandatInline({ mandat, reload }) {
     <div id="assets" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-display text-xl font-semibold text-stone-900 flex items-center gap-2">
-          <MapPin className="w-5 h-5 text-sage-dark" />
-          Vues du bien (cache)
+          📍 Vues du bien (cache)
         </h2>
         <div className="flex items-center gap-3">
           {generatedAt && (
@@ -167,10 +207,10 @@ export default function AssetsMandatInline({ mandat, reload }) {
             onClick={regenerate}
             disabled={loading || !mandat?.adresse}
             title={!mandat?.adresse ? 'Adresse requise' : 'Régénérer toutes les vues'}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-sage-light bg-white text-sage-darker hover:bg-sage-50 disabled:opacity-40 transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border bg-white hover:bg-stone-50 disabled:opacity-40 transition"
+            style={{ borderColor: '#A0B0A0', color: '#3d4d3d' }}
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            {loading ? 'Génération…' : (hasAnyAsset ? 'Régénérer' : 'Générer')}
+            {loading ? '⏳ Génération…' : (hasAnyAsset ? '🔄 Régénérer' : '✨ Générer')}
           </button>
         </div>
       </div>
@@ -187,38 +227,34 @@ export default function AssetsMandatInline({ mandat, reload }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {/* Street View - façade depuis la rue */}
+      {/* ─── BLOC 1 : Vues photo + cadastre + parcelle + transports ─── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+        {/* Street View */}
         <AssetCard
           title="Façade (Street View)"
-          icon={<ImageIcon className="w-4 h-4" />}
+          icon="📷"
           imageUrl={streetView}
         />
 
-        {/* Plan de situation - carte du quartier */}
+        {/* Plan situation */}
         <AssetCard
           title="Plan de situation"
-          icon={<MapPin className="w-4 h-4" />}
+          icon="📍"
           imageUrl={mapStatic}
         />
 
         {/* Vue satellite avec marker overlay */}
         <div className="border border-cream-dark rounded-lg overflow-hidden bg-cream-50">
           <div className="flex items-center gap-1.5 text-stone-500 text-[10px] uppercase tracking-wide font-semibold p-2 border-b border-cream-dark">
-            <ImageIcon className="w-4 h-4" />
-            Vue satellite
-            {satellite ? <CheckCircle2 className="w-3 h-3 text-emerald-600" /> : <AlertCircle className="w-3 h-3 text-stone-300" />}
+            🛰️ Vue satellite {satellite ? '✓' : ''}
           </div>
           <div className="relative aspect-square bg-stone-100 flex items-center justify-center">
             {satellite ? (
               <>
                 <img src={satellite} alt="Vue satellite" className="w-full h-full object-cover" />
-                {/* Marker rouge centré (pin Tailwind) */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-full pointer-events-none">
-                  <div className="relative">
-                    <div className="w-6 h-6 bg-red-600 border-2 border-white rounded-full rotate-45 origin-bottom-left shadow-lg" style={{ borderRadius: '50% 50% 50% 0', transform: 'translateX(-3px) translateY(-12px) rotate(-45deg)' }}>
-                      <div className="absolute top-1/2 left-1/2 w-2 h-2 bg-white rounded-full" style={{ transform: 'translate(-50%, -50%) rotate(45deg)' }}></div>
-                    </div>
+                <div className="absolute top-1/2 left-1/2 pointer-events-none" style={{ transform: 'translate(-50%, -100%)' }}>
+                  <div style={{ width: 24, height: 24, background: '#dc2626', border: '2px solid white', borderRadius: '50% 50% 50% 0', transform: 'rotate(-45deg)', boxShadow: '0 2px 6px rgba(0,0,0,0.4)' }}>
+                    <div style={{ width: 8, height: 8, background: 'white', borderRadius: '50%', position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%) rotate(45deg)' }}></div>
                   </div>
                 </div>
               </>
@@ -231,16 +267,14 @@ export default function AssetsMandatInline({ mandat, reload }) {
         {/* Cadastre */}
         <AssetCard
           title="Cadastre"
-          icon={<Layers className="w-4 h-4" />}
+          icon="🗺️"
           imageUrl={cadastre}
         />
 
         {/* Parcelle */}
         <div className="border border-cream-dark rounded-lg overflow-hidden bg-cream-50 p-3">
           <div className="flex items-center gap-1.5 text-stone-500 text-[10px] uppercase tracking-wide font-semibold mb-2">
-            <Layers className="w-4 h-4" />
-            Parcelle
-            {parcelle ? <CheckCircle2 className="w-3 h-3 text-emerald-600" /> : <AlertCircle className="w-3 h-3 text-stone-300" />}
+            📐 Parcelle {parcelle ? '✓' : ''}
           </div>
           {parcelle ? (
             <div className="text-[11px] space-y-1">
@@ -257,21 +291,16 @@ export default function AssetsMandatInline({ mandat, reload }) {
         {/* Transports */}
         <div className="border border-cream-dark rounded-lg overflow-hidden bg-cream-50 p-3">
           <div className="flex items-center gap-1.5 text-stone-500 text-[10px] uppercase tracking-wide font-semibold mb-2">
-            <Train className="w-4 h-4" />
-            Transports
-            {transportsCount > 0 ? <CheckCircle2 className="w-3 h-3 text-emerald-600" /> : <AlertCircle className="w-3 h-3 text-stone-300" />}
+            🚇 Transports {transportsCount > 0 ? '✓' : ''}
           </div>
           {transports && transportsCount > 0 ? (
             <>
-              {/* Compteurs */}
               <div className="text-[11px] space-y-1 mb-3">
                 {transports.metro?.length > 0 && <div><span className="text-stone-500">Métro :</span> <span className="font-medium">{transports.metro.length}</span></div>}
                 {transports.rer?.length > 0 && <div><span className="text-stone-500">RER :</span> <span className="font-medium">{transports.rer.length}</span></div>}
                 {transports.tram?.length > 0 && <div><span className="text-stone-500">Tram :</span> <span className="font-medium">{transports.tram.length}</span></div>}
                 {transports.bus?.length > 0 && <div><span className="text-stone-500">Bus :</span> <span className="font-medium">{transports.bus.length}</span></div>}
               </div>
-
-              {/* Liste détaillée stations les plus proches */}
               <div className="border-t border-cream pt-2 space-y-1.5 max-h-[260px] overflow-y-auto">
                 {(() => {
                   const stations = [];
@@ -311,7 +340,53 @@ export default function AssetsMandatInline({ mandat, reload }) {
         </div>
       </div>
 
-      <div className="mt-3 pt-3 border-t border-cream text-[11px] text-stone-500 leading-snug">
+      {/* ─── BLOC 2 : Diagnostic quartier ─── */}
+      {quartier && quartierTotalCount > 0 && (
+        <div className="border border-cream-dark rounded-lg p-3 mb-4">
+          <div className="flex items-center gap-1.5 text-stone-500 text-[10px] uppercase tracking-wide font-semibold mb-3">
+            🏘️ Diagnostic du quartier (rayon 500 m) — {quartierTotalCount} équipements
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {Object.entries(AMENITY_LABELS).map(([k, meta]) => {
+              const items = quartier[k] || [];
+              if (items.length === 0) return null;
+              return (
+                <div key={k} className="bg-cream-50 rounded p-2.5">
+                  <div className="text-[10px] font-semibold text-stone-700 mb-1.5 flex items-center gap-1">
+                    {meta.icon} {meta.label}
+                    <span className="ml-auto text-stone-500 font-normal">{items.length}</span>
+                  </div>
+                  <div className="space-y-0.5 max-h-[120px] overflow-y-auto">
+                    {items.slice(0, 5).map((item, i) => (
+                      <div key={i} className="text-[10px] text-stone-600 flex items-center justify-between gap-1">
+                        <span className="truncate flex-1" title={TYPE_FR[item.type] || item.type}>
+                          {item.name}
+                        </span>
+                        <span className="text-stone-400 flex-shrink-0">{item.distance}m</span>
+                      </div>
+                    ))}
+                    {items.length > 5 && (
+                      <div className="text-[9px] text-stone-400 italic">+{items.length - 5} autres</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ─── BLOC 3 : Risques naturels ─── */}
+      {risques && (
+        <div className="border border-cream-dark rounded-lg p-3 mb-4">
+          <div className="flex items-center gap-1.5 text-stone-500 text-[10px] uppercase tracking-wide font-semibold mb-3">
+            ⚠️ Risques naturels (Géorisques)
+          </div>
+          <RisquesPanel risques={risques} />
+        </div>
+      )}
+
+      <div className="pt-3 border-t border-cream text-[11px] text-stone-500 leading-snug">
         ⓘ Ces vues sont utilisées dans la plaquette commerciale et l'avis de valeur. Une fois générées, elles sont stockées pour éviter de relancer les appels externes à chaque document.
       </div>
     </div>
@@ -322,9 +397,7 @@ function AssetCard({ title, icon, imageUrl }) {
   return (
     <div className="border border-cream-dark rounded-lg overflow-hidden bg-cream-50">
       <div className="flex items-center gap-1.5 text-stone-500 text-[10px] uppercase tracking-wide font-semibold p-2 border-b border-cream-dark">
-        {icon}
-        {title}
-        {imageUrl ? <CheckCircle2 className="w-3 h-3 text-emerald-600" /> : <AlertCircle className="w-3 h-3 text-stone-300" />}
+        {icon} {title} {imageUrl ? '✓' : ''}
       </div>
       <div className="relative aspect-square bg-stone-100 flex items-center justify-center">
         {imageUrl ? (
@@ -333,6 +406,88 @@ function AssetCard({ title, icon, imageUrl }) {
           <span className="text-[11px] text-stone-400 italic">Non générée</span>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Panel d'affichage des risques ───
+function RisquesPanel({ risques }) {
+  // L'API Géorisques retourne un objet avec différentes propriétés selon les risques détectés
+  // On affiche ce qu'on trouve dans l'objet
+  if (!risques || typeof risques !== 'object') {
+    return <div className="text-[11px] text-stone-400 italic">Aucune donnée</div>;
+  }
+
+  const items = [];
+
+  // Risques inondations
+  if (Array.isArray(risques.inondations) && risques.inondations.length > 0) {
+    items.push({ label: 'Inondations', value: `${risques.inondations.length} zone(s) référencée(s)`, severity: 'warn' });
+  }
+  if (risques.risquesNaturels?.inondation || risques.inondation) {
+    items.push({ label: 'Inondation', value: 'Risque référencé', severity: 'warn' });
+  }
+
+  // Sismicité
+  if (risques.sismicite || risques.zonage_sismique) {
+    const zone = risques.sismicite?.zone || risques.zonage_sismique?.zone;
+    items.push({ label: 'Sismicité', value: zone ? `Zone ${zone}` : 'Référencée', severity: 'info' });
+  }
+
+  // Retrait-gonflement argiles
+  if (risques.argiles || risques.retrait_gonflement_argile || risques.retraitGonflementArgile) {
+    const niv = risques.argiles?.niveau || risques.retrait_gonflement_argile?.niveau || risques.retraitGonflementArgile?.niveau;
+    items.push({ label: 'Retrait-gonflement argiles', value: niv || 'Référencé', severity: 'warn' });
+  }
+
+  // Radon
+  if (risques.radon || risques.potentielRadon) {
+    const cat = risques.radon?.categorie || risques.potentielRadon?.categorie;
+    items.push({ label: 'Radon', value: cat ? `Catégorie ${cat}` : 'Référencé', severity: 'info' });
+  }
+
+  // ICPE
+  if (Array.isArray(risques.icpe) && risques.icpe.length > 0) {
+    items.push({ label: 'ICPE', value: `${risques.icpe.length} installation(s)`, severity: 'warn' });
+  }
+
+  // Si rien de connu, on affiche les clés brutes
+  if (items.length === 0) {
+    const keys = Object.keys(risques).filter(k => risques[k]);
+    if (keys.length === 0) {
+      return <div className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded p-2">✓ Aucun risque majeur référencé à cette adresse</div>;
+    }
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        {keys.slice(0, 6).map((k, i) => (
+          <div key={i} className="bg-cream-50 rounded p-2">
+            <div className="text-[10px] font-semibold text-stone-700 capitalize">{k.replace(/_/g, ' ')}</div>
+            <div className="text-[10px] text-stone-500 mt-0.5">Référencé</div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+      {items.map((item, i) => (
+        <div
+          key={i}
+          className={`rounded p-2 ${
+            item.severity === 'warn'
+              ? 'bg-amber-50 border border-amber-200'
+              : 'bg-blue-50 border border-blue-200'
+          }`}
+        >
+          <div className={`text-[10px] font-semibold ${item.severity === 'warn' ? 'text-amber-800' : 'text-blue-800'}`}>
+            {item.label}
+          </div>
+          <div className={`text-[10px] mt-0.5 ${item.severity === 'warn' ? 'text-amber-700' : 'text-blue-700'}`}>
+            {item.value}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
