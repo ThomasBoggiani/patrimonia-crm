@@ -3015,12 +3015,13 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           }}
         />
       )}
+      {showRapportMandant && (
+        <RapportMandantModal mandat={mandat} onClose={() => setShowRapportMandant(false)} />
+      )}
     </div>
   );
 }
-{showRapportMandant && (
-        <RapportMandantModal mandat={mandat} onClose={() => setShowRapportMandant(false)} />
-      )}
+
 // Composant : sélecteur de responsable (dropdown réassignable)
 // Fonctionne pour mandats ET clients via la prop `entity` ('mandat' | 'client')
 function OwnerSelector({ mandat, client, entity = 'mandat', reload }) {
