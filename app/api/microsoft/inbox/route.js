@@ -234,21 +234,32 @@ export async function DELETE(request) {
     );
 
     // Microsoft Graph : DELETE /me/messages/{id} déplace vers Deleted Items
-    await callGraph({
-      supabase: adminSupabase,
-      userId: user.id,
-      endpoint: `/me/messages/${messageId}`,
-      method: 'DELETE'
-    });
-
-    // On nettoie aussi le cache catégorie
+    // Si 404, le mail n'existe déjà plus dans Outlook → on traite comme un succès
+    let graphErrorMsg = null;
+    try {
+      await callGraph({
+        supabase: adminSupabase,
+        userId: user.id,
+        endpoint: `/me/messages/${messageId}`,
+        method: 'DELETE'
+      });
+    } catch (graphErr) {
+      const errStr = String(graphErr.message || '');
+      const is404 = errStr.includes('404') || errStr.includes('ErrorItemNotFound');
+      if (!is404) {
+        // Vraie erreur Graph (auth, serveur...) → on remonte
+        throw graphErr;
+      }
+      // 404 = mail déjà disparu d'Outlook, on continue et nettoie le cache
+      graphErrorMsg = 'already_deleted';
+    }
+    // On nettoie aussi le cache catégorie (toujours)
     await adminSupabase
       .from('email_categories')
       .delete()
       .eq('user_id', user.id)
       .eq('message_id', messageId);
-
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, alreadyDeleted: graphErrorMsg === 'already_deleted' });
   } catch (err) {
     console.error('Inbox DELETE error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
