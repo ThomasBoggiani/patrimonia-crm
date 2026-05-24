@@ -42,7 +42,7 @@ async function loadMandatData(mandatId) {
   if (mandat.profile_id) {
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('id, email, prenom, nom, telephone, avatar_url, fonction')
+      .select(.select('id, email, prenom, nom, telephone, avatar_url, fonction, is_boss'))
       .eq('id', mandat.profile_id)
       .maybeSingle();
 
@@ -249,7 +249,7 @@ export async function GET(request, { params }) {
     // Charger TOUS les profils actifs (utilisé pour plaquette ET rapport)
     const { data: profiles, error: pErr } = await supabaseAdmin
       .from('profiles')
-      .select('id, prenom, nom, email, fonction, telephone, avatar_url')
+      .select('id, prenom, nom, email, fonction, telephone, avatar_url, is_boss')
       .eq('actif', true);
 
     if (pErr) console.error('[PDF] Profiles query error:', pErr.message);
@@ -292,6 +292,7 @@ export async function GET(request, { params }) {
             email: p.email,
             phone: p.telephone || null,
             photo: ensureAbsoluteUrl(p.avatar_url, request),
+            is_boss: p.is_boss === true,
           };
         }
         if (mandat.profile_id && p.id === mandat.profile_id) {
