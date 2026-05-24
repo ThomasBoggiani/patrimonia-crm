@@ -129,6 +129,52 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
     return () => clearInterval(pollRef.current);
   }, [load]);
 
+  // Archivage automatique : pour chaque chargement, on identifie les mails business+internal
+  // non encore archivés et on les envoie à /api/microsoft/inbox/archive-and-extract
+  useEffect(() => {
+    if (!messages || messages.length === 0) return;
+
+    const toArchive = messages
+      .filter(m => (m.categorie === 'business' || m.categorie === 'internal') && !m.archived_at)
+      .map(m => ({
+        id: m.id,
+        subject: m.subject || '',
+        bodyPreview: m.bodyPreview || '',
+        fromName: m.from?.name || '',
+        fromAddress: m.from?.address || '',
+        receivedDate: m.receivedDateTime,
+        webLink: m.webLink,
+        hasAttachments: m.hasAttachments || false,
+        categorie: m.categorie,
+        clientId: m.crm_client?.id || null
+      }));
+
+    if (toArchive.length === 0) return;
+
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+        const res = await fetch('/api/microsoft/inbox/archive-and-extract', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({ emails: toArchive })
+        });
+        const json = await res.json();
+        console.log('[Inbox] Archivage terminé:', json);
+        // Recharge l'inbox pour voir les nouveaux badges
+        if (json.archived > 0 || json.todosTotal > 0) {
+          load(true);
+        }
+      } catch (e) {
+        console.warn('[Inbox] archive error:', e.message);
+      }
+    })();
+  }, [messages, load]);
+
   const filteredMessages = useMemo(() => {
     let list = messages;
     if (filter === 'crm') {
@@ -420,6 +466,11 @@ function MessageRow({ msg, isSelected, onClick }) {
           </div>
           <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
             <CategorieBadge categorie={msg.categorie} />
+            {msg.todos_count > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded-full border border-amber-200 flex items-center gap-0.5 font-medium">
+                ✨ {msg.todos_count} tâche{msg.todos_count > 1 ? 's' : ''}
+              </span>
+            )}
             {msg.crm_client ? (
               <span className="text-[10px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-full flex items-center gap-1 border border-emerald-200">
                 <UserIcon className="w-2.5 h-2.5" />
