@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 
 export default function ClientMatches({ client, mandats, interactions, onOpenMandat, reload }) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [filter, setFilter] = useState('all'); // 'all' | 'todo' | 'done'
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [emailDraft, setEmailDraft] = useState(null);
@@ -93,7 +93,7 @@ export default function ClientMatches({ client, mandats, interactions, onOpenMan
           'Authorization': `Bearer ${session?.access_token}`
         },
         body: JSON.stringify({
-          message: `Rédige un email court et professionnel à ${client.prenom} ${client.nom} pour lui présenter le mandat "${mandat.nom}" (prix: ${mandat.prix}€${mandat.rendement ? `, rendement ${mandat.rendement}%` : ''}, ${mandat.adresse || mandat.ville || ''}). Utilise OBLIGATOIREMENT le tool draft_email. Ton chaleureux mais sobre, signature "Thomas Boggiani".`
+          message: `Rédige un email court et professionnel à ${client.prenom} ${client.nom} pour lui présenter le mandat "${mandat.nom}" (prix: ${mandat.prix}€${mandat.rendement ? `, rendement ${mandat.rendement}%` : ''}, ${mandat.adresse || mandat.ville || ''}). Utilise OBLIGATOIREMENT le tool draft_email. Ton chaleureux mais sobre, signature "${profile?.prenom || ''} ${profile?.nom || ''}".trim().`
         })
       });
       const data = await res.json();
