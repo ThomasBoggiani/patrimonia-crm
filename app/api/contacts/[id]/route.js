@@ -67,6 +67,7 @@ export async function PATCH(request, { params }) {
       'type_contact', 'categorie',
       'adresse', 'ville', 'code_postal',
       'notes',
+      'qualite', 'motif_inactif',
     ];
     const patch = {};
     for (const k of allowedFields) {
