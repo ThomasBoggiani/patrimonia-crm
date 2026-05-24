@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
-  List, LayoutGrid, Search, Trash2, Sparkles, CheckCircle2, Plus
+  List, LayoutGrid, Search, Trash2, Sparkles, CheckCircle2, Plus, AlertTriangle, Loader2
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { formatPrix, formatPrixCompact, STATUTS_DEAL } from '@/lib/crm-constants';
 import { MaturiteBadge } from '@/components/crm/SharedComponents';
+import { matchClientsForMandat, filterAcheteurs } from '@/lib/matching';
 
 // ═══════════════════════════════════════════════════════════════════
 // DealsKanbanView - Vue kanban drag&drop pour les deals
@@ -156,12 +157,15 @@ export function DealsTab({ deals, reload, mandats, clients }) {
 
 // ═══════════════════════════════════════════════════════════════════
 // MatchingTab - Rapprochement automatique mandats <-> clients
+// Utilise désormais le vrai algorithme de lib/matching.js
+// avec filtre d'éligibilité (posture acheteur, qualité, statut)
 // ═══════════════════════════════════════════════════════════════════
 export function MatchingTab({ mandats, clients, deals, reload, initialMandatId, onInitialMandatConsumed }) {
   const [selectedMandatId, setSelectedMandatId] = useState(initialMandatId || mandats[0]?.id || null);
+  const [contactsByContactId, setContactsByContactId] = useState({});
+  const [loadingContacts, setLoadingContacts] = useState(true);
   const mandat = mandats.find(m => m.id === selectedMandatId);
 
-  // Si la prop initialMandatId change (re-navigation), on resélectionne ce mandat
   useEffect(() => {
     if (initialMandatId && initialMandatId !== selectedMandatId) {
       setSelectedMandatId(initialMandatId);
@@ -169,22 +173,46 @@ export function MatchingTab({ mandats, clients, deals, reload, initialMandatId, 
     }
   }, [initialMandatId]);
 
-  const computeScore = (client, m) => {
-    if (!m) return 0;
-    let score = 0;
-    const prix = parseFloat(m.prix);
-    if (prix >= parseFloat(client.budgetMin) && prix <= parseFloat(client.budgetMax)) score += 40;
-    else if (prix >= parseFloat(client.budgetMin) * 0.9 && prix <= parseFloat(client.budgetMax) * 1.1) score += 20;
-    if (parseFloat(m.rendement) >= parseFloat(client.rendementMin)) score += 30;
-    if ((client.typologiesRecherchees || []).includes(m.type)) score += 20;
-    if (client.statut === 'Actif') score += 10;
-    return score;
-  };
+  // Charge tous les contacts pour avoir les postures et qualités
+  useEffect(() => {
+    async function loadContacts() {
+      setLoadingContacts(true);
+      try {
+        const res = await fetch('/api/contacts?limit=500');
+        const data = await res.json();
+        const map = {};
+        (data?.contacts || []).forEach(c => { map[c.id] = c; });
+        setContactsByContactId(map);
+      } catch (e) {
+        console.error('[MatchingTab] load contacts error:', e);
+      } finally {
+        setLoadingContacts(false);
+      }
+    }
+    loadContacts();
+  }, []);
 
-  const matches = mandat ? clients.map(c => ({
-    client: c, score: computeScore(c, mandat),
-    alreadyLinked: deals.some(d => d.mandatId === mandat.id && d.clientId === c.id)
-  })).sort((a, b) => b.score - a.score) : [];
+  // Enrichit chaque client avec son contact (postures, qualité, catégorie)
+  const enrichedClients = useMemo(() => {
+    return (clients || []).map(c => {
+      const contactId = c.contactId || c.contact_id;
+      const contact = contactId ? contactsByContactId[contactId] : null;
+      return { ...c, contact };
+    });
+  }, [clients, contactsByContactId]);
+
+  // Filtre les acheteurs éligibles (posture, qualité, statut)
+  const eligibleClients = useMemo(() => filterAcheteurs(enrichedClients), [enrichedClients]);
+
+  // Calcule les matches avec le vrai algorithme
+  const matches = useMemo(() => {
+    if (!mandat || loadingContacts) return [];
+    const results = matchClientsForMandat(mandat, eligibleClients);
+    return results.map(r => ({
+      ...r,
+      alreadyLinked: deals.some(d => d.mandatId === mandat.id && d.clientId === r.client.id)
+    }));
+  }, [mandat, eligibleClients, deals, loadingContacts]);
 
   const addMatch = async (clientId) => {
     await supabase.from('deals').insert({
@@ -193,6 +221,10 @@ export function MatchingTab({ mandats, clients, deals, reload, initialMandatId, 
     });
     reload();
   };
+
+  // Nombre de contacts filtrés (pour stats)
+  const totalClients = clients?.length || 0;
+  const filteredOut = totalClients - eligibleClients.length;
 
   return (
     <div className="p-8 max-w-6xl">
@@ -209,43 +241,85 @@ export function MatchingTab({ mandats, clients, deals, reload, initialMandatId, 
         </select>
       </div>
 
-      {mandat && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="w-4 h-4 text-sage-dark" />
-            <h2 className="font-display text-xl font-semibold text-stone-900">Acquéreurs compatibles</h2>
-            <span className="text-sm text-stone-500">({matches.filter(m => m.score > 0).length} matches)</span>
-          </div>
-          {matches.filter(m => m.score > 0).map(({ client, score, alreadyLinked }) => (
-            <div key={client.id} className="bg-white rounded-xl p-5 shadow-luxe border border-stone-200 flex items-center gap-4">
-              <div className={`w-16 h-16 rounded-xl flex flex-col items-center justify-center flex-shrink-0 ${
-                score >= 80 ? 'bg-emerald-100 text-emerald-700' : score >= 50 ? 'bg-sage-100 text-sage-dark' : 'bg-cream-100 text-ink/80'
-              }`}>
-                <div className="font-display text-2xl font-bold">{score}</div>
-                <div className="text-[9px] uppercase font-medium">Score</div>
+      {loadingContacts && (
+        <div className="text-center py-12 text-stone-500 text-sm">
+          <Loader2 className="w-5 h-5 animate-spin inline mr-2" />
+          Chargement des contacts...
+        </div>
+      )}
+
+      {!loadingContacts && mandat && (
+        <>
+          {/* Stats de filtrage */}
+          {filteredOut > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-xs text-amber-900">
+              <AlertTriangle className="w-4 h-4 inline mr-1.5" />
+              {filteredOut} contact{filteredOut > 1 ? 's exclus' : ' exclu'} du matching (posture vendeur, qualité mauvais, ou inactif/perdu)
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="w-4 h-4 text-sage-dark" />
+              <h2 className="font-display text-xl font-semibold text-stone-900">Acquéreurs compatibles</h2>
+              <span className="text-sm text-stone-500">({matches.length} matches sur {eligibleClients.length} acheteurs éligibles)</span>
+            </div>
+
+            {matches.map(({ client, score, raisons, aQualifier, alreadyLinked }) => (
+              <div key={client.id} className={`bg-white rounded-xl p-5 shadow-luxe border flex items-center gap-4 ${aQualifier ? 'border-amber-200' : 'border-stone-200'}`}>
+                <div className={`w-16 h-16 rounded-xl flex flex-col items-center justify-center flex-shrink-0 ${
+                  score >= 80 ? 'bg-emerald-100 text-emerald-700' : score >= 50 ? 'bg-sage-100 text-sage-dark' : 'bg-cream-100 text-ink/80'
+                }`}>
+                  <div className="font-display text-2xl font-bold">{score}</div>
+                  <div className="text-[9px] uppercase font-medium">Score</div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="font-display text-lg font-semibold text-stone-900">{client.prenom} {client.nom}</div>
+                    {aQualifier && (
+                      <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full font-medium border border-amber-200">
+                        ⚠ À qualifier
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm text-stone-600 mb-2">{client.societe}</div>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {client.typologie && <span className="text-xs px-2 py-0.5 bg-cream-100 text-ink rounded-full">{client.typologie}</span>}
+                    {(client.budgetMin || client.budgetMax) && (
+                      <span className="text-xs px-2 py-0.5 bg-sage-50 text-sage-dark rounded-full">
+                        {formatPrixCompact(client.budgetMin)} - {formatPrixCompact(client.budgetMax)}
+                      </span>
+                    )}
+                    <MaturiteBadge maturite={client.maturite} />
+                  </div>
+                  {raisons && raisons.length > 0 && (
+                    <div className="text-[11px] text-stone-500 italic">
+                      {raisons.slice(0, 3).join(' · ')}
+                    </div>
+                  )}
+                </div>
+                {alreadyLinked ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cream-100 text-ink/80 rounded-lg text-sm flex-shrink-0">
+                    <CheckCircle2 className="w-4 h-4" /> Déjà lié
+                  </span>
+                ) : (
+                  <button onClick={() => addMatch(client.id)} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-stone-800 flex items-center gap-1.5 flex-shrink-0">
+                    <Plus className="w-4 h-4" /> Rapprocher
+                  </button>
+                )}
               </div>
-              <div className="flex-1">
-                <div className="font-display text-lg font-semibold text-stone-900">{client.prenom} {client.nom}</div>
-                <div className="text-sm text-stone-600 mb-2">{client.societe}</div>
-                <div className="flex flex-wrap gap-1.5">
-                  <span className="text-xs px-2 py-0.5 bg-cream-100 text-ink rounded-full">{client.typologie}</span>
-                  <span className="text-xs px-2 py-0.5 bg-sage-50 text-sage-dark rounded-full">{formatPrixCompact(client.budgetMin)} - {formatPrixCompact(client.budgetMax)}</span>
-                  <MaturiteBadge maturite={client.maturite} />
+            ))}
+
+            {matches.length === 0 && (
+              <div className="text-center py-12 text-stone-500 text-sm bg-white rounded-xl border border-stone-200">
+                Aucun acquéreur compatible avec les critères de ce mandat.
+                <div className="text-xs mt-2 text-stone-400">
+                  ({eligibleClients.length} acheteurs éligibles testés, aucun ne correspond aux critères marché/budget/type/zone)
                 </div>
               </div>
-              {alreadyLinked ? (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cream-100 text-ink/80 rounded-lg text-sm"><CheckCircle2 className="w-4 h-4" /> Déjà lié</span>
-              ) : (
-                <button onClick={() => addMatch(client.id)} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-stone-800 flex items-center gap-1.5">
-                  <Plus className="w-4 h-4" /> Rapprocher
-                </button>
-              )}
-            </div>
-          ))}
-          {matches.filter(m => m.score > 0).length === 0 && (
-            <div className="text-center py-12 text-stone-500 text-sm">Aucun acquéreur compatible</div>
-          )}
-        </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
