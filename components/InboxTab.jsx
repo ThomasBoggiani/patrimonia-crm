@@ -2,50 +2,52 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Mail, RefreshCw, Search, Inbox, User as UserIcon, Paperclip, Reply, ExternalLink, AlertCircle, X, UserPlus, Link2, ArrowLeft, Trash2, Loader2 } from 'lucide-react';
+import { Mail, RefreshCw, Search, Inbox, User as UserIcon, Paperclip, Reply, ExternalLink, AlertCircle, X, UserPlus, Link2, ArrowLeft, Trash2, Loader2, Eye, EyeOff, Briefcase, Bell, Building2, Receipt, Newspaper, HelpCircle, Sparkles, Undo2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import EmailPreviewModal from './EmailPreviewModal';
 import InboxClientActionsModal from './InboxClientActionsModal';
 
-const FILTERS = [
+const STATUT_FILTERS = [
   { id: 'all', label: 'Tous' },
   { id: 'unread', label: 'Non-lus' },
   { id: 'today', label: "Aujourd'hui" },
   { id: 'crm', label: 'Clients CRM' }
 ];
 
-// Configuration des catégories : couleur + label
 const CATEGORIE_CONFIG = {
-  business:     { label: 'Business',     color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-  notification: { label: 'Notification', color: 'bg-stone-100 text-stone-600 border-stone-200' },
-  internal:     { label: 'Interne',      color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  transaction:  { label: 'Transaction',  color: 'bg-amber-100 text-amber-700 border-amber-200' },
-  newsletter:   { label: 'Newsletter',   color: 'bg-purple-100 text-purple-700 border-purple-200' },
-  autre:        { label: 'Autre',        color: 'bg-stone-100 text-stone-500 border-stone-200' }
+  business:     { label: 'Business',     color: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: Briefcase },
+  notification: { label: 'Notification', color: 'bg-stone-100 text-stone-600 border-stone-200',       icon: Bell },
+  internal:     { label: 'Interne',      color: 'bg-blue-100 text-blue-700 border-blue-200',          icon: Building2 },
+  transaction:  { label: 'Transaction',  color: 'bg-amber-100 text-amber-700 border-amber-200',       icon: Receipt },
+  newsletter:   { label: 'Newsletter',   color: 'bg-purple-100 text-purple-700 border-purple-200',    icon: Newspaper },
+  autre:        { label: 'Autre',        color: 'bg-stone-100 text-stone-500 border-stone-200',       icon: HelpCircle }
 };
 
-const CATEGORIE_FILTERS = [
-  { id: 'all',          label: 'Toutes catégories' },
-  { id: 'business',     label: '💼 Business' },
-  { id: 'internal',     label: '🏢 Interne' },
-  { id: 'transaction',  label: '💰 Transaction' },
-  { id: 'notification', label: '🔔 Notification' },
-  { id: 'newsletter',   label: '📰 Newsletter' },
-  { id: 'autre',        label: '❓ Autre' }
+const CATEGORIE_TABS = [
+  { id: 'all',          label: 'Tous',         icon: Mail },
+  { id: 'business',     label: 'Business',     icon: Briefcase },
+  { id: 'internal',     label: 'Interne',      icon: Building2 },
+  { id: 'transaction',  label: 'Transaction',  icon: Receipt },
+  { id: 'notification', label: 'Notification', icon: Bell },
+  { id: 'newsletter',   label: 'Newsletter',   icon: Newspaper },
+  { id: 'autre',        label: 'Autre',        icon: HelpCircle }
 ];
 
 const POLL_INTERVAL_MS = 60_000;
+const SWIPE_THRESHOLD = 80;
+const TOAST_DURATION = 5000;
 
 export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [filter, setFilter] = useState('all');
+  const [statutFilter, setStatutFilter] = useState('all');
   const [categorieFilter, setCategorieFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [undoToast, setUndoToast] = useState(null);
 
   const [replyModalOpen, setReplyModalOpen] = useState(false);
   const [replyDraft, setReplyDraft] = useState(null);
@@ -79,7 +81,7 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('Session expirée.');
 
-      const apiFilter = filter === 'crm' ? 'all' : filter;
+      const apiFilter = statutFilter === 'crm' ? 'all' : statutFilter;
 
       const res = await fetch(`/api/microsoft/inbox?limit=50&filter=${apiFilter}`, {
         headers: { 'Authorization': `Bearer ${session.access_token}` }
@@ -95,7 +97,6 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
       setMessages(json.messages || []);
       onUnreadCountChange?.(json.unread_count || 0);
 
-      // Déclenche la classification IA pour les mails non encore classés
       if (Array.isArray(json.to_classify) && json.to_classify.length > 0) {
         fetch('/api/microsoft/inbox/classify', {
           method: 'POST',
@@ -118,7 +119,7 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
       setLoading(false);
       setRefreshing(false);
     }
-  }, [filter, onUnreadCountChange]);
+  }, [statutFilter, onUnreadCountChange]);
 
   useEffect(() => {
     load();
@@ -129,8 +130,6 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
     return () => clearInterval(pollRef.current);
   }, [load]);
 
-  // Archivage automatique : pour chaque chargement, on identifie les mails business+internal
-  // non encore archivés et on les envoie à /api/microsoft/inbox/archive-and-extract
   useEffect(() => {
     if (!messages || messages.length === 0) return;
 
@@ -165,7 +164,6 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
         });
         const json = await res.json();
         console.log('[Inbox] Archivage terminé:', json);
-        // Recharge l'inbox pour voir les nouveaux badges
         if (json.archived > 0 || json.todosTotal > 0) {
           load(true);
         }
@@ -175,12 +173,21 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
     })();
   }, [messages, load]);
 
+  const categorieCounts = useMemo(() => {
+    const counts = { all: messages.length };
+    for (const tab of CATEGORIE_TABS) {
+      if (tab.id !== 'all') {
+        counts[tab.id] = messages.filter(m => m.categorie === tab.id).length;
+      }
+    }
+    return counts;
+  }, [messages]);
+
   const filteredMessages = useMemo(() => {
     let list = messages;
-    if (filter === 'crm') {
+    if (statutFilter === 'crm') {
       list = list.filter(m => m.crm_client);
     }
-    // Filtre catégorie (côté client pour éviter les rechargements)
     if (categorieFilter !== 'all') {
       list = list.filter(m => m.categorie === categorieFilter);
     }
@@ -194,7 +201,7 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
       );
     }
     return list;
-  }, [messages, filter, categorieFilter, search]);
+  }, [messages, statutFilter, categorieFilter, search]);
 
   const selected = useMemo(
     () => messages.find(m => m.id === selectedId),
@@ -204,8 +211,13 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
   async function handleSelect(msg) {
     setSelectedId(msg.id);
     if (msg.isRead) return;
-    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isRead: true } : m));
-    onUnreadCountChange?.(messages.filter(m => !m.isRead && m.id !== msg.id).length);
+    await markAsRead(msg.id, true);
+  }
+
+  async function markAsRead(messageId, isRead) {
+    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, isRead } : m));
+    const newUnread = messages.filter(m => !m.isRead && m.id !== messageId).length + (isRead ? 0 : 1);
+    onUnreadCountChange?.(newUnread);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       await fetch('/api/microsoft/inbox', {
@@ -214,11 +226,15 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`
         },
-        body: JSON.stringify({ messageId: msg.id, isRead: true })
+        body: JSON.stringify({ messageId, isRead })
       });
     } catch (e) {
       console.warn('[Inbox] mark as read KO:', e.message);
     }
+  }
+
+  function handleMarkUnread(msg) {
+    markAsRead(msg.id, false);
   }
 
   function handleReply(msg) {
@@ -236,10 +252,24 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
 
   async function handleDelete(msg) {
     if (!msg) return;
-    const confirmMsg = `Supprimer définitivement cet email ?\n\n"${msg.subject || '(sans objet)'}"\n\nLe mail sera déplacé dans la corbeille Outlook.`;
-    if (!window.confirm(confirmMsg)) return;
 
+    if (msg.categorie === 'business') {
+      const ok = window.confirm(
+        `⚠️ ATTENTION : Cet email est classé BUSINESS.\n\n"${msg.subject || '(sans objet)'}"\n\nDe : ${msg.from?.name || msg.from?.address}\n\nEs-tu sûr de vouloir le supprimer ? Cette action ne peut pas être annulée facilement.`
+      );
+      if (!ok) return;
+      await doDelete(msg, false);
+      return;
+    }
+
+    await doDelete(msg, true);
+  }
+
+  async function doDelete(msg, withUndo) {
     setDeleting(true);
+    setMessages(prev => prev.filter(m => m.id !== msg.id));
+    if (selectedId === msg.id) setSelectedId(null);
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(`/api/microsoft/inbox?messageId=${encodeURIComponent(msg.id)}`, {
@@ -250,20 +280,33 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
         const json = await res.json().catch(() => ({}));
         throw new Error(json.error || `Erreur ${res.status}`);
       }
-      // Retire le mail de la liste locale
-      setMessages(prev => prev.filter(m => m.id !== msg.id));
-      setSelectedId(null);
+
+      if (withUndo) {
+        if (undoToast?.timeoutId) clearTimeout(undoToast.timeoutId);
+        const timeoutId = setTimeout(() => setUndoToast(null), TOAST_DURATION);
+        setUndoToast({ msg, timeoutId });
+      }
     } catch (e) {
       console.error('[Inbox] Delete error:', e);
+      setMessages(prev => [msg, ...prev].sort((a, b) =>
+        new Date(b.receivedDateTime || 0) - new Date(a.receivedDateTime || 0)
+      ));
       alert('Erreur de suppression : ' + e.message);
     } finally {
       setDeleting(false);
     }
   }
 
+  function handleUndo() {
+    if (undoToast?.timeoutId) clearTimeout(undoToast.timeoutId);
+    setUndoToast(null);
+    alert(
+      'Pour récupérer cet email, va dans Outlook → dossier "Éléments supprimés" et déplace-le vers la boîte de réception.\n\nIl réapparaîtra ici au prochain rafraîchissement.'
+    );
+  }
+
   return (
     <div className="flex flex-col h-full p-3 md:p-6">
-      {/* Header — caché sur mobile quand un email est ouvert */}
       <div className={`${selected ? 'hidden md:flex' : 'flex'} items-center justify-between mb-3 md:mb-4`}>
         <div className="flex items-center gap-2">
           <Inbox className="w-5 h-5 md:w-6 md:h-6 text-stone-700" />
@@ -280,62 +323,68 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
         </button>
       </div>
 
-      {/* Filtres + Recherche — cachés sur mobile quand un email est ouvert */}
-      <div className={`${selected ? 'hidden md:flex' : 'flex'} flex-col gap-2 sm:gap-3 mb-3 md:mb-4`}>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-          <div className="flex gap-1 bg-stone-100 p-1 rounded-lg overflow-x-auto scrollbar-thin">
-            {FILTERS.map(f => (
+      {/* Onglets catégories (sticker bar) */}
+      <div className={`${selected ? 'hidden md:block' : 'block'} mb-3`}>
+        <div className="flex gap-1 overflow-x-auto scrollbar-thin pb-1">
+          {CATEGORIE_TABS.map(tab => {
+            const Icon = tab.icon;
+            const count = categorieCounts[tab.id] || 0;
+            const isActive = categorieFilter === tab.id;
+            return (
               <button
-                key={f.id}
-                onClick={() => setFilter(f.id)}
-                className={`px-2.5 md:px-3 py-1.5 text-xs rounded-md transition whitespace-nowrap ${
-                  filter === f.id
-                    ? 'bg-white text-stone-900 shadow-sm font-medium'
-                    : 'text-stone-600 hover:text-stone-900'
+                key={tab.id}
+                onClick={() => setCategorieFilter(tab.id)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs whitespace-nowrap transition border ${
+                  isActive
+                    ? 'bg-stone-900 text-white border-stone-900 font-medium shadow-sm'
+                    : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'
                 }`}
               >
-                {f.label}
+                <Icon className="w-3.5 h-3.5" />
+                <span>{tab.label}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                  isActive ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
+                }`}>
+                  {count}
+                </span>
               </button>
-            ))}
-          </div>
+            );
+          })}
+        </div>
+      </div>
 
-          <div className="relative flex-1 sm:max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher..."
-              className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-stone-400 hover:text-stone-600"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
+      <div className={`${selected ? 'hidden md:flex' : 'flex'} flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-3 md:mb-4`}>
+        <div className="flex gap-1 bg-stone-100 p-1 rounded-lg overflow-x-auto scrollbar-thin">
+          {STATUT_FILTERS.map(f => (
+            <button
+              key={f.id}
+              onClick={() => setStatutFilter(f.id)}
+              className={`px-2.5 md:px-3 py-1.5 text-xs rounded-md transition whitespace-nowrap ${
+                statutFilter === f.id
+                  ? 'bg-white text-stone-900 shadow-sm font-medium'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
 
-        {/* Filtre catégorie (sur sa propre ligne) */}
-        <div className="flex items-center gap-2">
-          <select
-            value={categorieFilter}
-            onChange={(e) => setCategorieFilter(e.target.value)}
-            className="text-xs px-3 py-1.5 bg-white border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400"
-          >
-            {CATEGORIE_FILTERS.map(c => (
-              <option key={c.id} value={c.id}>{c.label}</option>
-            ))}
-          </select>
-          {categorieFilter !== 'all' && (
+        <div className="relative flex-1 sm:max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher..."
+            className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          />
+          {search && (
             <button
-              onClick={() => setCategorieFilter('all')}
-              className="text-xs text-stone-500 hover:text-stone-700 underline"
+              onClick={() => setSearch('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-stone-400 hover:text-stone-600"
             >
-              Réinitialiser
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
@@ -348,9 +397,7 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
         </div>
       )}
 
-      {/* Maître / Détail */}
       <div className="flex-1 grid grid-cols-1 md:grid-cols-[400px_1fr] gap-4 overflow-hidden min-h-0">
-        {/* LISTE — cachée sur mobile quand un email est ouvert */}
         <div className={`${selected ? 'hidden md:block' : 'block'} bg-white border border-stone-200 rounded-xl overflow-y-auto`}>
           {loading && (
             <div className="p-8 text-center text-stone-400 text-sm">Chargement...</div>
@@ -359,21 +406,22 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
           {!loading && filteredMessages.length === 0 && (
             <div className="p-8 text-center text-stone-400 text-sm">
               <Mail className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              Aucun email.
+              Aucun email dans cette catégorie.
             </div>
           )}
 
           {!loading && filteredMessages.map(msg => (
-            <MessageRow
+            <SwipeableMessageRow
               key={msg.id}
               msg={msg}
               isSelected={msg.id === selectedId}
               onClick={() => handleSelect(msg)}
+              onMarkUnread={() => handleMarkUnread(msg)}
+              onDelete={() => handleDelete(msg)}
             />
           ))}
         </div>
 
-        {/* DÉTAIL — plein écran sur mobile, panel à droite sur desktop */}
         <div className={`${selected ? 'block' : 'hidden md:block'} bg-white border border-stone-200 rounded-xl overflow-y-auto`}>
           {!selected ? (
             <div className="h-full flex items-center justify-center text-stone-400 text-sm p-6">
@@ -393,14 +441,26 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
         </div>
       </div>
 
+      {/* Toast d'annulation suppression */}
+      {undoToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-stone-900 text-white px-4 py-3 rounded-xl shadow-xl border border-stone-700">
+          <span className="text-sm">Email supprimé</span>
+          <button
+            onClick={handleUndo}
+            className="flex items-center gap-1.5 px-3 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition"
+          >
+            <Undo2 className="w-3.5 h-3.5" />
+            Annuler
+          </button>
+        </div>
+      )}
+
       <EmailPreviewModal
         isOpen={replyModalOpen}
         onClose={() => setReplyModalOpen(false)}
         draft={replyDraft}
         client={replyClient}
-        onSent={() => {
-          setReplyModalOpen(false);
-        }}
+        onSent={() => setReplyModalOpen(false)}
       />
 
       <InboxClientActionsModal
@@ -416,10 +476,6 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
   );
 }
 
-// ==========================================================================
-// MessageRow - une ligne dans la liste
-// ==========================================================================
-
 function CategorieBadge({ categorie }) {
   if (!categorie) return null;
   const config = CATEGORIE_CONFIG[categorie] || CATEGORIE_CONFIG.autre;
@@ -430,7 +486,13 @@ function CategorieBadge({ categorie }) {
   );
 }
 
-function MessageRow({ msg, isSelected, onClick }) {
+function SwipeableMessageRow({ msg, isSelected, onClick, onMarkUnread, onDelete }) {
+  const [translateX, setTranslateX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const touchStartX = useRef(0);
+  const touchCurrentX = useRef(0);
+  const hasMoved = useRef(false);
+
   const date = msg.receivedDateTime ? new Date(msg.receivedDateTime) : null;
   const today = new Date();
   const isToday = date && date.toDateString() === today.toDateString();
@@ -440,67 +502,136 @@ function MessageRow({ msg, isSelected, onClick }) {
       ? date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
       : date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
 
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchCurrentX.current = touchStartX.current;
+    hasMoved.current = false;
+    setIsDragging(true);
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDragging) return;
+    touchCurrentX.current = e.touches[0].clientX;
+    const delta = touchCurrentX.current - touchStartX.current;
+    if (Math.abs(delta) > 5) hasMoved.current = true;
+    const clamped = Math.max(-120, Math.min(120, delta));
+    setTranslateX(clamped);
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+    const delta = touchCurrentX.current - touchStartX.current;
+    if (delta > SWIPE_THRESHOLD) {
+      setTranslateX(0);
+      onDelete();
+    } else if (delta < -SWIPE_THRESHOLD) {
+      setTranslateX(0);
+      onMarkUnread();
+    } else {
+      setTranslateX(0);
+    }
+  };
+
+  const handleClick = (e) => {
+    if (hasMoved.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    onClick();
+  };
+
   return (
-    <div
-      onClick={onClick}
-      className={`px-3 py-3 md:py-2.5 border-b border-stone-100 cursor-pointer transition active:bg-purple-100 ${
-        isSelected ? 'md:bg-purple-50' : 'hover:bg-stone-50'
-      } ${!msg.isRead ? 'border-l-2 border-l-purple-500' : ''}`}
-    >
-      <div className="flex items-start gap-2">
-        {!msg.isRead && (
-          <span className="mt-1.5 w-2 h-2 rounded-full bg-purple-500 flex-shrink-0" />
-        )}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2 mb-0.5">
-            <div className={`text-sm truncate ${!msg.isRead ? 'font-semibold text-stone-900' : 'text-stone-700'}`}>
-              {msg.from?.name || msg.from?.address || '(inconnu)'}
+    <div className="relative overflow-hidden border-b border-stone-100">
+      <div className="absolute inset-0 flex items-center justify-between px-4 pointer-events-none">
+        <div className={`flex items-center gap-2 text-red-600 transition-opacity ${translateX > 20 ? 'opacity-100' : 'opacity-0'}`}>
+          <Trash2 className="w-5 h-5" />
+          <span className="text-xs font-medium">Supprimer</span>
+        </div>
+        <div className={`flex items-center gap-2 text-purple-600 ml-auto transition-opacity ${translateX < -20 ? 'opacity-100' : 'opacity-0'}`}>
+          <span className="text-xs font-medium">Non lu</span>
+          <EyeOff className="w-5 h-5" />
+        </div>
+      </div>
+
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onClick={handleClick}
+        style={{ transform: `translateX(${translateX}px)`, transition: isDragging ? 'none' : 'transform 0.2s ease' }}
+        className={`relative bg-white px-3 py-3 md:py-2.5 cursor-pointer transition-colors active:bg-purple-100 group ${
+          isSelected ? 'md:bg-purple-50' : 'hover:bg-stone-50'
+        } ${!msg.isRead ? 'border-l-2 border-l-purple-500' : ''}`}
+      >
+        <div className="flex items-start gap-2">
+          {!msg.isRead && (
+            <span className="mt-1.5 w-2 h-2 rounded-full bg-purple-500 flex-shrink-0" />
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2 mb-0.5">
+              <div className={`text-sm truncate ${!msg.isRead ? 'font-semibold text-stone-900' : 'text-stone-700'}`}>
+                {msg.from?.name || msg.from?.address || '(inconnu)'}
+              </div>
+              <div className="text-xs text-stone-400 flex-shrink-0">{dateLabel}</div>
             </div>
-            <div className="text-xs text-stone-400 flex-shrink-0">{dateLabel}</div>
+            <div className={`text-sm truncate ${!msg.isRead ? 'font-medium text-stone-900' : 'text-stone-600'}`}>
+              {msg.subject || '(sans objet)'}
+            </div>
+            <div className="text-xs text-stone-500 truncate mt-0.5">
+              {msg.bodyPreview}
+            </div>
+            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+              <CategorieBadge categorie={msg.categorie} />
+              {msg.todos_count > 0 && (
+                <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded-full border border-amber-200 flex items-center gap-0.5 font-medium">
+                  ✨ {msg.todos_count} tâche{msg.todos_count > 1 ? 's' : ''}
+                </span>
+              )}
+              {msg.crm_client ? (
+                <span className="text-[10px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-full flex items-center gap-1 border border-emerald-200">
+                  <UserIcon className="w-2.5 h-2.5" />
+                  {msg.crm_client.prenom} {msg.crm_client.nom}
+                </span>
+              ) : (
+                <span className="text-[10px] px-1.5 py-0.5 bg-stone-50 text-stone-500 rounded-full border border-stone-200">
+                  Pas dans le CRM
+                </span>
+              )}
+              {msg.hasAttachments && (
+                <Paperclip className="w-3 h-3 text-stone-400" />
+              )}
+            </div>
           </div>
-          <div className={`text-sm truncate ${!msg.isRead ? 'font-medium text-stone-900' : 'text-stone-600'}`}>
-            {msg.subject || '(sans objet)'}
-          </div>
-          <div className="text-xs text-stone-500 truncate mt-0.5">
-            {msg.bodyPreview}
-          </div>
-          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-            <CategorieBadge categorie={msg.categorie} />
-            {msg.todos_count > 0 && (
-              <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded-full border border-amber-200 flex items-center gap-0.5 font-medium">
-                ✨ {msg.todos_count} tâche{msg.todos_count > 1 ? 's' : ''}
-              </span>
-            )}
-            {msg.crm_client ? (
-              <span className="text-[10px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-full flex items-center gap-1 border border-emerald-200">
-                <UserIcon className="w-2.5 h-2.5" />
-                {msg.crm_client.prenom} {msg.crm_client.nom}
-              </span>
-            ) : (
-              <span className="text-[10px] px-1.5 py-0.5 bg-stone-50 text-stone-500 rounded-full border border-stone-200">
-                Pas dans le CRM
-              </span>
-            )}
-            {msg.hasAttachments && (
-              <Paperclip className="w-3 h-3 text-stone-400" />
-            )}
-          </div>
+        </div>
+
+        {/* Boutons hover desktop */}
+        <div className="hidden md:flex absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity gap-1 bg-white border border-stone-200 rounded-lg shadow-sm p-0.5">
+          <button
+            onClick={(e) => { e.stopPropagation(); onMarkUnread(); }}
+            title="Marquer comme non lu"
+            className="p-1.5 hover:bg-purple-50 rounded text-purple-600"
+          >
+            <EyeOff className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            title="Supprimer"
+            className="p-1.5 hover:bg-red-50 rounded text-red-600"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-// ==========================================================================
-// MessageDetail - le panneau de droite
-// ==========================================================================
-
 function MessageDetail({ msg, onReply, onDelete, onCreateOrLink, onOpenClient, onBack, deleting }) {
   const date = msg.receivedDateTime ? new Date(msg.receivedDateTime).toLocaleString('fr-FR') : '';
 
   return (
     <div className="flex flex-col h-full">
-      {/* Bouton retour mobile uniquement */}
       <div className="md:hidden sticky top-0 z-10 bg-white border-b border-stone-200 p-3 flex items-center gap-2">
         <button
           onClick={onBack}
@@ -565,7 +696,6 @@ function MessageDetail({ msg, onReply, onDelete, onCreateOrLink, onOpenClient, o
         </div>
       </div>
 
-      {/* Actions sticky en bas */}
       <div className="sticky bottom-0 bg-white border-t border-stone-200 p-3 md:p-4 flex gap-2 flex-wrap">
         <button
           onClick={onReply}
@@ -590,7 +720,7 @@ function MessageDetail({ msg, onReply, onDelete, onCreateOrLink, onOpenClient, o
           onClick={onDelete}
           disabled={deleting}
           className="flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-red-200 text-red-600 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50 ml-auto"
-          title="Supprimer cet email (vers la corbeille Outlook)"
+          title="Supprimer cet email"
         >
           {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
           <span className="hidden sm:inline">Supprimer</span>
