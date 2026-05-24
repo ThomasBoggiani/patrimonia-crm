@@ -175,6 +175,32 @@ export function OwnerSelector({ mandat, client, entity = 'mandat', reload }) {
 // ─────────────────────────────────────────────────────────────────
 
 export function ClientDetail({ client, onBack, onEdit, mandats, deals, interactions, reload, onOpenMandat }) {
+  // Charge les données enrichies du contact (mandats liés, autres liens, etc.)
+  const [contactData, setContactData] = useState(null);
+  const [loadingContact, setLoadingContact] = useState(true);
+
+  async function loadContact() {
+    if (!client?.contactId && !client?.contact_id) {
+      setLoadingContact(false);
+      return;
+    }
+    const contactId = client.contactId || client.contact_id;
+    setLoadingContact(true);
+    try {
+      const res = await fetch(`/api/contacts/${contactId}`);
+      const data = await res.json();
+      setContactData(data);
+    } catch (e) {
+      console.error('[loadContact]', e);
+    } finally {
+      setLoadingContact(false);
+    }
+  }
+
+  useEffect(() => {
+    loadContact();
+  }, [client?.id]);
+
   const clientDeals = deals.filter(d => d.clientId === client.id);
   const clientInteractions = (interactions || []).filter(i => i.clientId === client.id);
 
@@ -183,15 +209,34 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
     return matchMandatsForClient(client, mandats || []);
   }, [client, mandats]);
 
+  // Agrège les rôles depuis les données enrichies
+  const contactRoles = useMemo(() => {
+    if (!contactData) return ['acquereur']; // par défaut (c'est un acquéreur car on a son client)
+    const roles = new Set(['acquereur']); // on est ici car le contact a un client lié
+    (contactData.mandats || []).forEach(mc => {
+      if (mc.role === 'mandant' || mc.role === 'proprietaire') roles.add('mandant');
+      else if (mc.role === 'apporteur') roles.add('apporteur');
+      else if (mc.role === 'notaire_vendeur' || mc.role === 'notaire_acquereur') roles.add('notaire');
+    });
+    if (contactData.contact?.categorie === 'agence') roles.add('agence');
+    return Array.from(roles);
+  }, [contactData]);
+
+  // Mandats par rôle (pour les sections)
+  const mandatsAsMandant = (contactData?.mandats || []).filter(mc => mc.role === 'mandant' || mc.role === 'proprietaire');
+  const mandatsAsApporteur = (contactData?.mandats || []).filter(mc => mc.role === 'apporteur');
+  const mandatsAsNotaire = (contactData?.mandats || []).filter(mc => mc.role === 'notaire_vendeur' || mc.role === 'notaire_acquereur');
+
   return (
     <div className="p-8 max-w-6xl">
       <button onClick={onBack} className="text-sm text-stone-500 hover:text-stone-900 mb-4 flex items-center gap-1">
         <ArrowLeft className="w-4 h-4" /> Retour à la liste
       </button>
 
+      {/* HEADER */}
       <div className="flex items-start justify-between mb-6 gap-4">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 mb-1 flex-wrap">
+          <div className="flex items-center gap-3 mb-2 flex-wrap">
             <h1 className="font-display text-3xl font-semibold text-stone-900">
               {client.prenom} {client.nom}
             </h1>
@@ -199,22 +244,34 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
               <span className="text-stone-500 text-lg">· {client.societe}</span>
             )}
           </div>
-          <div className="flex items-center gap-3 text-sm text-stone-500 flex-wrap">
-            {client.typologie && <span className="px-2 py-0.5 bg-sage-50 text-sage-darker rounded-full text-xs border border-sage-light">{client.typologie}</span>}
-            {client.maturite && <MaturiteBadge maturite={client.maturite} />}
-            {client.statut && <span className="text-xs">{client.statut}</span>}
+          {/* Badges de tous les rôles */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {contactRoles.map(r => <RoleBadge key={r} role={r} />)}
+            {client.typologie && (
+              <span className="text-xs px-2 py-0.5 bg-stone-100 text-stone-700 rounded-full">{client.typologie}</span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <OwnerSelector client={client} entity="client" reload={reload} />
+          <button
+            onClick={() => alert('Ajout de rôle : à venir au prochain commit (3c)')}
+            className="flex items-center gap-2 px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded-lg text-sm hover:bg-cream-50"
+          >
+            <Plus className="w-4 h-4" /> Ajouter un rôle
+          </button>
           <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
             <Edit2 className="w-4 h-4" /> Modifier
           </button>
         </div>
       </div>
 
+      {/* ═══ COORDONNÉES (toujours visible) ═══ */}
       <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
-        <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Coordonnées</h2>
+        <div className="flex items-center gap-2 mb-4">
+          <UserIcon className="w-4 h-4 text-stone-500" />
+          <h2 className="font-display text-lg font-semibold text-stone-900">Coordonnées</h2>
+        </div>
         <div className="grid grid-cols-2 gap-4">
           <DetailItem label="Email" value={client.email || '—'} />
           <DetailItem label="Téléphone" value={client.tel || '—'} />
@@ -223,51 +280,147 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
         </div>
       </div>
 
-      {(client.budgetMin || client.budgetMax || (client.zones || []).length > 0 || (client.typologiesRecherchees || []).length > 0) && (
-        <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
-          <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Critères de recherche</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <DetailItem label="Budget" value={
-              client.budgetMin || client.budgetMax
-                ? `${formatPrixCompact(client.budgetMin || 0)} → ${formatPrixCompact(client.budgetMax || 0)}`
-                : '—'
-            } />
-            <DetailItem label="Surface" value={
-              client.surfaceMin || client.surfaceMax
-                ? `${client.surfaceMin || '?'}m² → ${client.surfaceMax || '?'}m²`
-                : '—'
-            } />
-            {(client.typologiesRecherchees || []).length > 0 && (
-              <div className="col-span-2">
-                <div className="text-xs uppercase tracking-wide text-stone-500 mb-2">Typologies recherchées</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {(client.typologiesRecherchees || []).map((t, i) => (
-                    <span key={i} className="text-xs px-2 py-1 bg-sage-50 text-sage-darker rounded-full border border-sage-light">{t}</span>
-                  ))}
-                </div>
+      {/* ═══ SECTION ACQUÉREUR ═══ */}
+      {contactRoles.includes('acquereur') && (
+        <div className="bg-emerald-50/30 rounded-xl p-6 border border-emerald-200 mb-4">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <h2 className="font-display text-lg font-semibold text-emerald-900">Profil Acquéreur</h2>
+          </div>
+
+          {(client.budgetMin || client.budgetMax || (client.zones || []).length > 0 || (client.typologiesRecherchees || []).length > 0) && (
+            <div className="bg-white rounded-lg p-4 border border-emerald-200/50 mb-3">
+              <div className="text-xs uppercase tracking-wide text-emerald-700 mb-3 font-semibold">Critères de recherche</div>
+              <div className="grid grid-cols-2 gap-3">
+                <DetailItem label="Budget" value={
+                  client.budgetMin || client.budgetMax
+                    ? `${formatPrixCompact(client.budgetMin || 0)} → ${formatPrixCompact(client.budgetMax || 0)}`
+                    : '—'
+                } />
+                <DetailItem label="Surface" value={
+                  client.surfaceMin || client.surfaceMax
+                    ? `${client.surfaceMin || '?'}m² → ${client.surfaceMax || '?'}m²`
+                    : '—'
+                } />
+                {(client.typologiesRecherchees || []).length > 0 && (
+                  <div className="col-span-2">
+                    <div className="text-xs uppercase tracking-wide text-stone-500 mb-2">Typologies</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(client.typologiesRecherchees || []).map((t, i) => (
+                        <span key={i} className="text-xs px-2 py-1 bg-emerald-100 text-emerald-800 rounded-full">{t}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(client.zones || []).length > 0 && (
+                  <div className="col-span-2">
+                    <div className="text-xs uppercase tracking-wide text-stone-500 mb-2">Zones</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(client.zones || []).map((z, i) => (
+                        <span key={i} className="text-xs px-2 py-1 bg-stone-100 text-stone-700 rounded-full">{z}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-            {(client.zones || []).length > 0 && (
-              <div className="col-span-2">
-                <div className="text-xs uppercase tracking-wide text-stone-500 mb-2">Zones</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {(client.zones || []).map((z, i) => (
-                    <span key={i} className="text-xs px-2 py-1 bg-stone-100 text-stone-700 rounded-full">{z}</span>
-                  ))}
-                </div>
-              </div>
-            )}
+            </div>
+          )}
+
+          <div className="bg-white rounded-lg border border-emerald-200/50">
+            <ClientMatches client={client} mandats={mandats} interactions={interactions} onOpenMandat={onOpenMandat} reload={reload} />
           </div>
         </div>
       )}
 
-      <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
-        <ClientMatches client={client} mandats={mandats} interactions={interactions} onOpenMandat={onOpenMandat} reload={reload} />
-      </div>
+      {/* ═══ SECTION MANDANT ═══ */}
+      {contactRoles.includes('mandant') && mandatsAsMandant.length > 0 && (
+        <div className="bg-blue-50/30 rounded-xl p-6 border border-blue-200 mb-4">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+            <h2 className="font-display text-lg font-semibold text-blue-900">Mandats portés (Mandant)</h2>
+          </div>
+          <div className="space-y-2">
+            {mandatsAsMandant.map(mc => (
+              <button
+                key={mc.id}
+                onClick={() => onOpenMandat?.(mc.mandat.id)}
+                className="w-full flex items-center justify-between p-3 bg-white rounded-lg border border-blue-200/50 hover:bg-blue-50 text-left"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-stone-900">{mc.mandat?.nom || 'Mandat inconnu'}</div>
+                  <div className="text-xs text-stone-500">
+                    {mc.mandat?.ville || ''}{mc.est_principal ? ' · Principal' : ''}
+                  </div>
+                </div>
+                {mc.mandat?.statut && (
+                  <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">{mc.mandat.statut}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
+      {/* ═══ SECTION APPORTEUR ═══ */}
+      {contactRoles.includes('apporteur') && mandatsAsApporteur.length > 0 && (
+        <div className="bg-purple-50/30 rounded-xl p-6 border border-purple-200 mb-4">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+            <h2 className="font-display text-lg font-semibold text-purple-900">Mandats apportés</h2>
+          </div>
+          <div className="space-y-2">
+            {mandatsAsApporteur.map(mc => (
+              <button
+                key={mc.id}
+                onClick={() => onOpenMandat?.(mc.mandat.id)}
+                className="w-full flex items-center justify-between p-3 bg-white rounded-lg border border-purple-200/50 hover:bg-purple-50 text-left"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-stone-900">{mc.mandat?.nom || 'Mandat inconnu'}</div>
+                  <div className="text-xs text-stone-500">{mc.mandat?.ville || ''}</div>
+                </div>
+                {mc.mandat?.statut && (
+                  <span className="text-xs px-2 py-1 bg-purple-100 text-purple-800 rounded-full">{mc.mandat.statut}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ SECTION NOTAIRE ═══ */}
+      {contactRoles.includes('notaire') && mandatsAsNotaire.length > 0 && (
+        <div className="bg-amber-50/30 rounded-xl p-6 border border-amber-200 mb-4">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+            <h2 className="font-display text-lg font-semibold text-amber-900">Mandats suivis (Notaire)</h2>
+          </div>
+          <div className="space-y-2">
+            {mandatsAsNotaire.map(mc => (
+              <button
+                key={mc.id}
+                onClick={() => onOpenMandat?.(mc.mandat.id)}
+                className="w-full flex items-center justify-between p-3 bg-white rounded-lg border border-amber-200/50 hover:bg-amber-50 text-left"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-stone-900">{mc.mandat?.nom || 'Mandat inconnu'}</div>
+                  <div className="text-xs text-stone-500">
+                    {mc.role === 'notaire_vendeur' ? 'Côté vendeur' : 'Côté acquéreur'}
+                  </div>
+                </div>
+                {mc.mandat?.statut && (
+                  <span className="text-xs px-2 py-1 bg-amber-100 text-amber-800 rounded-full">{mc.mandat.statut}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ SECTION DEALS (acquéreurs uniquement) ═══ */}
       {clientDeals.length > 0 && (
         <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
-          <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Deals ({clientDeals.length})</h2>
+          <h2 className="font-display text-lg font-semibold text-stone-900 mb-4">Deals ({clientDeals.length})</h2>
           <div className="space-y-2">
             {clientDeals.map(d => {
               const mandat = mandats.find(m => m.id === d.mandatId);
@@ -285,9 +438,10 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
         </div>
       )}
 
+      {/* ═══ INTERACTIONS ═══ */}
       {clientInteractions.length > 0 && (
         <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
-          <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Historique des échanges ({clientInteractions.length})</h2>
+          <h2 className="font-display text-lg font-semibold text-stone-900 mb-4">Historique des échanges ({clientInteractions.length})</h2>
           <div className="space-y-3">
             {clientInteractions.slice(0, 10).map(int => (
               <div key={int.id} className="flex items-start gap-3 pb-3 border-b border-cream-dark last:border-0">
