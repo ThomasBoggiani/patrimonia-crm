@@ -2696,8 +2696,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
               <QuickAddTask
                 lienType="mandat"
                 lienId={mandat.id}
-                defaultAssignee={profile?.prenom && profile?.nom ? 
-                `${profile.prenom} ${profile.nom}` : null}
+                defaultAssignee={null}
                 onAdd={reload}
               />
             </div>
