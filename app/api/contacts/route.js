@@ -84,7 +84,8 @@ export async function GET(request) {
       mandatRoles.forEach(r => {
         // mandat_contacts.role : 'mandant' / 'proprietaire' / 'interlocuteur' / 'acquereur' / 'apporteur' / 'notaire_vendeur' / 'notaire_acquereur'
         if (r === 'mandant' || r === 'proprietaire') roles.add('mandant');
-        else if (r === 'apporteur') roles.add('apporteur');
+        else if (r === 'apporteur_mandat') roles.add('apporteur_mandat');
+        else if (r === 'apporteur_acquereur') roles.add('apporteur_acquereur');
         else if (r === 'notaire_vendeur' || r === 'notaire_acquereur') roles.add('notaire');
         else if (r === 'acquereur') roles.add('acquereur');
       });
