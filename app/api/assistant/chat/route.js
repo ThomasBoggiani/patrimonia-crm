@@ -222,10 +222,6 @@ const tools = [
     type: 'function',
     function: {
       name: 'propose_create_mandat',
-  {
-    type: 'function',
-    function: {
-      name: 'propose_create_mandat',
       description: 'PROPOSE la création d\'un mandat. Ne crée RIEN, Thomas valide avant exécution.',
       parameters: {
         type: 'object',
