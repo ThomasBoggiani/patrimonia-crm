@@ -1,8 +1,8 @@
 'use client';
 
 // components/ClientsView.jsx
-// Extrait depuis CRM.jsx — Commit 1 (extraction sans changement de comportement)
-// Contient : ClientsTab, ClientDetail, ClientForm, OwnerSelector
+// Vue Contacts unifiée (Acquéreurs + Mandants + Apporteurs + Notaires + Agences)
+// Source : table contacts + agrégation roles via /api/contacts
 
 import React, { useState, useEffect, useMemo } from 'react';
 import {
@@ -31,6 +31,31 @@ import AIAssistantChat from './AIAssistantChat';
 import ClientMatches from './ClientMatches';
 import ContactsImportModal from './ContactsImportModal';
 import CascadeSelectMulti from './CascadeSelectMulti';
+
+// ─────────────────────────────────────────────────────────────────
+// Configuration des rôles avec couleurs
+// ─────────────────────────────────────────────────────────────────
+
+const ROLES_CONFIG = {
+  acquereur:  { label: 'Acquéreur',  bg: 'bg-emerald-50',  text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500' },
+  mandant:    { label: 'Mandant',    bg: 'bg-blue-50',     text: 'text-blue-700',    border: 'border-blue-200',    dot: 'bg-blue-500' },
+  apporteur:  { label: 'Apporteur',  bg: 'bg-purple-50',   text: 'text-purple-700',  border: 'border-purple-200',  dot: 'bg-purple-500' },
+  notaire:    { label: 'Notaire',    bg: 'bg-amber-50',    text: 'text-amber-700',   border: 'border-amber-200',   dot: 'bg-amber-500' },
+  agence:     { label: 'Agence',     bg: 'bg-stone-100',   text: 'text-stone-700',   border: 'border-stone-300',   dot: 'bg-stone-500' },
+};
+
+const ROLE_ORDER = ['acquereur', 'mandant', 'apporteur', 'notaire', 'agence'];
+
+function RoleBadge({ role }) {
+  const cfg = ROLES_CONFIG[role];
+  if (!cfg) return null;
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+      {cfg.label}
+    </span>
+  );
+}
 
 // Helper utilisé pour notifier le matching (fire-and-forget)
 async function triggerMatchingBatch({ mandatId, clientId }) {
@@ -75,10 +100,7 @@ export function OwnerSelector({ mandat, client, entity = 'mandat', reload }) {
   }, [open]);
 
   const reassign = async (newInitials, profile) => {
-    if (newInitials === target?.owner) {
-      setOpen(false);
-      return;
-    }
+    if (newInitials === target?.owner) { setOpen(false); return; }
     setSaving(true);
     try {
       const table = entity === 'client' ? 'clients' : 'mandats';
@@ -89,7 +111,6 @@ export function OwnerSelector({ mandat, client, entity = 'mandat', reload }) {
           ? `${target.prenom || ''} ${target.nom || ''}`.trim() || 'un client'
           : target.nom || 'un mandat';
         const titreEntity = entity === 'client' ? 'client' : 'mandat';
-
         await supabase.from('notifications').insert({
           user_id: profile.id,
           type: entity === 'client' ? 'client_assigned' : 'mandat_assigned',
@@ -125,9 +146,7 @@ export function OwnerSelector({ mandat, client, entity = 'mandat', reload }) {
       </button>
       {open && (
         <div className="absolute top-full mt-2 right-0 bg-white rounded-lg shadow-luxe-hover border border-cream-dark py-1 z-30 min-w-[180px]">
-          <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-stone-500 border-b border-cream-dark">
-            Réassigner à
-          </div>
+          <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-stone-500 border-b border-cream-dark">Réassigner à</div>
           {profiles.map(p => {
             const initials = getInitials(p);
             const isCurrent = initials === target?.owner;
@@ -152,7 +171,7 @@ export function OwnerSelector({ mandat, client, entity = 'mandat', reload }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// ClientDetail — fiche détail d'un client
+// ClientDetail — fiche détail d'un contact (côté client/acquéreur)
 // ─────────────────────────────────────────────────────────────────
 
 export function ClientDetail({ client, onBack, onEdit, mandats, deals, interactions, reload, onOpenMandat }) {
@@ -291,7 +310,7 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
 }
 
 // ─────────────────────────────────────────────────────────────────
-// ClientForm — formulaire d'édition
+// ClientForm — formulaire d'édition (inchangé)
 // ─────────────────────────────────────────────────────────────────
 
 export function ClientForm({ client, onSave, onClose }) {
@@ -398,14 +417,16 @@ export function ClientForm({ client, onSave, onClose }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// ClientsTab — onglet principal "Clients"
+// ClientsTab — onglet principal "Contacts" (anciennement Clients)
+// Affiche tous les contacts avec leurs rôles (Acquéreur, Mandant, etc.)
 // ─────────────────────────────────────────────────────────────────
 
 export default function ClientsTab({ clients, reload, mandats, deals, interactions, pendingClientId, onPendingClientConsumed, onOpenMandat }) {
   const { user, profile } = useAuth();
+  const [contacts, setContacts] = useState([]);
+  const [loadingContacts, setLoadingContacts] = useState(true);
   const [search, setSearch] = useState('');
-  const [filterTypo, setFilterTypo] = useState('Tous');
-  const [filterMarche, setFilterMarche] = useState('Tous');
+  const [filterRole, setFilterRole] = useState(''); // '' | 'acquereur' | 'mandant' | ...
   const [filterMine, setFilterMine] = useState(false);
   const myInitials = getCurrentUserInitials(profile);
   const [editingClient, setEditingClient] = useState(null);
@@ -413,6 +434,31 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
   const [showImport, setShowImport] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
 
+  // Charge les contacts (avec leurs rôles agrégés via l'API)
+  async function loadContacts() {
+    setLoadingContacts(true);
+    try {
+      const params = new URLSearchParams();
+      if (search.trim()) params.set('q', search.trim());
+      if (filterRole) params.set('role', filterRole);
+      params.set('limit', '500');
+      const res = await fetch(`/api/contacts?${params.toString()}`);
+      const data = await res.json();
+      setContacts(data?.contacts || []);
+    } catch (e) {
+      console.error('[ContactsTab] load error:', e);
+    } finally {
+      setLoadingContacts(false);
+    }
+  }
+
+  useEffect(() => {
+    const h = setTimeout(loadContacts, 250);
+    return () => clearTimeout(h);
+  }, [search, filterRole]);
+
+  // Deep-link : si pendingClientId est passé, on cherche le client correspondant dans `clients` prop
+  // (car le deep-link arrive avec un client.id, pas un contact.id)
   useEffect(() => {
     if (pendingClientId && Array.isArray(clients) && clients.length > 0) {
       const c = clients.find(x => x.id === pendingClientId);
@@ -420,20 +466,27 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
     }
   }, [pendingClientId, clients]);
 
-  const filtered = clients.filter(c => {
-    if (filterMine && c.owner !== myInitials) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      const hay = `${c.prenom || ''} ${c.nom || ''} ${c.societe || ''} ${c.email || ''} ${c.tel || ''}`.toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
-    if (filterTypo !== 'Tous' && c.typologie !== filterTypo) return false;
-    if (filterMarche !== 'Tous') {
-      const m = getMarcheFromTypologieClient(c.typologie);
-      if (m !== filterMarche) return false;
+  // Filtre Mes contacts : on filtre par owner sur les clients liés au contact
+  const filtered = contacts.filter(c => {
+    if (filterMine) {
+      const hasMyOwnedClient = (c.client_owners || []).includes(myInitials);
+      if (!hasMyOwnedClient) return false;
     }
     return true;
   });
+
+  // Quand on clique sur un contact qui est aussi un acquéreur, on ouvre la fiche Client classique
+  function handleContactClick(contact) {
+    // Trouver le client lié à ce contact
+    const linkedClient = clients.find(c => c.contact_id === contact.id);
+    if (linkedClient) {
+      setSelectedClient(linkedClient);
+    } else {
+      // Pour un contact sans client (mandant, apporteur...), on n'a pas encore d'écran détail
+      // → on ouvre l'édition contact en attendant
+      alert(`${contact.prenom || ''} ${contact.nom || ''} n'est pas un acquéreur. Édition coordonnées à venir au prochain commit.`);
+    }
+  }
 
   const handleSave = async (clientData) => {
     const snakeData = toSnake(clientData);
@@ -452,13 +505,15 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
     setEditingClient(null);
     setShowNew(false);
     reload();
+    loadContacts();
     if (clientId) triggerMatchingBatch({ clientId });
   };
 
-  const handleDelete = async (id) => {
-    if (confirm('Supprimer ce client ?')) {
-      await supabase.from('clients').delete().eq('id', id);
+  const handleDelete = async (clientId, contactId) => {
+    if (confirm('Supprimer ce contact ?')) {
+      await supabase.from('clients').delete().eq('id', clientId);
       reload();
+      loadContacts();
     }
   };
 
@@ -483,91 +538,128 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
     );
   }
 
+  // Compteurs par rôle pour les filtres
+  const roleCounts = useMemo(() => {
+    const counts = { acquereur: 0, mandant: 0, apporteur: 0, notaire: 0, agence: 0, sans_role: 0 };
+    contacts.forEach(c => {
+      if (c.roles.length === 0) counts.sans_role++;
+      c.roles.forEach(r => { if (counts[r] !== undefined) counts[r]++; });
+    });
+    return counts;
+  }, [contacts]);
+
   return (
     <div className="p-6 max-w-none">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="flex items-baseline gap-3">
-          <h1 className="font-display text-2xl font-semibold text-stone-900">Clients</h1>
-          <span className="text-stone-500 text-sm">{filtered.length} client{filtered.length > 1 ? 's' : ''}</span>
+          <h1 className="font-display text-2xl font-semibold text-stone-900">Contacts</h1>
+          <span className="text-stone-500 text-sm">{filtered.length} contact{filtered.length > 1 ? 's' : ''}</span>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50 text-sm">
             <Upload className="w-4 h-4" /> Importer
           </button>
           <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-3 py-2 bg-ink-deep text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
-            <Plus className="w-4 h-4" /> Nouveau client
+            <Plus className="w-4 h-4" /> Nouveau contact
           </button>
         </div>
       </div>
 
-      <div className="flex gap-3 mb-6 flex-wrap">
+      {/* Barre de recherche */}
+      <div className="flex gap-3 mb-3 flex-wrap">
         <div className="flex-1 relative min-w-[280px]">
           <Search className="w-4 h-4 absolute left-3 top-3 text-stone-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher (nom, société, email…)"
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher (nom, société, email, tél…)"
             className="w-full pl-10 pr-4 py-2.5 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" />
         </div>
-        <div className="flex bg-white border border-stone-200 rounded-lg overflow-hidden">
-          <button onClick={() => setFilterMarche('Tous')} className={`px-3 py-2.5 text-xs font-medium ${filterMarche === 'Tous' ? 'bg-ink-deep text-white' : 'text-stone-600 hover:bg-stone-50'}`}>Tous</button>
-          <button onClick={() => setFilterMarche('b2b')} className={`px-3 py-2.5 text-xs font-medium border-l border-stone-200 ${filterMarche === 'b2b' ? 'bg-sage-100 text-sage-darker' : 'text-stone-600 hover:bg-stone-50'}`}>B2B</button>
-          <button onClick={() => setFilterMarche('b2c')} className={`px-3 py-2.5 text-xs font-medium border-l border-stone-200 ${filterMarche === 'b2c' ? 'bg-blue-100 text-blue-900' : 'text-stone-600 hover:bg-stone-50'}`}>B2C</button>
-        </div>
-        <select value={filterTypo} onChange={e => setFilterTypo(e.target.value)} className="px-4 py-2.5 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
-          <option>Tous</option>
-          {TYPOLOGIES_CLIENT.map(t => <option key={t}>{t}</option>)}
-        </select>
         <label className="flex items-center gap-2 px-3 py-2.5 bg-white border border-stone-200 rounded-lg text-sm cursor-pointer">
           <input type="checkbox" checked={filterMine} onChange={e => setFilterMine(e.target.checked)} />
-          <span>Mes clients</span>
+          <span>Mes contacts</span>
         </label>
       </div>
 
+      {/* Filtres par rôle (tags) */}
+      <div className="flex gap-2 mb-6 flex-wrap">
+        <button
+          onClick={() => setFilterRole('')}
+          className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${filterRole === '' ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}
+        >
+          Tous ({contacts.length})
+        </button>
+        {ROLE_ORDER.map(role => {
+          const cfg = ROLES_CONFIG[role];
+          const active = filterRole === role;
+          return (
+            <button
+              key={role}
+              onClick={() => setFilterRole(role)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${active ? `${cfg.bg} ${cfg.text} ${cfg.border} ring-2 ring-offset-1 ring-stone-300` : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+              {cfg.label} ({roleCounts[role] || 0})
+            </button>
+          );
+        })}
+        <button
+          onClick={() => setFilterRole('sans_role')}
+          className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${filterRole === 'sans_role' ? 'bg-stone-200 text-stone-800 border-stone-400 ring-2 ring-offset-1 ring-stone-300' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}
+        >
+          Sans rôle ({roleCounts.sans_role || 0})
+        </button>
+      </div>
+
+      {/* Tableau */}
       <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden">
         <table className="w-full">
           <thead className="bg-stone-50 border-b border-cream-dark">
             <tr>
               <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Nom</th>
               <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Société</th>
-              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Typologie</th>
-              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Budget</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Rôles</th>
               <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Contact</th>
               <th className="text-center px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide w-12">Owner</th>
-              <th className="w-12"></th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map(c => (
-              <tr key={c.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer group" onClick={() => setSelectedClient(c)}>
+            {loadingContacts && (
+              <tr><td colSpan="5" className="p-12 text-center text-sm text-stone-500"><Loader2 className="w-5 h-5 animate-spin inline mr-2" />Chargement…</td></tr>
+            )}
+            {!loadingContacts && filtered.map(c => (
+              <tr key={c.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer group" onClick={() => handleContactClick(c)}>
                 <td className="px-3 py-3">
-                  <div className="font-medium text-stone-900 text-sm">{c.prenom} {c.nom}</div>
+                  <div className="font-medium text-stone-900 text-sm">
+                    {[c.prenom, c.nom].filter(Boolean).join(' ') || <span className="text-stone-400 italic">Sans nom</span>}
+                  </div>
                 </td>
                 <td className="px-3 py-3 text-sm text-stone-700">{c.societe || '—'}</td>
-                <td className="px-3 py-3 text-sm">
-                  {c.typologie ? (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-sage-50 text-sage-darker border border-sage-light">{c.typologie}</span>
-                  ) : <span className="text-stone-400">—</span>}
-                </td>
-                <td className="px-3 py-3 text-sm text-stone-700">
-                  {c.budgetMin || c.budgetMax ? `${formatPrixCompact(c.budgetMin || 0)} → ${formatPrixCompact(c.budgetMax || 0)}` : '—'}
+                <td className="px-3 py-3">
+                  <div className="flex flex-wrap gap-1">
+                    {c.roles && c.roles.length > 0 ? (
+                      c.roles.map(r => <RoleBadge key={r} role={r} />)
+                    ) : (
+                      <span className="text-xs text-stone-400 italic">—</span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-3 py-3 text-sm text-stone-600">
-                  <div className="truncate max-w-[200px]">{c.email || c.tel || '—'}</div>
+                  <div className="truncate max-w-[220px]">{c.email || c.tel || '—'}</div>
                 </td>
                 <td className="px-3 py-3 text-center">
-                  <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-sage-100 text-sage-darker text-xs font-semibold border border-sage-light" title={'Owner: ' + (c.owner || '—')}>
-                    {c.owner || '?'}
-                  </div>
-                </td>
-                <td className="px-3 py-2">
-                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100" onClick={e => e.stopPropagation()}>
-                    <button onClick={() => setEditingClient(c)} className="p-1.5 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded"><Edit2 className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => handleDelete(c.id)} className="p-1.5 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
-                  </div>
+                  {(c.client_owners || []).length > 0 ? (
+                    <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-sage-100 text-sage-darker text-xs font-semibold border border-sage-light" title={'Owners: ' + (c.client_owners || []).join(', ')}>
+                      {c.client_owners[0]}
+                    </div>
+                  ) : (
+                    <span className="text-stone-400 text-xs">—</span>
+                  )}
                 </td>
               </tr>
             ))}
+            {!loadingContacts && filtered.length === 0 && (
+              <tr><td colSpan="5" className="p-12 text-center text-sm text-stone-500">Aucun contact trouvé</td></tr>
+            )}
           </tbody>
         </table>
-        {filtered.length === 0 && <div className="p-12 text-center text-stone-500 text-sm">Aucun client trouvé</div>}
       </div>
 
       {(editingClient || showNew) && (
@@ -578,7 +670,7 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
         />
       )}
       {showImport && (
-        <ContactsImportModal onClose={() => setShowImport(false)} onImported={() => { setShowImport(false); reload(); }} />
+        <ContactsImportModal onClose={() => setShowImport(false)} onImported={() => { setShowImport(false); reload(); loadContacts(); }} />
       )}
     </div>
   );
