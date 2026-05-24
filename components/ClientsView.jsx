@@ -478,12 +478,14 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
   // Quand on clique sur un contact qui est aussi un acquéreur, on ouvre la fiche Client classique
   function handleContactClick(contact) {
     // Trouver le client lié à ce contact
-    const linkedClient = clients.find(c => c.contact_id === contact.id);
+    const linkedClient = clients.find(c => c.contactId === contact.id || c.contact_id === contact.id);
     if (linkedClient) {
       setSelectedClient(linkedClient);
+    } else if (contact.roles.includes('acquereur')) {
+      // C'est marqué acquéreur dans l'API mais on ne trouve pas le client local → rechargement nécessaire
+      alert('Rechargement nécessaire — clique sur l\'onglet Mandats puis reviens sur Contacts.');
     } else {
       // Pour un contact sans client (mandant, apporteur...), on n'a pas encore d'écran détail
-      // → on ouvre l'édition contact en attendant
       alert(`${contact.prenom || ''} ${contact.nom || ''} n'est pas un acquéreur. Édition coordonnées à venir au prochain commit.`);
     }
   }
