@@ -50,7 +50,7 @@ import MediasInline from './MediasInline';
 import DocumentsInline from './DocumentsInline';
 import ReferencesView from './ReferencesView';
 import AvisDeValeurEditor from './AvisDeValeurEditor';
-import ClientsTab from './ClientsView';
+import ClientsTab, { OwnerSelector } from './ClientsView';
 import {   formatPrix,   formatPrixCompact,   toCamel,   toSnake,   isManager,   getDPEClass,   getDPEColor,   STATUTS_MANDAT,   STATUTS_DEAL,   TYPES_ACTIF,   TYPES_ACTIF_B2B_TREE,   TYPES_HABITATION_B2C,   TYPOLOGIES_CLIENT,   ZONES,   NB_PIECES,   PORTAILS,   STATUTS_PORTAIL,   getSousTypesForFamille,   familleHasSousTypes,   getMarcheFromTypologieClient,   getSousTypologiesForClient,   clientHasSousTypologie,   groupTypologiesRecherchees,   getCoverPhoto,   getPhotos, } from '@/lib/crm-constants';
 import {
   Field,
