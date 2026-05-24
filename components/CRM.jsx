@@ -322,7 +322,7 @@ export default function CRM() {
   const tabs = [
     { id: 'dashboard', label: 'Tableau de bord', icon: Home },
     { id: 'mandats', label: 'Mandats', icon: Building2 },
-    { id: 'clients', label: 'Clients', icon: Users },
+    { id: 'clients', label: 'Contacts', icon: Users },
     { id: 'inbox', label: 'Inbox', icon: Inbox },
     { id: 'deals', label: 'Deals', icon: Handshake },
     { id: 'matching', label: 'Matching auto', icon: Sparkles },
