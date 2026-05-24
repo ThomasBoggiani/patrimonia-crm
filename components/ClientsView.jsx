@@ -37,14 +37,15 @@ import CascadeSelectMulti from './CascadeSelectMulti';
 // ─────────────────────────────────────────────────────────────────
 
 const ROLES_CONFIG = {
-  acquereur:  { label: 'Acquéreur',  bg: 'bg-emerald-50',  text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500' },
-  mandant:    { label: 'Mandant',    bg: 'bg-blue-50',     text: 'text-blue-700',    border: 'border-blue-200',    dot: 'bg-blue-500' },
-  apporteur:  { label: 'Apporteur',  bg: 'bg-purple-50',   text: 'text-purple-700',  border: 'border-purple-200',  dot: 'bg-purple-500' },
-  notaire:    { label: 'Notaire',    bg: 'bg-amber-50',    text: 'text-amber-700',   border: 'border-amber-200',   dot: 'bg-amber-500' },
-  agence:     { label: 'Agence',     bg: 'bg-stone-100',   text: 'text-stone-700',   border: 'border-stone-300',   dot: 'bg-stone-500' },
+  acquereur:           { label: 'Acquéreur',           bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500' },
+  mandant:             { label: 'Mandant',             bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-200',    dot: 'bg-blue-500' },
+  apporteur_mandat:    { label: 'Apporteur mandat',    bg: 'bg-purple-50',  text: 'text-purple-700',  border: 'border-purple-200',  dot: 'bg-purple-500' },
+  apporteur_acquereur: { label: 'Apporteur acquéreur', bg: 'bg-fuchsia-50', text: 'text-fuchsia-700', border: 'border-fuchsia-200', dot: 'bg-fuchsia-500' },
+  notaire:             { label: 'Notaire',             bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200',   dot: 'bg-amber-500' },
+  agence:              { label: 'Agence',              bg: 'bg-stone-100',  text: 'text-stone-700',   border: 'border-stone-300',   dot: 'bg-stone-500' },
 };
 
-const ROLE_ORDER = ['acquereur', 'mandant', 'apporteur', 'notaire', 'agence'];
+const ROLE_ORDER = ['acquereur', 'mandant', 'apporteur_mandat', 'apporteur_acquereur', 'notaire', 'agence'];
 
 function RoleBadge({ role }) {
   const cfg = ROLES_CONFIG[role];
@@ -184,7 +185,8 @@ function AddRoleModal({ contactId, contactName, mandats, onClose, onSuccess }) {
   const ROLE_OPTIONS = [
     { value: 'mandant', label: 'Mandant', desc: 'Propriétaire qui confie le mandat' },
     { value: 'proprietaire', label: 'Propriétaire', desc: 'Co-propriétaire / indivision' },
-    { value: 'apporteur', label: 'Apporteur', desc: 'A apporté ce mandat' },
+    { value: 'apporteur_mandat', label: 'Apporteur mandat', desc: 'A apporté ce mandat à I&P (côté entrée)' },
+    { value: 'apporteur_acquereur', label: 'Apporteur acquéreur', desc: 'Apporte des acquéreurs sur ce mandat (côté sortie)' },
     { value: 'notaire_vendeur', label: 'Notaire (côté vendeur)', desc: 'Notaire du mandant' },
     { value: 'notaire_acquereur', label: 'Notaire (côté acquéreur)', desc: 'Notaire de l\'acheteur' },
     { value: 'interlocuteur', label: 'Interlocuteur', desc: 'Contact opérationnel sur ce mandat' },
@@ -333,7 +335,8 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
     const roles = new Set(['acquereur']); // on est ici car le contact a un client lié
     (contactData.mandats || []).forEach(mc => {
       if (mc.role === 'mandant' || mc.role === 'proprietaire') roles.add('mandant');
-      else if (mc.role === 'apporteur') roles.add('apporteur');
+      else if (mc.role === 'apporteur_mandat') roles.add('apporteur_mandat');
+      else if (mc.role === 'apporteur_acquereur') roles.add('apporteur_acquereur');
       else if (mc.role === 'notaire_vendeur' || mc.role === 'notaire_acquereur') roles.add('notaire');
     });
     if (contactData.contact?.categorie === 'agence') roles.add('agence');
@@ -342,7 +345,8 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
 
   // Mandats par rôle (pour les sections)
   const mandatsAsMandant = (contactData?.mandats || []).filter(mc => mc.role === 'mandant' || mc.role === 'proprietaire');
-  const mandatsAsApporteur = (contactData?.mandats || []).filter(mc => mc.role === 'apporteur');
+  const mandatsAsApporteurMandat = (contactData?.mandats || []).filter(mc => mc.role === 'apporteur_mandat');
+  const mandatsAsApporteurAcquereur = (contactData?.mandats || []).filter(mc => mc.role === 'apporteur_acquereur');
   const mandatsAsNotaire = (contactData?.mandats || []).filter(mc => mc.role === 'notaire_vendeur' || mc.role === 'notaire_acquereur');
 
   return (
@@ -479,15 +483,15 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
         </div>
       )}
 
-      {/* ═══ SECTION APPORTEUR ═══ */}
-      {contactRoles.includes('apporteur') && mandatsAsApporteur.length > 0 && (
+      {/* ═══ SECTION APPORTEUR MANDAT (entrée mandat) ═══ */}
+      {contactRoles.includes('apporteur_mandat') && mandatsAsApporteurMandat.length > 0 && (
         <div className="bg-purple-50/30 rounded-xl p-6 border border-purple-200 mb-4">
           <div className="flex items-center gap-2 mb-4">
             <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-            <h2 className="font-display text-lg font-semibold text-purple-900">Mandats apportés</h2>
+            <h2 className="font-display text-lg font-semibold text-purple-900">Mandats apportés (entrée)</h2>
           </div>
           <div className="space-y-2">
-            {mandatsAsApporteur.map(mc => (
+            {mandatsAsApporteurMandat.map(mc => (
               <button
                 key={mc.id}
                 onClick={() => onOpenMandat?.(mc.mandat.id)}
@@ -506,6 +510,32 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
         </div>
       )}
 
+      {/* ═══ SECTION APPORTEUR ACQUÉREUR (sortie mandat) ═══ */}
+      {contactRoles.includes('apporteur_acquereur') && mandatsAsApporteurAcquereur.length > 0 && (
+        <div className="bg-fuchsia-50/30 rounded-xl p-6 border border-fuchsia-200 mb-4">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="w-2 h-2 rounded-full bg-fuchsia-500"></span>
+            <h2 className="font-display text-lg font-semibold text-fuchsia-900">Apporte des acquéreurs sur</h2>
+          </div>
+          <div className="space-y-2">
+            {mandatsAsApporteurAcquereur.map(mc => (
+              <button
+                key={mc.id}
+                onClick={() => onOpenMandat?.(mc.mandat.id)}
+                className="w-full flex items-center justify-between p-3 bg-white rounded-lg border border-fuchsia-200/50 hover:bg-fuchsia-50 text-left"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-stone-900">{mc.mandat?.nom || 'Mandat inconnu'}</div>
+                  <div className="text-xs text-stone-500">{mc.mandat?.ville || ''}</div>
+                </div>
+                {mc.mandat?.statut && (
+                  <span className="text-xs px-2 py-1 bg-fuchsia-100 text-fuchsia-800 rounded-full">{mc.mandat.statut}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {/* ═══ SECTION NOTAIRE ═══ */}
       {contactRoles.includes('notaire') && mandatsAsNotaire.length > 0 && (
         <div className="bg-amber-50/30 rounded-xl p-6 border border-amber-200 mb-4">
@@ -802,7 +832,7 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
 
   // Compteurs par rôle pour les filtres
   const roleCounts = useMemo(() => {
-    const counts = { acquereur: 0, mandant: 0, apporteur: 0, notaire: 0, agence: 0, sans_role: 0 };
+    const counts = { acquereur: 0, mandant: 0, apporteur_mandat: 0, apporteur_acquereur: 0, notaire: 0, agence: 0, sans_role: 0 };
     contacts.forEach(c => {
       if (c.roles.length === 0) counts.sans_role++;
       c.roles.forEach(r => { if (counts[r] !== undefined) counts[r]++; });
