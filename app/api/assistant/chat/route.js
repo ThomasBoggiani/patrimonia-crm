@@ -425,9 +425,8 @@ async function executeSearchClients(args) {
     .limit(Math.min(limit, 20));
   if (query_text && query_text.trim()) {
     const q = `%${query_text.trim()}%`;
-    query = const safe = q.replace(/[,()]/g, '');     
-    query = 
-  query.or(`prenom.ilike.${safe},nom.ilike.${safe},societe.ilike.${safe},email.ilike.${safe}`);e.ilike.${q},email.ilike.${q}`);
+    const safe = q.replace(/[,()]/g, '');
+    query = query.or(`prenom.ilike.${safe},nom.ilike.${safe},societe.ilike.${safe},email.ilike.${safe}`);
   }
   if (typologie) query = query.eq('typologie', typologie);
   if (marche) query = query.eq('marche', marche);
