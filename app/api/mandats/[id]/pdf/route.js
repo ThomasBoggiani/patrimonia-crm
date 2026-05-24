@@ -42,7 +42,7 @@ async function loadMandatData(mandatId) {
   if (mandat.profile_id) {
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('id, email, prenom, nom, telephone, photo_url, fonction')
+      .select('id, email, prenom, nom, telephone, avatar_url, fonction')
       .eq('id', mandat.profile_id)
       .maybeSingle();
 
@@ -249,7 +249,7 @@ export async function GET(request, { params }) {
     // Charger TOUS les profils actifs (utilisé pour plaquette ET rapport)
     const { data: profiles, error: pErr } = await supabaseAdmin
       .from('profiles')
-      .select('id, prenom, nom, email, fonction, telephone, photo_url')
+      .select('id, prenom, nom, email, fonction, telephone, avatar_url')
       .eq('actif', true);
 
     if (pErr) console.error('[PDF] Profiles query error:', pErr.message);
@@ -267,12 +267,12 @@ export async function GET(request, { params }) {
       email: senderProfile.email,
       telephone: senderProfile.telephone,
       fonction: senderProfile.fonction || 'Conseiller',
-      photo: ensureAbsoluteUrl(senderProfile.photo_url, request),
+      photo: ensureAbsoluteUrl(senderProfile.avatar_url, request),
       full_name: `${senderProfile.prenom || ''} ${senderProfile.nom || ''}`.trim() || 'Conseiller',
       initiales: `${(senderProfile.prenom || '').charAt(0)}${(senderProfile.nom || '').charAt(0)}`.toUpperCase(),
     } : (conseiller ? {
       ...conseiller,
-      photo: ensureAbsoluteUrl(conseiller.photo_url, request),
+      photo: ensureAbsoluteUrl(conseiller.avatar_url, request),
       initiales: `${(conseiller.prenom || '').charAt(0)}${(conseiller.nom || '').charAt(0)}`.toUpperCase(),
     } : null);
 
@@ -291,7 +291,7 @@ export async function GET(request, { params }) {
             role: p.fonction || 'Conseiller',
             email: p.email,
             phone: p.telephone || null,
-            photo: ensureAbsoluteUrl(p.photo_url, request),
+            photo: ensureAbsoluteUrl(p.avatar_url, request),
           };
         }
         if (mandat.profile_id && p.id === mandat.profile_id) {
