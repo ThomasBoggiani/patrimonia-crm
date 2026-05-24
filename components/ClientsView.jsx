@@ -19,6 +19,7 @@ import {
   TYPES_HABITATION_B2C,
   TYPOLOGIES_CLIENT,
   getMarcheFromTypologieClient,
+  CATEGORIES_CONTACT,
 } from '@/lib/crm-constants';
 import {
   Field,
@@ -748,12 +749,30 @@ export function ClientForm({ client, onSave, onClose }) {
   const userInitials = getCurrentUserInitials(profile);
   const [data, setData] = useState(client || {
     prenom: '', nom: '', societe: '', email: '', tel: '',
-    adresse: '', ville: '', typologie: '',
+    adresse: '', ville: '', typologie: '', categorie: '',
     budgetMin: 0, budgetMax: 0, surfaceMin: 0, surfaceMax: 0,
     typologiesRecherchees: [], zones: [],
     rendementMin: 0, statut: 'Actif', maturite: 'Tiède',
     owner: userInitials, notes: '',
   });
+
+  // Si on édite un client existant, on charge sa catégorie depuis contacts
+  useEffect(() => {
+    async function loadCategorie() {
+      const contactId = client?.contactId || client?.contact_id;
+      if (!contactId) return;
+      try {
+        const res = await fetch(`/api/contacts/${contactId}`);
+        const json = await res.json();
+        if (json?.contact?.categorie) {
+          setData(d => ({ ...d, categorie: json.contact.categorie }));
+        }
+      } catch (e) {
+        console.warn('[ClientForm] could not load categorie:', e);
+      }
+    }
+    if (client?.id) loadCategorie();
+  }, [client?.id]);
   const update = (k, v) => setData({ ...data, [k]: v });
   const marche = getMarcheFromTypologieClient(data.typologie);
 
@@ -771,6 +790,19 @@ export function ClientForm({ client, onSave, onClose }) {
             <Field label="Nom"><input type="text" value={data.nom || ''} onChange={e => update('nom', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
           </div>
           <Field label="Société (optionnel)"><input type="text" value={data.societe || ''} onChange={e => update('societe', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
+          <Field label="Catégorie (nature du contact)">
+            <select value={data.categorie || ''} onChange={e => update('categorie', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
+              <option value="">— Choisir —</option>
+              {CATEGORIES_CONTACT.map(c => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
+            {data.categorie && (
+              <p className="text-xs text-stone-500 mt-1 italic">
+                {CATEGORIES_CONTACT.find(c => c.value === data.categorie)?.desc || ''}
+              </p>
+            )}
+          </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Email"><input type="email" value={data.email || ''} onChange={e => update('email', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
             <Field label="Téléphone"><input type="text" value={data.tel || ''} onChange={e => update('tel', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
@@ -924,7 +956,14 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
     const snakeData = toSnake(clientData);
     delete snakeData.created_at;
     delete snakeData.updated_at;
+    
+    // On extrait la catégorie (qui va dans contacts, pas dans clients)
+    const categorie = snakeData.categorie;
+    delete snakeData.categorie;
+    
     let clientId = clientData.id;
+    let contactId = clientData.contactId || clientData.contact_id;
+    
     if (clientData.id) {
       snakeData.updated_by = user?.id;
       await supabase.from('clients').update(snakeData).eq('id', clientData.id);
@@ -932,8 +971,22 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
       delete snakeData.id;
       snakeData.created_by = user?.id;
       const { data: created } = await supabase.from('clients').insert(snakeData).select().single();
-      if (created) clientId = created.id;
+      if (created) { clientId = created.id; contactId = created.contact_id; }
     }
+    
+    // Patch la catégorie sur contacts si le contact_id existe
+    if (contactId && categorie !== undefined) {
+      try {
+        await fetch(`/api/contacts/${contactId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ categorie: categorie || null }),
+        });
+      } catch (e) {
+        console.warn('[handleSave] could not update categorie:', e);
+      }
+    }
+    
     setEditingClient(null);
     setShowNew(false);
     reload();
