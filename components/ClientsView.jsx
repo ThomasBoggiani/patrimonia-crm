@@ -7,7 +7,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Building2, Users, Handshake, MapPin, Trash2, Edit2, X, Check, Loader2,
-  Search, Plus, Upload, ChevronRight, User as UserIcon, ArrowLeft,
+  Search, Plus, Upload, ExternalLink, Paperclip, ChevronRight, User as UserIcon, ArrowLeft,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, getCurrentUserInitials } from '@/lib/auth';
@@ -393,6 +393,167 @@ function AddRoleModal({ contactId, contactName, mandats, onClose, onSuccess }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// InteractionsHistorySection — Historique des échanges avec onglets
+// ─────────────────────────────────────────────────────────────────
+
+const INTERACTION_TYPE_GROUPS = {
+  all:    { label: 'Tous',    types: null },
+  email:  { label: 'Emails',  types: ['email_entrant', 'email_sortant', 'Email'] },
+  call:   { label: 'Appels',  types: ['Appel', 'appel', 'call'] },
+  rdv:    { label: 'RDV',     types: ['RDV', 'rdv', 'Visite', 'visite', 'Rendez-vous'] },
+  note:   { label: 'Notes',   types: ['Note', 'note'] }
+};
+
+function InteractionsHistorySection({ interactions }) {
+  const [tab, setTab] = useState('all');
+
+  if (!interactions || interactions.length === 0) return null;
+
+  // Compteurs par onglet
+  const counts = {};
+  for (const [key, group] of Object.entries(INTERACTION_TYPE_GROUPS)) {
+    if (group.types === null) {
+      counts[key] = interactions.length;
+    } else {
+      counts[key] = interactions.filter(i => group.types.includes(i.type)).length;
+    }
+  }
+
+  // Filtrage
+  const activeGroup = INTERACTION_TYPE_GROUPS[tab];
+  const filtered = activeGroup.types === null
+    ? interactions
+    : interactions.filter(i => activeGroup.types.includes(i.type));
+
+  // Tri par date desc
+  const sorted = [...filtered].sort((a, b) => {
+    const aDate = a.date || a.createdAt || a.created_at || '';
+    const bDate = b.date || b.createdAt || b.created_at || '';
+    return bDate.localeCompare(aDate);
+  });
+
+  return (
+    <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <h2 className="font-display text-lg font-semibold text-stone-900">
+          Historique des échanges ({interactions.length})
+        </h2>
+        <div className="flex gap-1 bg-stone-100 p-1 rounded-lg">
+          {Object.entries(INTERACTION_TYPE_GROUPS).map(([key, group]) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`px-3 py-1 text-xs rounded-md transition flex items-center gap-1.5 ${
+                tab === key
+                  ? 'bg-white text-stone-900 shadow-sm font-medium'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              <span>{group.label}</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                tab === key ? 'bg-stone-100 text-stone-700' : 'bg-white/60 text-stone-500'
+              }`}>
+                {counts[key]}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {sorted.length === 0 ? (
+        <div className="text-sm text-stone-400 italic py-4">Aucune interaction dans cette catégorie</div>
+      ) : (
+        <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
+          {sorted.map(int => <InteractionItem key={int.id} interaction={int} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InteractionItem({ interaction: int }) {
+  const meta = int.metadata || {};
+  const isEmail = ['email_entrant', 'email_sortant', 'Email'].includes(int.type);
+  const isEntrant = int.type === 'email_entrant';
+  const isSortant = int.type === 'email_sortant';
+
+  // Date formatée
+  const rawDate = int.date || int.createdAt || int.created_at;
+  let dateLabel = '—';
+  if (rawDate) {
+    const d = new Date(rawDate);
+    dateLabel = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  // Sujet et contenu
+  const title = int.objet || int.resume || int.notes || '—';
+
+  return (
+    <div className="flex items-start gap-3 pb-3 border-b border-cream-dark last:border-0">
+      <TypeInteractionBadge type={int.type} />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          <div className="text-sm text-stone-900 font-medium flex-1 min-w-0 break-words">
+            {title}
+          </div>
+          {meta.web_link && (
+            
+              href={meta.web_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 flex-shrink-0"
+              title="Ouvrir dans Outlook"
+            >
+              <ExternalLink className="w-3 h-3" />
+              Outlook
+            </a>
+          )}
+        </div>
+        <div className="flex items-center gap-2 text-xs text-stone-500 mt-0.5 flex-wrap">
+          <span>{dateLabel}</span>
+          {isEmail && meta.from_name && isEntrant && (
+            <>
+              <span>·</span>
+              <span>De : <strong className="text-stone-700">{meta.from_name}</strong></span>
+            </>
+          )}
+          {isSortant && (
+            <>
+              <span>·</span>
+              <span className="text-emerald-700">↗ Envoyé</span>
+            </>
+          )}
+          {isEntrant && (
+            <>
+              <span>·</span>
+              <span className="text-blue-700">↙ Reçu</span>
+            </>
+          )}
+          {meta.has_attachments && (
+            <>
+              <span>·</span>
+              <Paperclip className="w-3 h-3" />
+              <span>Pièces jointes</span>
+            </>
+          )}
+          {meta.categorie && (
+            <span className="text-[10px] px-1.5 py-0.5 bg-stone-100 rounded-full font-medium uppercase">
+              {meta.categorie}
+            </span>
+          )}
+        </div>
+        {int.next_step && (
+          <div className="text-xs text-amber-700 mt-1.5 bg-amber-50 px-2 py-1 rounded">
+            ➡️ Prochaine étape : {int.next_step}
+            {int.date_next_step && ` (${new Date(int.date_next_step).toLocaleDateString('fr-FR')})`}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
 // ClientDetail — fiche détail unifiée
 // ─────────────────────────────────────────────────────────────────
 
@@ -675,25 +836,8 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
         </div>
       )}
 
-      {/* INTERACTIONS */}
-      {clientInteractions.length > 0 && (
-        <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
-          <h2 className="font-display text-lg font-semibold text-stone-900 mb-4">Historique des échanges ({clientInteractions.length})</h2>
-          <div className="space-y-3">
-            {clientInteractions.slice(0, 10).map(int => (
-              <div key={int.id} className="flex items-start gap-3 pb-3 border-b border-cream-dark last:border-0">
-                <TypeInteractionBadge type={int.type} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-stone-900">{int.objet || int.notes || '—'}</div>
-                  <div className="text-xs text-stone-500 mt-0.5">
-                    {int.date && new Date(int.date).toLocaleDateString('fr-FR')} · {int.par || '—'}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* INTERACTIONS — Historique des échanges avec onglets */}
+      <InteractionsHistorySection interactions={clientInteractions} />
 
       {showAddRole && (client.contactId || client.contact_id) && (
         <AddRoleModal
