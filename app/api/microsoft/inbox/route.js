@@ -78,11 +78,11 @@ export async function GET(request) {
     if (messageIds.length > 0) {
       const { data: cachedCats } = await adminSupabase
         .from('email_categories')
-        .select('message_id, categorie, confiance')
+        .select('message_id, categorie, confiance, archived_at, todos_count')
         .eq('user_id', user.id)
         .in('message_id', messageIds);
       for (const c of cachedCats || []) {
-        categoriesMap.set(c.message_id, { categorie: c.categorie, confiance: c.confiance });
+        categoriesMap.set(c.message_id, { categorie: c.categorie, confiance: c.confiance, archived_at: c.archived_at, todos_count: c.todos_count || 0 });
       }
     }
 
@@ -111,7 +111,9 @@ export async function GET(request) {
           email: matchedClient.email
         } : null,
         categorie: cachedCat?.categorie || null,
-        confiance: cachedCat?.confiance || null
+        confiance: cachedCat?.confiance || null,
+        archived_at: cachedCat?.archived_at || null,
+        todos_count: cachedCat?.todos_count || 0
       };
     });
 
