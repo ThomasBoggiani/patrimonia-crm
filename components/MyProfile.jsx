@@ -21,8 +21,7 @@ export default function MyProfile({ mandats = [], todos = [], clients = [], allP
     );
   }
 
-  const isManager = profile.role === 'Admin'
-    || (profile.prenom === 'Thomas' && (profile.nom === 'Ezquerra' || profile.nom === 'Boggiani'));
+  const isManager = profile.role === 'Admin' || profile.role === 'Directeur';
 
   return (
     <div className="p-6 md:p-8 max-w-5xl mx-auto">
