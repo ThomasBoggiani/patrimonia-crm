@@ -111,7 +111,7 @@ export async function POST(request) {
         surface: parseFloat(surface) || 0,
         statut: 'Sourcing',
         commercialisation: 'Off-market',
-        owner: 'TB',
+        
         pourvoyeur_id: tbUserId,
         contact: nom_complet,
         tel: telephone,
@@ -197,7 +197,7 @@ export async function POST(request) {
         zones: zones ? zones.split(',').map(z => z.trim()) : [],
         typologies_recherchees: typologies ? typologies.split(',').map(t => t.trim()) : [],
         notes: message ? `[Lead WordPress] ${message}` : '[Lead WordPress]',
-        owner: 'TB',
+        
         created_by: tbUserId,
       }).select().single();
 

@@ -50,7 +50,7 @@ export default function MarkAsSoldModal({ mandat, clients = [], onClose, onSucce
         typologie: 'Investisseur',
         statut: 'Actif',
         created_by: user?.id,
-        owner: 'TB',
+        
       }).select().single();
       if (error || !created) { alert('Erreur création client : ' + (error?.message || 'inconnue')); return; }
       clients.push(created);

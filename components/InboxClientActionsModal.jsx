@@ -154,7 +154,7 @@ function CreateClientForm({ fromName, fromEmail, emailSubject, emailPreview, use
     maturite: 'Moyen',
     statut: 'Actif',
     origine: 'Email',
-    owner: 'TB',
+    
     details_recherche: emailSubject || emailPreview
       ? `Premier contact via email${emailSubject ? ` : "${emailSubject}"` : ''}${emailPreview ? `\n\n${emailPreview.slice(0, 500)}` : ''}`
       : ''
