@@ -112,7 +112,7 @@ STYLE
 CONTEXTE MÉTIER
 - "Mandat" = un bien immobilier en vente.
 - "Client" = un acquéreur potentiel.
-- Statut mandat : "Sourcing", "En cours", "Mandat signé", "Vendu", "Abandonné".
+- Statut mandat : "Sourcing", "Analyse", "Mandat signé", "Commercialisation", "Offre", "Promesse", "Acte", "Vendu par autres", "Perdu".
 - Type mandat : "Immeubles", "Appartements", "Locaux commerciaux", "Maisons", etc.
 - Commercialisation : "Off-market" (défaut) ou "Public".
 - Marché : "B2B" ou "B2C".
