@@ -519,6 +519,16 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
     }
   };
 
+  // Compteurs par rôle pour les filtres
+  const roleCounts = useMemo(() => {
+    const counts = { acquereur: 0, mandant: 0, apporteur: 0, notaire: 0, agence: 0, sans_role: 0 };
+    contacts.forEach(c => {
+      if (c.roles.length === 0) counts.sans_role++;
+      c.roles.forEach(r => { if (counts[r] !== undefined) counts[r]++; });
+    });
+    return counts;
+  }, [contacts]);
+
   if (selectedClient) {
     const current = clients.find(c => c.id === selectedClient.id) || selectedClient;
     return (
@@ -539,16 +549,6 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
       </>
     );
   }
-
-  // Compteurs par rôle pour les filtres
-  const roleCounts = useMemo(() => {
-    const counts = { acquereur: 0, mandant: 0, apporteur: 0, notaire: 0, agence: 0, sans_role: 0 };
-    contacts.forEach(c => {
-      if (c.roles.length === 0) counts.sans_role++;
-      c.roles.forEach(r => { if (counts[r] !== undefined) counts[r]++; });
-    });
-    return counts;
-  }, [contacts]);
 
   return (
     <div className="p-6 max-w-none">
