@@ -57,6 +57,97 @@ function RoleBadge({ role }) {
     </span>
   );
 }
+// ─────────────────────────────────────────────────────────────────
+// Configuration qualité (réputation du contact)
+// ─────────────────────────────────────────────────────────────────
+
+const QUALITE_CONFIG = {
+  bon:           { label: 'Bon',           bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-300', dot: 'bg-emerald-500', icon: '✓' },
+  neutre:        { label: 'Neutre',        bg: 'bg-stone-100',  text: 'text-stone-700',   border: 'border-stone-300',   dot: 'bg-stone-400',   icon: '·' },
+  a_surveiller:  { label: 'À surveiller',  bg: 'bg-amber-50',   text: 'text-amber-800',   border: 'border-amber-300',   dot: 'bg-amber-500',   icon: '⚠' },
+  mauvais:       { label: 'Mauvais',       bg: 'bg-red-50',     text: 'text-red-800',     border: 'border-red-300',     dot: 'bg-red-500',     icon: '⛔' },
+};
+
+const QUALITE_ORDER = ['bon', 'neutre', 'a_surveiller', 'mauvais'];
+
+function QualiteBadge({ qualite }) {
+  if (!qualite || qualite === 'neutre') return null;
+  const cfg = QUALITE_CONFIG[qualite];
+  if (!cfg) return null;
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+      <span>{cfg.icon}</span>
+      {cfg.label}
+    </span>
+  );
+}
+
+function QualiteSelector({ value, motif, onChange }) {
+  const [editingMotif, setEditingMotif] = useState(false);
+  const [motifDraft, setMotifDraft] = useState(motif || '');
+  const showMotif = value === 'a_surveiller' || value === 'mauvais';
+
+  async function saveMotif() {
+    await onChange(value, motifDraft);
+    setEditingMotif(false);
+  }
+
+  return (
+    <div className="bg-white rounded-xl p-4 border border-stone-200 mb-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-xs uppercase tracking-wide text-stone-600 font-semibold">Qualité du contact</div>
+        <QualiteBadge qualite={value} />
+      </div>
+      <div className="grid grid-cols-4 gap-2">
+        {QUALITE_ORDER.map(q => {
+          const cfg = QUALITE_CONFIG[q];
+          const active = value === q;
+          return (
+            <button
+              key={q}
+              onClick={() => onChange(q, motif)}
+              className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-all ${
+                active 
+                  ? `${cfg.bg} ${cfg.text} ${cfg.border} ring-2 ring-offset-1 ring-stone-300` 
+                  : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+              }`}
+            >
+              <span>{cfg.icon}</span>
+              <span>{cfg.label}</span>
+            </button>
+          );
+        })}
+      </div>
+      {showMotif && (
+        <div className="mt-3">
+          <div className="text-xs uppercase tracking-wide text-stone-600 font-semibold mb-1.5">Motif</div>
+          {editingMotif ? (
+            <div className="flex gap-2">
+              <textarea
+                value={motifDraft}
+                onChange={e => setMotifDraft(e.target.value)}
+                rows={2}
+                placeholder="Ex : non-respect d'un accord, négociation déloyale..."
+                className="flex-1 px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900"
+              />
+              <div className="flex flex-col gap-1">
+                <button onClick={saveMotif} className="px-3 py-1.5 bg-ink-deep text-white rounded text-xs hover:bg-ink">OK</button>
+                <button onClick={() => { setEditingMotif(false); setMotifDraft(motif || ''); }} className="px-3 py-1.5 bg-white border border-stone-200 text-stone-700 rounded text-xs hover:bg-stone-50">×</button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setEditingMotif(true)}
+              className="w-full text-left text-sm text-stone-700 px-3 py-2 bg-stone-50 rounded-lg hover:bg-stone-100 italic"
+            >
+              {motif || '+ Ajouter un motif'}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Helper utilisé pour notifier le matching (fire-and-forget)
 async function triggerMatchingBatch({ mandatId, clientId }) {
@@ -298,6 +389,8 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
   const [contactData, setContactData] = useState(null);
   const [loadingContact, setLoadingContact] = useState(true);
   const [showAddRole, setShowAddRole] = useState(false);
+  const [qualite, setQualite] = useState('neutre');
+  const [motifInactif, setMotifInactif] = useState('');
 
   async function loadContact() {
     if (!client?.contactId && !client?.contact_id) {
@@ -310,10 +403,33 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
       const res = await fetch(`/api/contacts/${contactId}`);
       const data = await res.json();
       setContactData(data);
+      setQualite(data?.contact?.qualite || 'neutre');
+      setMotifInactif(data?.contact?.motif_inactif || '');
     } catch (e) {
       console.error('[loadContact]', e);
     } finally {
       setLoadingContact(false);
+    }
+  }
+
+  async function updateQualite(newQualite, newMotif) {
+    const contactId = client.contactId || client.contact_id;
+    if (!contactId) return;
+    setQualite(newQualite);
+    setMotifInactif(newMotif || '');
+    try {
+      const res = await fetch(`/api/contacts/${contactId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qualite: newQualite, motif_inactif: newMotif || null }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert('Erreur : ' + (err.error || 'inconnue'));
+      }
+    } catch (e) {
+      console.error('[updateQualite]', e);
+      alert('Erreur réseau');
     }
   }
 
@@ -366,9 +482,10 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
               <span className="text-stone-500 text-lg">· {client.societe}</span>
             )}
           </div>
-          {/* Badges de tous les rôles */}
+          {/* Badges de tous les rôles + qualité */}
           <div className="flex items-center gap-2 flex-wrap">
             {contactRoles.map(r => <RoleBadge key={r} role={r} />)}
+            <QualiteBadge qualite={qualite} />
             {client.typologie && (
               <span className="text-xs px-2 py-0.5 bg-stone-100 text-stone-700 rounded-full">{client.typologie}</span>
             )}
@@ -388,6 +505,8 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
         </div>
       </div>
 
+      {/* ═══ QUALITÉ DU CONTACT (réputation) ═══ */}
+      <QualiteSelector value={qualite} motif={motifInactif} onChange={updateQualite} />
       {/* ═══ COORDONNÉES (toujours visible) ═══ */}
       <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
         <div className="flex items-center gap-2 mb-4">
