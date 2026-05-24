@@ -127,19 +127,8 @@ export async function GET(request) {
         hasCrmMatch: !!m.crm_client
       }));
 
-    // Lance la classification en background (fire-and-forget, ne bloque pas la réponse)
-    if (toClassify.length > 0) {
-      // Construit l'URL absolue depuis la requête courante (pour fonctionner en serverless)
-      const origin = url.origin;
-      fetch(`${origin}/api/microsoft/inbox/classify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authHeader
-        },
-        body: JSON.stringify({ messages: toClassify })
-      }).catch(e => console.warn('[Inbox] classify background fail:', e.message));
-    }
+    // La classification est déclenchée côté client (fire-and-forget côté serveur ne marche pas en serverless)
+    // toClassify est retourné dans la réponse pour que le client puisse déclencher
 
     // Filtre côté catégorie si demandé
     let filtered = enriched;
@@ -154,7 +143,8 @@ export async function GET(request) {
       total: filtered.length,
       unread_count: unreadCount,
       filter,
-      pending_classification: toClassify.length
+      pending_classification: toClassify.length,       
+      to_classify: toClassify
     });
   } catch (err) {
     console.error('Inbox error:', err);
