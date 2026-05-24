@@ -70,31 +70,6 @@ export default function PdfExportButtons({ mandatId, mandatNom, isOffMarket, pla
     }
   }
 
-  async function downloadPdf(template, params = {}) {
-    setLoading(template);
-    setError(null);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        setError('Session expirée, reconnectez-vous');
-        setLoading(null);
-        return;
-      }
-      const queryString = new URLSearchParams({
-        template,
-        token: session.access_token,
-        ...params,
-      }).toString();
-      const url = `/api/mandats/${mandatId}/pdf?${queryString}`;
-      window.open(url, '_blank');
-      setTimeout(() => setLoading(null), 1000);
-    } catch (err) {
-      console.error('[PdfExportButtons] Erreur:', err);
-      setError('Erreur lors de la génération');
-      setLoading(null);
-    }
-  }
-
   function handlePlaquette() {
     downloadPlaquette();
   }
