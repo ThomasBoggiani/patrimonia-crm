@@ -1100,7 +1100,7 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
             <tr>
               <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Nom</th>
               <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Société</th>
-              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Rôles</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Nature</th><th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Postures</th>
               <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Contact</th>
               <th className="text-center px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide w-12">Owner</th>
             </tr>
@@ -1117,11 +1117,8 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
                   </div>
                 </td>
                 <td className="px-3 py-3 text-sm text-stone-700">{c.societe || '—'}</td>
-                <td className="px-3 py-3">
-                  <div className="flex flex-wrap gap-1">
-                    {c.roles && c.roles.length > 0 ? (
-                      c.roles.map(r => <RoleBadge key={r} role={r} />)
-                    ) : (
+                <td className="px-3 py-3"><NatureBadge categorie={c.categorie} /></td><td className="px-3 py-3"><div className="flex gap-1">{(c.postures || []).map(p => <PostureBadge key={p} posture={p} />)}{(c.postures || []).length === 0 && <span className="text-xs text-stone-400 italic">—</span>}</div></td>
+                
                       <span className="text-xs text-stone-400 italic">—</span>
                     )}
                   </div>
