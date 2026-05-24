@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Mail, RefreshCw, Search, Inbox, User as UserIcon, Paperclip, Reply, ExternalLink, AlertCircle, X, UserPlus, Link2, ArrowLeft } from 'lucide-react';
+import { Mail, RefreshCw, Search, Inbox, User as UserIcon, Paperclip, Reply, ExternalLink, AlertCircle, X, UserPlus, Link2, ArrowLeft, Trash2, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import EmailPreviewModal from './EmailPreviewModal';
 import InboxClientActionsModal from './InboxClientActionsModal';
@@ -14,6 +14,26 @@ const FILTERS = [
   { id: 'crm', label: 'Clients CRM' }
 ];
 
+// Configuration des catégories : couleur + label
+const CATEGORIE_CONFIG = {
+  business:     { label: 'Business',     color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  notification: { label: 'Notification', color: 'bg-stone-100 text-stone-600 border-stone-200' },
+  internal:     { label: 'Interne',      color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  transaction:  { label: 'Transaction',  color: 'bg-amber-100 text-amber-700 border-amber-200' },
+  newsletter:   { label: 'Newsletter',   color: 'bg-purple-100 text-purple-700 border-purple-200' },
+  autre:        { label: 'Autre',        color: 'bg-stone-100 text-stone-500 border-stone-200' }
+};
+
+const CATEGORIE_FILTERS = [
+  { id: 'all',          label: 'Toutes catégories' },
+  { id: 'business',     label: '💼 Business' },
+  { id: 'internal',     label: '🏢 Interne' },
+  { id: 'transaction',  label: '💰 Transaction' },
+  { id: 'notification', label: '🔔 Notification' },
+  { id: 'newsletter',   label: '📰 Newsletter' },
+  { id: 'autre',        label: '❓ Autre' }
+];
+
 const POLL_INTERVAL_MS = 60_000;
 
 export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) {
@@ -21,9 +41,11 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('all');
+  const [categorieFilter, setCategorieFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [replyModalOpen, setReplyModalOpen] = useState(false);
   const [replyDraft, setReplyDraft] = useState(null);
@@ -86,7 +108,6 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
           .then(r => r.json())
           .then(result => {
             console.log('[Inbox] Classification terminée:', result);
-            // Recharge l'inbox pour récupérer les catégories
             load(true);
           })
           .catch(e => console.warn('[Inbox] classify error:', e.message));
@@ -113,6 +134,10 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
     if (filter === 'crm') {
       list = list.filter(m => m.crm_client);
     }
+    // Filtre catégorie (côté client pour éviter les rechargements)
+    if (categorieFilter !== 'all') {
+      list = list.filter(m => m.categorie === categorieFilter);
+    }
     const q = search.trim().toLowerCase();
     if (q) {
       list = list.filter(m =>
@@ -123,7 +148,7 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
       );
     }
     return list;
-  }, [messages, filter, search]);
+  }, [messages, filter, categorieFilter, search]);
 
   const selected = useMemo(
     () => messages.find(m => m.id === selectedId),
@@ -163,6 +188,33 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
     setReplyModalOpen(true);
   }
 
+  async function handleDelete(msg) {
+    if (!msg) return;
+    const confirmMsg = `Supprimer définitivement cet email ?\n\n"${msg.subject || '(sans objet)'}"\n\nLe mail sera déplacé dans la corbeille Outlook.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setDeleting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/microsoft/inbox?messageId=${encodeURIComponent(msg.id)}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || `Erreur ${res.status}`);
+      }
+      // Retire le mail de la liste locale
+      setMessages(prev => prev.filter(m => m.id !== msg.id));
+      setSelectedId(null);
+    } catch (e) {
+      console.error('[Inbox] Delete error:', e);
+      alert('Erreur de suppression : ' + e.message);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="flex flex-col h-full p-3 md:p-6">
       {/* Header — caché sur mobile quand un email est ouvert */}
@@ -183,38 +235,61 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
       </div>
 
       {/* Filtres + Recherche — cachés sur mobile quand un email est ouvert */}
-      <div className={`${selected ? 'hidden md:flex' : 'flex'} flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-3 md:mb-4`}>
-        <div className="flex gap-1 bg-stone-100 p-1 rounded-lg overflow-x-auto scrollbar-thin">
-          {FILTERS.map(f => (
-            <button
-              key={f.id}
-              onClick={() => setFilter(f.id)}
-              className={`px-2.5 md:px-3 py-1.5 text-xs rounded-md transition whitespace-nowrap ${
-                filter === f.id
-                  ? 'bg-white text-stone-900 shadow-sm font-medium'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+      <div className={`${selected ? 'hidden md:flex' : 'flex'} flex-col gap-2 sm:gap-3 mb-3 md:mb-4`}>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          <div className="flex gap-1 bg-stone-100 p-1 rounded-lg overflow-x-auto scrollbar-thin">
+            {FILTERS.map(f => (
+              <button
+                key={f.id}
+                onClick={() => setFilter(f.id)}
+                className={`px-2.5 md:px-3 py-1.5 text-xs rounded-md transition whitespace-nowrap ${
+                  filter === f.id
+                    ? 'bg-white text-stone-900 shadow-sm font-medium'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="relative flex-1 sm:max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher..."
+              className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-stone-400 hover:text-stone-600"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="relative flex-1 sm:max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher..."
-            className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-          />
-          {search && (
+        {/* Filtre catégorie (sur sa propre ligne) */}
+        <div className="flex items-center gap-2">
+          <select
+            value={categorieFilter}
+            onChange={(e) => setCategorieFilter(e.target.value)}
+            className="text-xs px-3 py-1.5 bg-white border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400"
+          >
+            {CATEGORIE_FILTERS.map(c => (
+              <option key={c.id} value={c.id}>{c.label}</option>
+            ))}
+          </select>
+          {categorieFilter !== 'all' && (
             <button
-              onClick={() => setSearch('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-stone-400 hover:text-stone-600"
+              onClick={() => setCategorieFilter('all')}
+              className="text-xs text-stone-500 hover:text-stone-700 underline"
             >
-              <X className="w-3.5 h-3.5" />
+              Réinitialiser
             </button>
           )}
         </div>
@@ -262,9 +337,11 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
             <MessageDetail
               msg={selected}
               onReply={() => handleReply(selected)}
+              onDelete={() => handleDelete(selected)}
               onCreateOrLink={() => openClientActions(selected)}
               onOpenClient={onOpenClient}
               onBack={() => setSelectedId(null)}
+              deleting={deleting}
             />
           )}
         </div>
@@ -290,6 +367,20 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
         onSuccess={handleClientActionSuccess}
       />
     </div>
+  );
+}
+
+// ==========================================================================
+// MessageRow - une ligne dans la liste
+// ==========================================================================
+
+function CategorieBadge({ categorie }) {
+  if (!categorie) return null;
+  const config = CATEGORIE_CONFIG[categorie] || CATEGORIE_CONFIG.autre;
+  return (
+    <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-medium uppercase tracking-wide ${config.color}`}>
+      {config.label}
+    </span>
   );
 }
 
@@ -327,14 +418,15 @@ function MessageRow({ msg, isSelected, onClick }) {
           <div className="text-xs text-stone-500 truncate mt-0.5">
             {msg.bodyPreview}
           </div>
-          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            <CategorieBadge categorie={msg.categorie} />
             {msg.crm_client ? (
-              <span className="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full flex items-center gap-1">
+              <span className="text-[10px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-full flex items-center gap-1 border border-emerald-200">
                 <UserIcon className="w-2.5 h-2.5" />
                 {msg.crm_client.prenom} {msg.crm_client.nom}
               </span>
             ) : (
-              <span className="text-[10px] px-1.5 py-0.5 bg-stone-100 text-stone-500 rounded-full">
+              <span className="text-[10px] px-1.5 py-0.5 bg-stone-50 text-stone-500 rounded-full border border-stone-200">
                 Pas dans le CRM
               </span>
             )}
@@ -348,7 +440,11 @@ function MessageRow({ msg, isSelected, onClick }) {
   );
 }
 
-function MessageDetail({ msg, onReply, onCreateOrLink, onOpenClient, onBack }) {
+// ==========================================================================
+// MessageDetail - le panneau de droite
+// ==========================================================================
+
+function MessageDetail({ msg, onReply, onDelete, onCreateOrLink, onOpenClient, onBack, deleting }) {
   const date = msg.receivedDateTime ? new Date(msg.receivedDateTime).toLocaleString('fr-FR') : '';
 
   return (
@@ -366,9 +462,12 @@ function MessageDetail({ msg, onReply, onCreateOrLink, onOpenClient, onBack }) {
 
       <div className="p-4 md:p-6 space-y-4 flex-1">
         <div>
-          <h2 className="font-display text-lg md:text-xl font-semibold text-stone-900 mb-2 break-words">
-            {msg.subject || '(sans objet)'}
-          </h2>
+          <div className="flex items-start justify-between gap-2 mb-2">
+            <h2 className="font-display text-lg md:text-xl font-semibold text-stone-900 break-words">
+              {msg.subject || '(sans objet)'}
+            </h2>
+            <CategorieBadge categorie={msg.categorie} />
+          </div>
           <div className="flex items-start justify-between gap-2 flex-wrap">
             <div className="text-sm text-stone-700 min-w-0">
               <div className="font-medium truncate">{msg.from?.name || msg.from?.address}</div>
@@ -415,26 +514,36 @@ function MessageDetail({ msg, onReply, onCreateOrLink, onOpenClient, onBack }) {
         </div>
       </div>
 
-      {/* Actions sticky en bas sur mobile */}
-      <div className="sticky bottom-0 bg-white border-t border-stone-200 p-3 md:p-4 flex gap-2">
+      {/* Actions sticky en bas */}
+      <div className="sticky bottom-0 bg-white border-t border-stone-200 p-3 md:p-4 flex gap-2 flex-wrap">
         <button
           onClick={onReply}
-          className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700"
+          disabled={deleting}
+          className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50"
         >
           <Reply className="w-4 h-4" />
           Répondre
         </button>
         {msg.webLink && (
-           <a
+          <a
             href={msg.webLink}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded-lg text-sm hover:bg-stone-50"
           >
             <ExternalLink className="w-4 h-4" />
-            <span className="hidden sm:inline">Ouvrir dans Outlook</span>
+            <span className="hidden sm:inline">Outlook</span>
           </a>
         )}
+        <button
+          onClick={onDelete}
+          disabled={deleting}
+          className="flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-red-200 text-red-600 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50 ml-auto"
+          title="Supprimer cet email (vers la corbeille Outlook)"
+        >
+          {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+          <span className="hidden sm:inline">Supprimer</span>
+        </button>
       </div>
     </div>
   );
