@@ -486,15 +486,29 @@ function InteractionItem({ interaction: int }) {
   }
 
   // Sujet et contenu
-  const title = int.objet || int.resume || int.notes || '—';
+  // Le 'resume' des emails archivés est "Sujet — preview 200 car". On split.
+  let title = int.objet || int.resume || int.notes || '—';
+  let preview = null;
+  if (isEmail && int.resume && int.resume.includes(' — ')) {
+    const parts = int.resume.split(' — ');
+    title = parts[0];
+    preview = parts.slice(1).join(' — ');
+  }
 
   return (
     <div className="flex items-start gap-3 pb-3 border-b border-cream-dark last:border-0">
       <TypeInteractionBadge type={int.type} />
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2 flex-wrap">
-          <div className="text-sm text-stone-900 font-medium flex-1 min-w-0 break-words">
-            {title}
+          <div className="flex-1 min-w-0">
+            <div className="text-sm text-stone-900 font-medium break-words">
+              {title}
+            </div>
+            {preview && (
+              <div className="text-xs text-stone-500 mt-0.5 line-clamp-2 break-words">
+                {preview}
+              </div>
+            )}
           </div>
           {meta.web_link && (
             <a
