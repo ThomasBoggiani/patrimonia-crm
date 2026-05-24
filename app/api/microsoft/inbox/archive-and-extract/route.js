@@ -140,16 +140,32 @@ export async function POST(request) {
           }
         };
 
-        const { data: interaction, error: intErr } = await adminSupabase
+        // Vérifie d'abord si une interaction existe déjà pour ce message_id (idempotence)
+        const { data: existingInteraction } = await adminSupabase
           .from('interactions')
-          .insert(interactionPayload)
           .select('id')
-          .single();
+          .eq('type', 'email_entrant')
+          .filter('metadata->>message_id', 'eq', email.id)
+          .maybeSingle();
 
-        if (intErr) {
-          console.error('[archive-and-extract] interaction insert error:', intErr);
-          results.push({ messageId: email.id, status: 'error', error: intErr.message });
-          continue;
+        let interaction;
+        if (existingInteraction) {
+          // Réutilise l'interaction existante
+          interaction = existingInteraction;
+        } else {
+          // Crée une nouvelle interaction
+          const { data: newInteraction, error: intErr } = await adminSupabase
+            .from('interactions')
+            .insert(interactionPayload)
+            .select('id')
+            .single();
+
+          if (intErr) {
+            console.error('[archive-and-extract] interaction insert error:', intErr);
+            results.push({ messageId: email.id, status: 'error', error: intErr.message });
+            continue;
+          }
+          interaction = newInteraction;
         }
 
         // 4. Analyse IA pour DÉTECTER (pas créer) les actions
