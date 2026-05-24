@@ -2,8 +2,9 @@
 // Pour chaque email entrant business+internal non encore archivé :
 // 1. Crée une entrée dans interactions (lié au client_id si match CRM)
 // 2. Demande à Claude de détecter si une action est attendue
-// 3. Si oui : crée une todo (statut "À faire")
+// 3. Si oui : STOCKE les suggestions dans email_categories.suggested_todos (PAS de création auto)
 // 4. Marque l'email comme archivé dans email_categories
+// L'utilisateur valide ensuite les suggestions via /api/todos/create-from-suggestions
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -14,7 +15,6 @@ export const dynamic = 'force-dynamic';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// Détecte si un mail contient une action attendue + propose une todo
 async function detectActions(email) {
   const prompt = `Tu es un assistant pour un agent immobilier B2B haut de gamme (Immeubles & Patrimoine).
 
@@ -116,7 +116,7 @@ export async function POST(request) {
           continue;
         }
 
-        // 2. Construit le résumé (sujet + 200 premiers caractères)
+        // 2. Construit le résumé
         const subject = email.subject || '(sans objet)';
         const preview = (email.bodyPreview || '').slice(0, 200).trim();
         const resume = preview ? `${subject} — ${preview}` : subject;
@@ -127,7 +127,7 @@ export async function POST(request) {
           mandat_id: null,
           date: email.receivedDate ? email.receivedDate.split('T')[0] : new Date().toISOString().split('T')[0],
           type: 'email_entrant',
-          resume: resume.slice(0, 500), // safety
+          resume: resume.slice(0, 500),
           created_by: user.id,
           metadata: {
             message_id: email.id,
@@ -152,49 +152,31 @@ export async function POST(request) {
           continue;
         }
 
-        // 4. Analyse IA pour détecter les actions
-        let todosCreated = 0;
+        // 4. Analyse IA pour DÉTECTER (pas créer) les actions
+        let suggestedTodos = null;
         try {
           const analysis = await detectActions(email);
-
           if (analysis.needs_action && Array.isArray(analysis.todos) && analysis.todos.length > 0) {
-            const todosToInsert = analysis.todos.slice(0, 2).map(t => {
-              const echeanceJours = Math.max(1, Math.min(30, t.echeance_jours || 3));
-              const echeance = new Date();
-              echeance.setDate(echeance.getDate() + echeanceJours);
-              return {
-                titre: (t.titre || 'Action à traiter').slice(0, 200),
-                priorite: ['Haute', 'Moyenne', 'Basse'].includes(t.priorite) ? t.priorite : 'Moyenne',
-                statut: 'À faire',
-                echeance: echeance.toISOString().split('T')[0],
-                lien_type: email.clientId ? 'client' : null,
-                lien_id: email.clientId || null,
-                created_by: user.id,
-                assigned_to_user_id: user.id
-              };
-            });
-
-            const { error: todoErr } = await adminSupabase
-              .from('todos')
-              .insert(todosToInsert);
-
-            if (todoErr) {
-              console.error('[archive-and-extract] todo insert error:', todoErr);
-            } else {
-              todosCreated = todosToInsert.length;
-            }
+            // On nettoie et limite les suggestions, mais on ne crée PAS les todos
+            suggestedTodos = analysis.todos.slice(0, 2).map(t => ({
+              titre: (t.titre || 'Action à traiter').slice(0, 200),
+              priorite: ['Haute', 'Moyenne', 'Basse'].includes(t.priorite) ? t.priorite : 'Moyenne',
+              echeance_jours: Math.max(1, Math.min(30, t.echeance_jours || 3)),
+              raison: (t.raison || '').slice(0, 300)
+            }));
           }
         } catch (aiErr) {
           console.warn('[archive-and-extract] AI error (continuing):', aiErr.message);
         }
 
-        // 5. Marque le mail comme archivé
+        // 5. Marque le mail comme archivé + stocke les suggestions (PAS de todos créées)
         await adminSupabase
           .from('email_categories')
           .update({
             archived_at: new Date().toISOString(),
             interaction_id: interaction.id,
-            todos_count: todosCreated
+            suggested_todos: suggestedTodos,
+            todos_count: 0 // pas encore créés
           })
           .eq('message_id', email.id)
           .eq('user_id', user.id);
@@ -203,7 +185,7 @@ export async function POST(request) {
           messageId: email.id,
           status: 'archived',
           interactionId: interaction.id,
-          todosCreated
+          suggestionsCount: suggestedTodos?.length || 0
         });
       } catch (e) {
         console.error('[archive-and-extract] error on email:', email.id, e);
@@ -214,7 +196,7 @@ export async function POST(request) {
     return NextResponse.json({
       processed: results.length,
       archived: results.filter(r => r.status === 'archived').length,
-      todosTotal: results.reduce((sum, r) => sum + (r.todosCreated || 0), 0),
+      suggestionsTotal: results.reduce((sum, r) => sum + (r.suggestionsCount || 0), 0),
       results
     });
   } catch (err) {
