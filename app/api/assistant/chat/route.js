@@ -22,7 +22,8 @@ const supabaseAdmin = createClient(
 // SYSTEM PROMPT
 // ==========================================================================
 
-function buildSystemPrompt(context, pdfTexts) {
+async function buildSystemPrompt(context, pdfTexts) {   
+  const recentInteractions = await loadRecentInteractions(context);
   const today = new Date().toLocaleDateString('fr-FR', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
   });
@@ -66,6 +67,18 @@ L'utilisateur est sur la fiche du client suivant :
 Si l'utilisateur pose une question vague ou demande de modifier, il parle de CE client sauf indication contraire. Utilise son ID pour propose_update_client.`;
   }
 
+  // Bloc interactions récentes
+  let interactionsBlock = '';
+  if (recentInteractions && recentInteractions.length > 0) {
+    interactionsBlock = `
+
+10 DERNIÈRES INTERACTIONS (du plus récent au plus ancien)
+${recentInteractions.map((i, idx) => {
+  const date = i.date ? new Date(i.date).toLocaleDateString('fr-FR') : '—';
+  const from = i.metadata?.from_name ? ` (de ${i.metadata.from_name})` : '';
+  return `${idx + 1}. [${date}] ${i.type}${from} : ${(i.resume || '').slice(0, 200)}`;
+}).join('\n')}`;
+  }
   let pdfBlock = '';
   if (pdfTexts && pdfTexts.length > 0) {
     pdfBlock = '\n\nPIÈCES JOINTES PDF\n';
@@ -134,7 +147,7 @@ UTILISATION DES OUTILS
 - Pour modifier sans contexte : d'abord search pour trouver l'id, puis propose_update_*.
 - Pour envoyer plaquette : d'abord search_mandats pour trouver le mandat, et search_clients pour trouver le destinataire, puis propose_send_plaquette avec les ids.
 - N'hésite pas à appeler plusieurs outils en cascade.
-- Si l'utilisateur demande de faire 2-3 choses en cascade (créer un client PUIS envoyer plaquette), enchaîne les outils. Si une étape nécessite confirmation, propose-la ; Thomas la validera, et au tour suivant tu pourras enchaîner le reste.${contextBlock}${pdfBlock}`;
+- Si l'utilisateur demande de faire 2-3 choses en cascade (créer un client PUIS envoyer plaquette), enchaîne les outils. Si une étape nécessite confirmation, propose-la ; Thomas la validera, et au tour suivant tu pourras enchaîner le reste.${contextBlock}${interactionsBlock}${pdfBlock}`;
 }
 
 // ==========================================================================
@@ -186,7 +199,30 @@ const tools = [
       }
     }
   },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_interactions',
+      description: 'Cherche dans l\'historique des interactions (emails, appels, RDV, notes). Filtrable par client ou mandat.',
+      parameters: {
+        type: 'object',
+        properties: {
+          client_id: { type: 'string', description: 'UUID du client pour filtrer ses interactions.' },
+          mandat_id: { type: 'string', description: 'UUID du mandat pour filtrer ses interactions.' },
+          type: { type: 'string', description: 'Type : "Appel", "Email", "RDV", "Note", "email_entrant", "email_sortant"...' },
+          since_days: { type: 'integer', description: 'Limiter aux X derniers jours (ex: 14 pour 2 semaines).' },
+          limit: { type: 'integer', description: 'Nombre max de résultats. Défaut 20.' }
+        },
+        required: []
+      }
+    }
+  },
   // CRÉATION
+  {
+    type: 'function',
+    function: {
+      name: 'propose_create_mandat',
   {
     type: 'function',
     function: {
@@ -394,6 +430,19 @@ const tools = [
 // EXÉCUTION OUTILS LECTURE
 // ==========================================================================
 
+// Charge les N dernières interactions pour un contexte client ou mandat
+async function loadRecentInteractions(context) {
+  if (!context || !context.data?.id) return [];
+  const filterCol = context.type === 'mandat' ? 'mandat_id' : context.type === 'client' ? 'client_id' : null;
+  if (!filterCol) return [];
+  const { data } = await supabaseAdmin
+    .from('interactions')
+    .select('type, resume, date, metadata')
+    .eq(filterCol, context.data.id)
+    .order('date', { ascending: false })
+    .limit(10);
+  return data || [];
+}
 async function executeSearchMandats(args) {
   const { query_text, ville, statut, type, prix_min, prix_max, owner, limit = 10 } = args;
   let query = supabaseAdmin
@@ -417,6 +466,35 @@ async function executeSearchMandats(args) {
   return { count: data?.length || 0, results: data || [] };
 }
 
+async function executeSearchInteractions(args) {
+  const { client_id, mandat_id, type, since_days, limit = 20 } = args;
+  let query = supabaseAdmin
+    .from('interactions')
+    .select('id, type, resume, date, client_id, mandat_id, next_step, date_next_step, metadata, created_at')
+    .limit(Math.min(limit, 50));
+  if (client_id) query = query.eq('client_id', client_id);
+  if (mandat_id) query = query.eq('mandat_id', mandat_id);
+  if (type) query = query.eq('type', type);
+  if (typeof since_days === 'number' && since_days > 0) {
+    const date = new Date();
+    date.setDate(date.getDate() - since_days);
+    query = query.gte('date', date.toISOString().split('T')[0]);
+  }
+  query = query.order('date', { ascending: false });
+  const { data, error } = await query;
+  if (error) return { error: error.message, results: [] };
+  // Enrichit avec from_name pour les emails
+  const enriched = (data || []).map(i => {
+    const out = { ...i };
+    if (i.metadata && (i.type === 'email_entrant' || i.type === 'email_sortant')) {
+      out.from_name = i.metadata.from_name || null;
+      out.from_address = i.metadata.from_address || null;
+      out.web_link = i.metadata.web_link || null;
+    }
+    return out;
+  });
+  return { count: enriched.length, results: enriched };
+}
 async function executeSearchClients(args) {
   const { query_text, typologie, marche, maturite, statut, owner, budget_min, budget_max, limit = 10 } = args;
   let query = supabaseAdmin
@@ -644,7 +722,8 @@ function buildProposeSendPlaquette(args) {
 async function executeTool(name, args) {
   switch (name) {
     case 'search_mandats': return await executeSearchMandats(args);
-    case 'search_clients': return await executeSearchClients(args);
+    case 'search_clients': return await executeSearchClients(args);     
+    case 'search_interactions': return await executeSearchInteractions(args);
     case 'propose_create_mandat': return buildProposeCreateMandat(args);
     case 'propose_create_client': return buildProposeCreateClient(args);
     case 'propose_create_task': return buildProposeCreateTask(args);
@@ -721,8 +800,9 @@ export async function POST(req) {
       }
     }
 
+    const systemPromptText = await buildSystemPrompt(context, pdfTexts);
     const conversation = [
-      { role: 'system', content: buildSystemPrompt(context, pdfTexts) },
+      { role: 'system', content: systemPromptText },
       ...userMessages
     ];
 
