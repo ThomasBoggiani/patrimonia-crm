@@ -98,19 +98,19 @@ const AMENITY_DEFS = {
 
 // ─── Équipe ────────────────────────────────────────────────────────
 function buildTeamForPlaquette({ mandat, sender, allMembers }) {
-  const BOSS_INITIALS = 'TE';
   const ownerInitials = (mandat?.ownerInitials || '').toUpperCase();
   const senderInitials = (sender?.initiales || sender?.initials || '').toUpperCase();
 
   const allKeys = Object.keys(allMembers || {});
-  const boss = allMembers[BOSS_INITIALS];
+  const bossInitials = allKeys.find(k => allMembers[k]?.is_boss === true) || null;
+  const boss = bossInitials ? allMembers[bossInitials] : null;
   const owner = allMembers[ownerInitials];
   const sndr = allMembers[senderInitials];
 
   const seen = new Set();
   const team = [];
 
-  if (boss) { team.push({ ...boss, position: 'center', isBoss: true }); seen.add(BOSS_INITIALS); }
+  if (boss) { team.push({ ...boss, position: 'center', isBoss: true }); seen.add(bossInitials); }
   if (owner && !seen.has(ownerInitials)) { team.push({ ...owner, position: 'left', isBoss: false }); seen.add(ownerInitials); }
   if (sndr && !seen.has(senderInitials)) { team.push({ ...sndr, position: 'right', isBoss: false }); seen.add(senderInitials); }
 
