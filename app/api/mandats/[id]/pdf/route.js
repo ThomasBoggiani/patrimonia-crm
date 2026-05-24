@@ -42,7 +42,7 @@ async function loadMandatData(mandatId) {
   if (mandat.profile_id) {
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select(.select('id, email, prenom, nom, telephone, avatar_url, fonction, is_boss'))
+      .select('id, email, prenom, nom, telephone, avatar_url, fonction, is_boss')
       .eq('id', mandat.profile_id)
       .maybeSingle();
 
