@@ -1,7 +1,7 @@
 'use client';
 
 // components/ClientsView.jsx
-// Vue Contacts unifiée (Acquéreurs + Mandants + Apporteurs + Notaires + Agences)
+// Vue Contacts unifiée — modèle Nature (catégorie) + Postures (acheteur/vendeur)
 // Source : table contacts + agrégation roles via /api/contacts
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -34,23 +34,24 @@ import ContactsImportModal from './ContactsImportModal';
 import CascadeSelectMulti from './CascadeSelectMulti';
 
 // ─────────────────────────────────────────────────────────────────
-// Configuration des rôles avec couleurs
+// Configuration NATURE (catégorie du contact, 1 valeur)
 // ─────────────────────────────────────────────────────────────────
 
-const ROLES_CONFIG = {
-  acquereur:           { label: 'Acquéreur',           bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500' },
-  mandant:             { label: 'Mandant',             bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-200',    dot: 'bg-blue-500' },
-  apporteur_mandat:    { label: 'Apporteur mandat',    bg: 'bg-purple-50',  text: 'text-purple-700',  border: 'border-purple-200',  dot: 'bg-purple-500' },
-  apporteur_acquereur: { label: 'Apporteur acquéreur', bg: 'bg-fuchsia-50', text: 'text-fuchsia-700', border: 'border-fuchsia-200', dot: 'bg-fuchsia-500' },
-  notaire:             { label: 'Notaire',             bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200',   dot: 'bg-amber-500' },
-  agence:              { label: 'Agence',              bg: 'bg-stone-100',  text: 'text-stone-700',   border: 'border-stone-300',   dot: 'bg-stone-500' },
+const NATURE_CONFIG = {
+  particulier:   { label: 'Particulier',       bg: 'bg-stone-100',    text: 'text-stone-800',    border: 'border-stone-300',    dot: 'bg-stone-500' },
+  agence:        { label: 'Agence',            bg: 'bg-blue-50',      text: 'text-blue-800',     border: 'border-blue-200',     dot: 'bg-blue-500' },
+  notaire:       { label: 'Notaire',           bg: 'bg-amber-50',     text: 'text-amber-800',    border: 'border-amber-200',    dot: 'bg-amber-500' },
+  family_office: { label: 'Family Office',     bg: 'bg-purple-50',    text: 'text-purple-800',   border: 'border-purple-200',   dot: 'bg-purple-500' },
+  fonciere:      { label: 'Foncière',          bg: 'bg-emerald-50',   text: 'text-emerald-800',  border: 'border-emerald-200',  dot: 'bg-emerald-500' },
+  mdb:           { label: 'Marchand de biens', bg: 'bg-orange-50',    text: 'text-orange-800',   border: 'border-orange-200',   dot: 'bg-orange-500' },
+  apporteur:     { label: 'Apporteur',         bg: 'bg-fuchsia-50',   text: 'text-fuchsia-800',  border: 'border-fuchsia-200',  dot: 'bg-fuchsia-500' },
+  autre:         { label: 'Autre',             bg: 'bg-stone-50',     text: 'text-stone-600',    border: 'border-stone-200',    dot: 'bg-stone-400' },
 };
 
-const ROLE_ORDER = ['acquereur', 'mandant', 'apporteur_mandat', 'apporteur_acquereur', 'notaire', 'agence']; const NATURE_CONFIG = { particulier: { label: 'Particulier', bg: 'bg-stone-100', text: 'text-stone-800', border: 'border-stone-300', dot: 'bg-stone-500' }, agence: { label: 'Agence', bg: 'bg-blue-50', text: 'text-blue-800', border: 'border-blue-200', dot: 'bg-blue-500' }, notaire: { label: 'Notaire', bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-200', dot: 'bg-amber-500' }, family_office: { label: 'Family Office', bg: 'bg-purple-50', text: 'text-purple-800', border: 'border-purple-200', dot: 'bg-purple-500' }, fonciere: { label: 'Foncière', bg: 'bg-emerald-50', text: 'text-emerald-800', border: 'border-emerald-200', dot: 'bg-emerald-500' }, mdb: { label: 'Marchand de biens', bg: 'bg-orange-50', text: 'text-orange-800', border: 'border-orange-200', dot: 'bg-orange-500' }, apporteur: { label: 'Apporteur', bg: 'bg-fuchsia-50', text: 'text-fuchsia-800', border: 'border-fuchsia-200', dot: 'bg-fuchsia-500' }, autre: { label: 'Autre', bg: 'bg-stone-50', text: 'text-stone-600', border: 'border-stone-200', dot: 'bg-stone-400' }, };
+const NATURE_ORDER = ['particulier', 'agence', 'notaire', 'family_office', 'fonciere', 'mdb', 'apporteur', 'autre'];
 
-function NatureBadge({ categorie }) { const cfg = NATURE_CONFIG[categorie] || NATURE_CONFIG.autre; return (<span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.text} ${cfg.border}`}><span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />{cfg.label}</span>); } function PostureBadge({ posture }) { const isAcheteur = posture === 'acheteur'; return (<span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium ${isAcheteur ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800'}`}>{isAcheteur ? '↑ Achat' : '↓ Vente'}</span>); } function RoleBadge({ role }) {
-  const cfg = ROLES_CONFIG[role];
-  if (!cfg) return null;
+function NatureBadge({ categorie }) {
+  const cfg = NATURE_CONFIG[categorie] || NATURE_CONFIG.autre;
   return (
     <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
@@ -58,8 +59,18 @@ function NatureBadge({ categorie }) { const cfg = NATURE_CONFIG[categorie] || NA
     </span>
   );
 }
+
+function PostureBadge({ posture }) {
+  const isAcheteur = posture === 'acheteur';
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium ${isAcheteur ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800'}`}>
+      {isAcheteur ? '↑ Achat' : '↓ Vente'}
+    </span>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────
-// Configuration qualité (réputation du contact)
+// Configuration QUALITÉ (réputation du contact)
 // ─────────────────────────────────────────────────────────────────
 
 const QUALITE_CONFIG = {
@@ -108,8 +119,8 @@ function QualiteSelector({ value, motif, onChange }) {
               key={q}
               onClick={() => onChange(q, motif)}
               className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-all ${
-                active 
-                  ? `${cfg.bg} ${cfg.text} ${cfg.border} ring-2 ring-offset-1 ring-stone-300` 
+                active
+                  ? `${cfg.bg} ${cfg.text} ${cfg.border} ring-2 ring-offset-1 ring-stone-300`
                   : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
               }`}
             >
@@ -150,7 +161,7 @@ function QualiteSelector({ value, motif, onChange }) {
   );
 }
 
-// Helper utilisé pour notifier le matching (fire-and-forget)
+// Helper : notifier le matching (fire-and-forget)
 async function triggerMatchingBatch({ mandatId, clientId }) {
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -382,11 +393,10 @@ function AddRoleModal({ contactId, contactName, mandats, onClose, onSuccess }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// ClientDetail — fiche détail d'un contact (côté client/acquéreur)
+// ClientDetail — fiche détail unifiée
 // ─────────────────────────────────────────────────────────────────
 
 export function ClientDetail({ client, onBack, onEdit, mandats, deals, interactions, reload, onOpenMandat }) {
-  // Charge les données enrichies du contact (mandats liés, autres liens, etc.)
   const [contactData, setContactData] = useState(null);
   const [loadingContact, setLoadingContact] = useState(true);
   const [showAddRole, setShowAddRole] = useState(false);
@@ -446,21 +456,11 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
     return matchMandatsForClient(client, mandats || []);
   }, [client, mandats]);
 
-  // Agrège les rôles depuis les données enrichies
-  const contactRoles = useMemo(() => {
-    if (!contactData) return ['acquereur']; // par défaut (c'est un acquéreur car on a son client)
-    const roles = new Set(['acquereur']); // on est ici car le contact a un client lié
-    (contactData.mandats || []).forEach(mc => {
-      if (mc.role === 'mandant' || mc.role === 'proprietaire') roles.add('mandant');
-      else if (mc.role === 'apporteur_mandat') roles.add('apporteur_mandat');
-      else if (mc.role === 'apporteur_acquereur') roles.add('apporteur_acquereur');
-      else if (mc.role === 'notaire_vendeur' || mc.role === 'notaire_acquereur') roles.add('notaire');
-    });
-    if (contactData.contact?.categorie === 'agence') roles.add('agence');
-    return Array.from(roles);
-  }, [contactData]);
+  // Postures depuis contactData
+  const postures = contactData?.contact?.postures || ['acheteur'];
+  const categorie = contactData?.contact?.categorie || 'autre';
 
-  // Mandats par rôle (pour les sections)
+  // Mandats par rôle
   const mandatsAsMandant = (contactData?.mandats || []).filter(mc => mc.role === 'mandant' || mc.role === 'proprietaire');
   const mandatsAsApporteurMandat = (contactData?.mandats || []).filter(mc => mc.role === 'apporteur_mandat');
   const mandatsAsApporteurAcquereur = (contactData?.mandats || []).filter(mc => mc.role === 'apporteur_acquereur');
@@ -483,9 +483,10 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
               <span className="text-stone-500 text-lg">· {client.societe}</span>
             )}
           </div>
-          {/* Badges de tous les rôles + qualité */}
+          {/* Nature + Postures + Qualité */}
           <div className="flex items-center gap-2 flex-wrap">
-            {contactRoles.map(r => <RoleBadge key={r} role={r} />)}
+            <NatureBadge categorie={categorie} />
+            {postures.map(p => <PostureBadge key={p} posture={p} />)}
             <QualiteBadge qualite={qualite} />
             {client.typologie && (
               <span className="text-xs px-2 py-0.5 bg-stone-100 text-stone-700 rounded-full">{client.typologie}</span>
@@ -506,9 +507,10 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
         </div>
       </div>
 
-      {/* ═══ QUALITÉ DU CONTACT (réputation) ═══ */}
+      {/* QUALITÉ */}
       <QualiteSelector value={qualite} motif={motifInactif} onChange={updateQualite} />
-      {/* ═══ COORDONNÉES (toujours visible) ═══ */}
+
+      {/* COORDONNÉES */}
       <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
         <div className="flex items-center gap-2 mb-4">
           <UserIcon className="w-4 h-4 text-stone-500" />
@@ -522,12 +524,12 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
         </div>
       </div>
 
-      {/* ═══ SECTION ACQUÉREUR ═══ */}
-      {contactRoles.includes('acquereur') && (
+      {/* CÔTÉ ACHAT (si posture acheteur) */}
+      {postures.includes('acheteur') && (
         <div className="bg-emerald-50/30 rounded-xl p-6 border border-emerald-200 mb-4">
           <div className="flex items-center gap-2 mb-4">
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <h2 className="font-display text-lg font-semibold text-emerald-900">Profil Acquéreur</h2>
+            <h2 className="font-display text-lg font-semibold text-emerald-900">Côté Achat</h2>
           </div>
 
           {(client.budgetMin || client.budgetMax || (client.zones || []).length > 0 || (client.typologiesRecherchees || []).length > 0) && (
@@ -574,118 +576,85 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
         </div>
       )}
 
-      {/* ═══ SECTION MANDANT ═══ */}
-      {contactRoles.includes('mandant') && mandatsAsMandant.length > 0 && (
-        <div className="bg-blue-50/30 rounded-xl p-6 border border-blue-200 mb-4">
+      {/* CÔTÉ VENTE (si posture vendeur OU mandats associés) */}
+      {(postures.includes('vendeur') || mandatsAsMandant.length > 0 || mandatsAsApporteurMandat.length > 0 || mandatsAsApporteurAcquereur.length > 0 || mandatsAsNotaire.length > 0) && (
+        <div className="bg-orange-50/30 rounded-xl p-6 border border-orange-200 mb-4">
           <div className="flex items-center gap-2 mb-4">
-            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-            <h2 className="font-display text-lg font-semibold text-blue-900">Mandats portés (Mandant)</h2>
+            <span className="w-2 h-2 rounded-full bg-orange-500"></span>
+            <h2 className="font-display text-lg font-semibold text-orange-900">Côté Vente</h2>
           </div>
-          <div className="space-y-2">
-            {mandatsAsMandant.map(mc => (
-              <button
-                key={mc.id}
-                onClick={() => onOpenMandat?.(mc.mandat.id)}
-                className="w-full flex items-center justify-between p-3 bg-white rounded-lg border border-blue-200/50 hover:bg-blue-50 text-left"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-stone-900">{mc.mandat?.nom || 'Mandat inconnu'}</div>
-                  <div className="text-xs text-stone-500">
-                    {mc.mandat?.ville || ''}{mc.est_principal ? ' · Principal' : ''}
-                  </div>
-                </div>
-                {mc.mandat?.statut && (
-                  <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">{mc.mandat.statut}</span>
-                )}
-              </button>
-            ))}
-          </div>
+
+          {mandatsAsMandant.length > 0 && (
+            <div className="mb-3">
+              <div className="text-xs uppercase tracking-wide text-blue-700 mb-2 font-semibold">Mandats portés (Mandant)</div>
+              <div className="space-y-2">
+                {mandatsAsMandant.map(mc => (
+                  <button key={mc.id} onClick={() => onOpenMandat?.(mc.mandat.id)} className="w-full flex items-center justify-between p-3 bg-white rounded-lg border border-blue-200/50 hover:bg-blue-50 text-left">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-stone-900">{mc.mandat?.nom || 'Mandat inconnu'}</div>
+                      <div className="text-xs text-stone-500">{mc.mandat?.ville || ''}{mc.est_principal ? ' · Principal' : ''}</div>
+                    </div>
+                    {mc.mandat?.statut && (<span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">{mc.mandat.statut}</span>)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {mandatsAsApporteurMandat.length > 0 && (
+            <div className="mb-3">
+              <div className="text-xs uppercase tracking-wide text-purple-700 mb-2 font-semibold">Mandats apportés (entrée)</div>
+              <div className="space-y-2">
+                {mandatsAsApporteurMandat.map(mc => (
+                  <button key={mc.id} onClick={() => onOpenMandat?.(mc.mandat.id)} className="w-full flex items-center justify-between p-3 bg-white rounded-lg border border-purple-200/50 hover:bg-purple-50 text-left">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-stone-900">{mc.mandat?.nom || 'Mandat inconnu'}</div>
+                      <div className="text-xs text-stone-500">{mc.mandat?.ville || ''}</div>
+                    </div>
+                    {mc.mandat?.statut && (<span className="text-xs px-2 py-1 bg-purple-100 text-purple-800 rounded-full">{mc.mandat.statut}</span>)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {mandatsAsApporteurAcquereur.length > 0 && (
+            <div className="mb-3">
+              <div className="text-xs uppercase tracking-wide text-fuchsia-700 mb-2 font-semibold">Apporte des acquéreurs sur</div>
+              <div className="space-y-2">
+                {mandatsAsApporteurAcquereur.map(mc => (
+                  <button key={mc.id} onClick={() => onOpenMandat?.(mc.mandat.id)} className="w-full flex items-center justify-between p-3 bg-white rounded-lg border border-fuchsia-200/50 hover:bg-fuchsia-50 text-left">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-stone-900">{mc.mandat?.nom || 'Mandat inconnu'}</div>
+                      <div className="text-xs text-stone-500">{mc.mandat?.ville || ''}</div>
+                    </div>
+                    {mc.mandat?.statut && (<span className="text-xs px-2 py-1 bg-fuchsia-100 text-fuchsia-800 rounded-full">{mc.mandat.statut}</span>)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {mandatsAsNotaire.length > 0 && (
+            <div className="mb-3">
+              <div className="text-xs uppercase tracking-wide text-amber-700 mb-2 font-semibold">Mandats suivis (Notaire)</div>
+              <div className="space-y-2">
+                {mandatsAsNotaire.map(mc => (
+                  <button key={mc.id} onClick={() => onOpenMandat?.(mc.mandat.id)} className="w-full flex items-center justify-between p-3 bg-white rounded-lg border border-amber-200/50 hover:bg-amber-50 text-left">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-stone-900">{mc.mandat?.nom || 'Mandat inconnu'}</div>
+                      <div className="text-xs text-stone-500">{mc.role === 'notaire_vendeur' ? 'Côté vendeur' : 'Côté acquéreur'}</div>
+                    </div>
+                    {mc.mandat?.statut && (<span className="text-xs px-2 py-1 bg-amber-100 text-amber-800 rounded-full">{mc.mandat.statut}</span>)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* ═══ SECTION APPORTEUR MANDAT (entrée mandat) ═══ */}
-      {contactRoles.includes('apporteur_mandat') && mandatsAsApporteurMandat.length > 0 && (
-        <div className="bg-purple-50/30 rounded-xl p-6 border border-purple-200 mb-4">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-            <h2 className="font-display text-lg font-semibold text-purple-900">Mandats apportés (entrée)</h2>
-          </div>
-          <div className="space-y-2">
-            {mandatsAsApporteurMandat.map(mc => (
-              <button
-                key={mc.id}
-                onClick={() => onOpenMandat?.(mc.mandat.id)}
-                className="w-full flex items-center justify-between p-3 bg-white rounded-lg border border-purple-200/50 hover:bg-purple-50 text-left"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-stone-900">{mc.mandat?.nom || 'Mandat inconnu'}</div>
-                  <div className="text-xs text-stone-500">{mc.mandat?.ville || ''}</div>
-                </div>
-                {mc.mandat?.statut && (
-                  <span className="text-xs px-2 py-1 bg-purple-100 text-purple-800 rounded-full">{mc.mandat.statut}</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ═══ SECTION APPORTEUR ACQUÉREUR (sortie mandat) ═══ */}
-      {contactRoles.includes('apporteur_acquereur') && mandatsAsApporteurAcquereur.length > 0 && (
-        <div className="bg-fuchsia-50/30 rounded-xl p-6 border border-fuchsia-200 mb-4">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="w-2 h-2 rounded-full bg-fuchsia-500"></span>
-            <h2 className="font-display text-lg font-semibold text-fuchsia-900">Apporte des acquéreurs sur</h2>
-          </div>
-          <div className="space-y-2">
-            {mandatsAsApporteurAcquereur.map(mc => (
-              <button
-                key={mc.id}
-                onClick={() => onOpenMandat?.(mc.mandat.id)}
-                className="w-full flex items-center justify-between p-3 bg-white rounded-lg border border-fuchsia-200/50 hover:bg-fuchsia-50 text-left"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-stone-900">{mc.mandat?.nom || 'Mandat inconnu'}</div>
-                  <div className="text-xs text-stone-500">{mc.mandat?.ville || ''}</div>
-                </div>
-                {mc.mandat?.statut && (
-                  <span className="text-xs px-2 py-1 bg-fuchsia-100 text-fuchsia-800 rounded-full">{mc.mandat.statut}</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-      {/* ═══ SECTION NOTAIRE ═══ */}
-      {contactRoles.includes('notaire') && mandatsAsNotaire.length > 0 && (
-        <div className="bg-amber-50/30 rounded-xl p-6 border border-amber-200 mb-4">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-            <h2 className="font-display text-lg font-semibold text-amber-900">Mandats suivis (Notaire)</h2>
-          </div>
-          <div className="space-y-2">
-            {mandatsAsNotaire.map(mc => (
-              <button
-                key={mc.id}
-                onClick={() => onOpenMandat?.(mc.mandat.id)}
-                className="w-full flex items-center justify-between p-3 bg-white rounded-lg border border-amber-200/50 hover:bg-amber-50 text-left"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-stone-900">{mc.mandat?.nom || 'Mandat inconnu'}</div>
-                  <div className="text-xs text-stone-500">
-                    {mc.role === 'notaire_vendeur' ? 'Côté vendeur' : 'Côté acquéreur'}
-                  </div>
-                </div>
-                {mc.mandat?.statut && (
-                  <span className="text-xs px-2 py-1 bg-amber-100 text-amber-800 rounded-full">{mc.mandat.statut}</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ═══ SECTION DEALS (acquéreurs uniquement) ═══ */}
+      {/* DEALS */}
       {clientDeals.length > 0 && (
         <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
           <h2 className="font-display text-lg font-semibold text-stone-900 mb-4">Deals ({clientDeals.length})</h2>
@@ -706,7 +675,7 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
         </div>
       )}
 
-      {/* ═══ INTERACTIONS ═══ */}
+      {/* INTERACTIONS */}
       {clientInteractions.length > 0 && (
         <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
           <h2 className="font-display text-lg font-semibold text-stone-900 mb-4">Historique des échanges ({clientInteractions.length})</h2>
@@ -726,7 +695,7 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
         </div>
       )}
 
-      {showAddRole && client.contactId || client.contact_id ? (
+      {showAddRole && (client.contactId || client.contact_id) && (
         <AddRoleModal
           contactId={client.contactId || client.contact_id}
           contactName={`${client.prenom || ''} ${client.nom || ''}`.trim()}
@@ -734,14 +703,14 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
           onClose={() => setShowAddRole(false)}
           onSuccess={() => { setShowAddRole(false); loadContact(); }}
         />
-      ) : null}
+      )}
       <AIAssistantChat floating context={{ type: 'client', data: client }} />
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────
-// ClientForm — formulaire d'édition (inchangé)
+// ClientForm — formulaire d'édition
 // ─────────────────────────────────────────────────────────────────
 
 export function ClientForm({ client, onSave, onClose }) {
@@ -756,7 +725,6 @@ export function ClientForm({ client, onSave, onClose }) {
     owner: userInitials, notes: '',
   });
 
-  // Si on édite un client existant, on charge sa catégorie depuis contacts
   useEffect(() => {
     async function loadCategorie() {
       const contactId = client?.contactId || client?.contact_id;
@@ -773,6 +741,7 @@ export function ClientForm({ client, onSave, onClose }) {
     }
     if (client?.id) loadCategorie();
   }, [client?.id]);
+
   const update = (k, v) => setData({ ...data, [k]: v });
   const marche = getMarcheFromTypologieClient(data.typologie);
 
@@ -879,8 +848,7 @@ export function ClientForm({ client, onSave, onClose }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// ClientsTab — onglet principal "Contacts" (anciennement Clients)
-// Affiche tous les contacts avec leurs rôles (Acquéreur, Mandant, etc.)
+// ClientsTab — onglet principal "Contacts"
 // ─────────────────────────────────────────────────────────────────
 
 export default function ClientsTab({ clients, reload, mandats, deals, interactions, pendingClientId, onPendingClientConsumed, onOpenMandat }) {
@@ -888,7 +856,8 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
   const [contacts, setContacts] = useState([]);
   const [loadingContacts, setLoadingContacts] = useState(true);
   const [search, setSearch] = useState('');
-  const [filterRole, setFilterRole] = useState(''); // '' | 'acquereur' | 'mandant' | ...
+  const [filterNature, setFilterNature] = useState('');
+  const [filterPosture, setFilterPosture] = useState('');
   const [filterMine, setFilterMine] = useState(false);
   const myInitials = getCurrentUserInitials(profile);
   const [editingClient, setEditingClient] = useState(null);
@@ -896,13 +865,11 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
   const [showImport, setShowImport] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
 
-  // Charge les contacts (avec leurs rôles agrégés via l'API)
   async function loadContacts() {
     setLoadingContacts(true);
     try {
       const params = new URLSearchParams();
       if (search.trim()) params.set('q', search.trim());
-      if (filterRole) params.set('role', filterRole);
       params.set('limit', '500');
       const res = await fetch(`/api/contacts?${params.toString()}`);
       const data = await res.json();
@@ -917,10 +884,8 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
   useEffect(() => {
     const h = setTimeout(loadContacts, 250);
     return () => clearTimeout(h);
-  }, [search, filterRole]);
+  }, [search]);
 
-  // Deep-link : si pendingClientId est passé, on cherche le client correspondant dans `clients` prop
-  // (car le deep-link arrive avec un client.id, pas un contact.id)
   useEffect(() => {
     if (pendingClientId && Array.isArray(clients) && clients.length > 0) {
       const c = clients.find(x => x.id === pendingClientId);
@@ -928,27 +893,25 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
     }
   }, [pendingClientId, clients]);
 
-  // Filtre Mes contacts : on filtre par owner sur les clients liés au contact
+  // Filtres combinés
   const filtered = contacts.filter(c => {
     if (filterMine) {
       const hasMyOwnedClient = (c.client_owners || []).includes(myInitials);
       if (!hasMyOwnedClient) return false;
     }
+    if (filterNature && c.categorie !== filterNature) return false;
+    if (filterPosture && !(c.postures || []).includes(filterPosture)) return false;
     return true;
   });
 
-  // Quand on clique sur un contact qui est aussi un acquéreur, on ouvre la fiche Client classique
   function handleContactClick(contact) {
-    // Trouver le client lié à ce contact
     const linkedClient = clients.find(c => c.contactId === contact.id || c.contact_id === contact.id);
     if (linkedClient) {
       setSelectedClient(linkedClient);
-    } else if (contact.roles.includes('acquereur')) {
-      // C'est marqué acquéreur dans l'API mais on ne trouve pas le client local → rechargement nécessaire
+    } else if ((contact.postures || []).includes('acheteur')) {
       alert('Rechargement nécessaire — clique sur l\'onglet Mandats puis reviens sur Contacts.');
     } else {
-      // Pour un contact sans client (mandant, apporteur...), on n'a pas encore d'écran détail
-      alert(`${contact.prenom || ''} ${contact.nom || ''} n'est pas un acquéreur. Édition coordonnées à venir au prochain commit.`);
+      alert(`${contact.prenom || ''} ${contact.nom || ''} : édition coordonnées à venir.`);
     }
   }
 
@@ -956,14 +919,13 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
     const snakeData = toSnake(clientData);
     delete snakeData.created_at;
     delete snakeData.updated_at;
-    
-    // On extrait la catégorie (qui va dans contacts, pas dans clients)
+
     const categorie = snakeData.categorie;
     delete snakeData.categorie;
-    
+
     let clientId = clientData.id;
     let contactId = clientData.contactId || clientData.contact_id;
-    
+
     if (clientData.id) {
       snakeData.updated_by = user?.id;
       await supabase.from('clients').update(snakeData).eq('id', clientData.id);
@@ -973,8 +935,7 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
       const { data: created } = await supabase.from('clients').insert(snakeData).select().single();
       if (created) { clientId = created.id; contactId = created.contact_id; }
     }
-    
-    // Patch la catégorie sur contacts si le contact_id existe
+
     if (contactId && categorie !== undefined) {
       try {
         await fetch(`/api/contacts/${contactId}`, {
@@ -986,7 +947,7 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
         console.warn('[handleSave] could not update categorie:', e);
       }
     }
-    
+
     setEditingClient(null);
     setShowNew(false);
     reload();
@@ -994,20 +955,21 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
     if (clientId) triggerMatchingBatch({ clientId });
   };
 
-  const handleDelete = async (clientId, contactId) => {
-    if (confirm('Supprimer ce contact ?')) {
-      await supabase.from('clients').delete().eq('id', clientId);
-      reload();
-      loadContacts();
-    }
-  };
-
-  // Compteurs par rôle pour les filtres
-  const roleCounts = useMemo(() => {
-    const counts = { acquereur: 0, mandant: 0, apporteur_mandat: 0, apporteur_acquereur: 0, notaire: 0, agence: 0, sans_role: 0 };
+  // Compteurs par nature et posture
+  const natureCounts = useMemo(() => {
+    const counts = {};
+    NATURE_ORDER.forEach(n => { counts[n] = 0; });
     contacts.forEach(c => {
-      if (c.roles.length === 0) counts.sans_role++;
-      c.roles.forEach(r => { if (counts[r] !== undefined) counts[r]++; });
+      const cat = c.categorie || 'autre';
+      if (counts[cat] !== undefined) counts[cat]++;
+    });
+    return counts;
+  }, [contacts]);
+
+  const postureCounts = useMemo(() => {
+    const counts = { acheteur: 0, vendeur: 0 };
+    contacts.forEach(c => {
+      (c.postures || []).forEach(p => { if (counts[p] !== undefined) counts[p]++; });
     });
     return counts;
   }, [contacts]);
@@ -1050,7 +1012,7 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
         </div>
       </div>
 
-      {/* Barre de recherche */}
+      {/* Recherche */}
       <div className="flex gap-3 mb-3 flex-wrap">
         <div className="flex-1 relative min-w-[280px]">
           <Search className="w-4 h-4 absolute left-3 top-3 text-stone-400" />
@@ -1063,33 +1025,38 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
         </label>
       </div>
 
-      {/* Filtres par rôle (tags) */}
-      <div className="flex gap-2 mb-6 flex-wrap">
-        <button
-          onClick={() => setFilterRole('')}
-          className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${filterRole === '' ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}
-        >
-          Tous ({contacts.length})
+      {/* Filtres Nature */}
+      <div className="flex gap-2 mb-2 flex-wrap items-center">
+        <span className="text-xs uppercase text-stone-500 tracking-wide font-semibold mr-1">Nature :</span>
+        <button onClick={() => setFilterNature('')} className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${filterNature === '' ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}>
+          Toutes ({contacts.length})
         </button>
-        {ROLE_ORDER.map(role => {
-          const cfg = ROLES_CONFIG[role];
-          const active = filterRole === role;
+        {NATURE_ORDER.map(nature => {
+          const cfg = NATURE_CONFIG[nature];
+          const active = filterNature === nature;
+          const count = natureCounts[nature] || 0;
+          if (count === 0) return null;
           return (
-            <button
-              key={role}
-              onClick={() => setFilterRole(role)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${active ? `${cfg.bg} ${cfg.text} ${cfg.border} ring-2 ring-offset-1 ring-stone-300` : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}
-            >
+            <button key={nature} onClick={() => setFilterNature(nature)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${active ? `${cfg.bg} ${cfg.text} ${cfg.border} ring-2 ring-offset-1 ring-stone-300` : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-              {cfg.label} ({roleCounts[role] || 0})
+              {cfg.label} ({count})
             </button>
           );
         })}
-        <button
-          onClick={() => setFilterRole('sans_role')}
-          className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${filterRole === 'sans_role' ? 'bg-stone-200 text-stone-800 border-stone-400 ring-2 ring-offset-1 ring-stone-300' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}
-        >
-          Sans rôle ({roleCounts.sans_role || 0})
+      </div>
+
+      {/* Filtres Posture */}
+      <div className="flex gap-2 mb-6 flex-wrap items-center">
+        <span className="text-xs uppercase text-stone-500 tracking-wide font-semibold mr-1">Posture :</span>
+        <button onClick={() => setFilterPosture('')} className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${filterPosture === '' ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}>
+          Toutes
+        </button>
+        <button onClick={() => setFilterPosture('acheteur')} className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${filterPosture === 'acheteur' ? 'bg-emerald-100 text-emerald-800 border-emerald-300 ring-2 ring-offset-1 ring-stone-300' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}>
+          ↑ Acheteur ({postureCounts.acheteur || 0})
+        </button>
+        <button onClick={() => setFilterPosture('vendeur')} className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${filterPosture === 'vendeur' ? 'bg-orange-100 text-orange-800 border-orange-300 ring-2 ring-offset-1 ring-stone-300' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}>
+          ↓ Vendeur ({postureCounts.vendeur || 0})
         </button>
       </div>
 
@@ -1100,14 +1067,15 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
             <tr>
               <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Nom</th>
               <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Société</th>
-              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Nature</th><th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Postures</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Nature</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Postures</th>
               <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Contact</th>
               <th className="text-center px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide w-12">Owner</th>
             </tr>
           </thead>
           <tbody>
             {loadingContacts && (
-              <tr><td colSpan="5" className="p-12 text-center text-sm text-stone-500"><Loader2 className="w-5 h-5 animate-spin inline mr-2" />Chargement…</td></tr>
+              <tr><td colSpan="6" className="p-12 text-center text-sm text-stone-500"><Loader2 className="w-5 h-5 animate-spin inline mr-2" />Chargement…</td></tr>
             )}
             {!loadingContacts && filtered.map(c => (
               <tr key={c.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer group" onClick={() => handleContactClick(c)}>
@@ -1117,10 +1085,13 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
                   </div>
                 </td>
                 <td className="px-3 py-3 text-sm text-stone-700">{c.societe || '—'}</td>
-                <td className="px-3 py-3"><NatureBadge categorie={c.categorie} /></td><td className="px-3 py-3"><div className="flex gap-1">{(c.postures || []).map(p => <PostureBadge key={p} posture={p} />)}{(c.postures || []).length === 0 && <span className="text-xs text-stone-400 italic">—</span>}</div></td>
-                
-                      <span className="text-xs text-stone-400 italic">—</span>
-                    )}
+                <td className="px-3 py-3"><NatureBadge categorie={c.categorie} /></td>
+                <td className="px-3 py-3">
+                  <div className="flex gap-1 flex-wrap">
+                    {(c.postures || []).length > 0
+                      ? (c.postures || []).map(p => <PostureBadge key={p} posture={p} />)
+                      : <span className="text-xs text-stone-400 italic">—</span>
+                    }
                   </div>
                 </td>
                 <td className="px-3 py-3 text-sm text-stone-600">
@@ -1138,7 +1109,7 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
               </tr>
             ))}
             {!loadingContacts && filtered.length === 0 && (
-              <tr><td colSpan="5" className="p-12 text-center text-sm text-stone-500">Aucun contact trouvé</td></tr>
+              <tr><td colSpan="6" className="p-12 text-center text-sm text-stone-500">Aucun contact trouvé</td></tr>
             )}
           </tbody>
         </table>
