@@ -23,7 +23,7 @@ const NOTIFICATION_PATTERNS = [
 ];
 
 const NEWSLETTER_PATTERNS = [
-  /unsubscribe/i, /se d\u00e9sabonner/i, /newsletter@/i,
+  /unsubscribe/i, /se désabonner/i, /newsletter@/i,
   /@mailchimp\.com$/i, /@sendinblue\.com$/i, /@brevo\.com$/i
 ];
 
