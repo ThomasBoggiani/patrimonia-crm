@@ -756,10 +756,7 @@ export default function PlaquetteAcheteur({
             )}
 
             {autres.length > 0 && (() => {
-              const isBossInAutres = (m) => {
-                const initials = (m?.name || '').split(' ').map(s => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
-                return initials === 'TE';
-              };
+              const isBossInAutres = (m) => m?.is_boss === true;
               const bossEntry = autres.find(isBossInAutres);
               const autresSansBoss = autres.filter(m => !isBossInAutres(m));
 
