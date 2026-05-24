@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Mail, RefreshCw, Search, Inbox, User as UserIcon, Paperclip, Reply, ExternalLink, AlertCircle, X, UserPlus, Link2, ArrowLeft, Trash2, Loader2, Eye, EyeOff, Briefcase, Bell, Building2, Receipt, Newspaper, HelpCircle, Sparkles, Undo2 } from 'lucide-react';
+import { Mail, RefreshCw, Search, Inbox, User as UserIcon, Paperclip, Reply, ExternalLink, AlertCircle, X, UserPlus, Link2, ArrowLeft, Trash2, Loader2, Eye, EyeOff, Briefcase, Bell, Building2, Receipt, Newspaper, HelpCircle, Sparkles, Undo2, Lightbulb, Check } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import EmailPreviewModal from './EmailPreviewModal';
 import InboxClientActionsModal from './InboxClientActionsModal';
@@ -130,6 +130,7 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
     return () => clearInterval(pollRef.current);
   }, [load]);
 
+  // Archivage automatique business+internal non encore archivés
   useEffect(() => {
     if (!messages || messages.length === 0) return;
 
@@ -164,7 +165,7 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
         });
         const json = await res.json();
         console.log('[Inbox] Archivage terminé:', json);
-        if (json.archived > 0 || json.todosTotal > 0) {
+        if (json.archived > 0 || json.suggestionsTotal > 0) {
           load(true);
         }
       } catch (e) {
@@ -255,7 +256,7 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
 
     if (msg.categorie === 'business') {
       const ok = window.confirm(
-        `⚠️ ATTENTION : Cet email est classé BUSINESS.\n\n"${msg.subject || '(sans objet)'}"\n\nDe : ${msg.from?.name || msg.from?.address}\n\nEs-tu sûr de vouloir le supprimer ? Cette action ne peut pas être annulée facilement.`
+        `⚠️ ATTENTION : Cet email est classé BUSINESS.\n\n"${msg.subject || '(sans objet)'}"\n\nDe : ${msg.from?.name || msg.from?.address}\n\nEs-tu sûr de vouloir le supprimer ?`
       );
       if (!ok) return;
       await doDelete(msg, false);
@@ -301,8 +302,13 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
     if (undoToast?.timeoutId) clearTimeout(undoToast.timeoutId);
     setUndoToast(null);
     alert(
-      'Pour récupérer cet email, va dans Outlook → dossier "Éléments supprimés" et déplace-le vers la boîte de réception.\n\nIl réapparaîtra ici au prochain rafraîchissement.'
+      'Pour récupérer cet email, va dans Outlook → "Éléments supprimés" et déplace-le vers la boîte de réception.'
     );
+  }
+
+  // Met à jour un message localement (utilisé après validation des suggestions)
+  function updateMessageLocal(messageId, patch) {
+    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, ...patch } : m));
   }
 
   return (
@@ -323,7 +329,6 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
         </button>
       </div>
 
-      {/* Onglets catégories (sticker bar) */}
       <div className={`${selected ? 'hidden md:block' : 'block'} mb-3`}>
         <div className="flex gap-1 overflow-x-auto scrollbar-thin pb-1">
           {CATEGORIE_TABS.map(tab => {
@@ -435,13 +440,13 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
               onCreateOrLink={() => openClientActions(selected)}
               onOpenClient={onOpenClient}
               onBack={() => setSelectedId(null)}
+              onSuggestionsValidated={(patch) => updateMessageLocal(selected.id, patch)}
               deleting={deleting}
             />
           )}
         </div>
       </div>
 
-      {/* Toast d'annulation suppression */}
       {undoToast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-stone-900 text-white px-4 py-3 rounded-xl shadow-xl border border-stone-700">
           <span className="text-sm">Email supprimé</span>
@@ -541,6 +546,11 @@ function SwipeableMessageRow({ msg, isSelected, onClick, onMarkUnread, onDelete 
     onClick();
   };
 
+  // Compteur des suggestions en attente (NON validées)
+  const pendingSuggestions = (msg.suggested_todos && Array.isArray(msg.suggested_todos) && !msg.suggestions_validated_at)
+    ? msg.suggested_todos.length
+    : 0;
+
   return (
     <div className="relative overflow-hidden border-b border-stone-100">
       <div className="absolute inset-0 flex items-center justify-between px-4 pointer-events-none">
@@ -583,9 +593,15 @@ function SwipeableMessageRow({ msg, isSelected, onClick, onMarkUnread, onDelete 
             </div>
             <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
               <CategorieBadge categorie={msg.categorie} />
+              {pendingSuggestions > 0 && (
+                <span className="text-[10px] px-1.5 py-0.5 bg-yellow-100 text-yellow-800 rounded-full border border-yellow-300 flex items-center gap-0.5 font-medium">
+                  <Lightbulb className="w-2.5 h-2.5" />
+                  {pendingSuggestions} proposition{pendingSuggestions > 1 ? 's' : ''}
+                </span>
+              )}
               {msg.todos_count > 0 && (
                 <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded-full border border-amber-200 flex items-center gap-0.5 font-medium">
-                  ✨ {msg.todos_count} tâche{msg.todos_count > 1 ? 's' : ''}
+                  ✓ {msg.todos_count} tâche{msg.todos_count > 1 ? 's' : ''}
                 </span>
               )}
               {msg.crm_client ? (
@@ -605,7 +621,6 @@ function SwipeableMessageRow({ msg, isSelected, onClick, onMarkUnread, onDelete 
           </div>
         </div>
 
-        {/* Boutons hover desktop */}
         <div className="hidden md:flex absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity gap-1 bg-white border border-stone-200 rounded-lg shadow-sm p-0.5">
           <button
             onClick={(e) => { e.stopPropagation(); onMarkUnread(); }}
@@ -627,7 +642,172 @@ function SwipeableMessageRow({ msg, isSelected, onClick, onMarkUnread, onDelete 
   );
 }
 
-function MessageDetail({ msg, onReply, onDelete, onCreateOrLink, onOpenClient, onBack, deleting }) {
+// ==========================================================================
+// SuggestionsPanel - Panneau jaune avec checkboxes des propositions IA
+// ==========================================================================
+
+function SuggestionsPanel({ msg, onValidated }) {
+  const [selected, setSelected] = useState(() => {
+    // Par défaut, toutes les suggestions sont cochées
+    return (msg.suggested_todos || []).map((_, i) => i);
+  });
+  const [submitting, setSubmitting] = useState(false);
+
+  if (!msg.suggested_todos || msg.suggested_todos.length === 0 || msg.suggestions_validated_at) {
+    return null;
+  }
+
+  const toggle = (i) => {
+    setSelected(prev => prev.includes(i) ? prev.filter(x => x !== i) : [...prev, i]);
+  };
+
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const selectedTodos = selected.map(i => msg.suggested_todos[i]);
+      const res = await fetch('/api/todos/create-from-suggestions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          messageId: msg.id,
+          selectedTodos,
+          clientId: msg.crm_client?.id || null
+        })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Erreur');
+
+      // Met à jour le message local pour faire disparaître le panneau
+      onValidated?.({
+        suggested_todos: null,
+        suggestions_validated_at: new Date().toISOString(),
+        todos_count: json.todosCreated || 0
+      });
+
+      // Émet un event pour recharger les todos dans CRM.jsx
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('todos-changed'));
+      }
+    } catch (e) {
+      console.error('[SuggestionsPanel] error:', e);
+      alert('Erreur : ' + e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSkipAll = async () => {
+    // Marque comme validé sans créer de todos
+    setSubmitting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      await fetch('/api/todos/create-from-suggestions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          messageId: msg.id,
+          selectedTodos: [],
+          clientId: msg.crm_client?.id || null
+        })
+      });
+      onValidated?.({
+        suggested_todos: null,
+        suggestions_validated_at: new Date().toISOString(),
+        todos_count: 0
+      });
+    } catch (e) {
+      console.error('[SuggestionsPanel] skip error:', e);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const PRIORITE_COLORS = {
+    'Haute': 'bg-red-100 text-red-700 border-red-200',
+    'Moyenne': 'bg-orange-100 text-orange-700 border-orange-200',
+    'Basse': 'bg-stone-100 text-stone-600 border-stone-200'
+  };
+
+  return (
+    <div className="p-3 bg-yellow-50 border border-yellow-300 rounded-lg">
+      <div className="flex items-center gap-2 mb-3">
+        <Lightbulb className="w-4 h-4 text-yellow-700 flex-shrink-0" />
+        <div className="font-medium text-sm text-yellow-900">
+          L'IA suggère {msg.suggested_todos.length} tâche{msg.suggested_todos.length > 1 ? 's' : ''}
+        </div>
+      </div>
+
+      <div className="space-y-2 mb-3">
+        {msg.suggested_todos.map((t, i) => {
+          const isSelected = selected.includes(i);
+          return (
+            <label
+              key={i}
+              className={`flex items-start gap-2 p-2 rounded-lg cursor-pointer transition border ${
+                isSelected
+                  ? 'bg-white border-yellow-400'
+                  : 'bg-yellow-50/50 border-yellow-200 opacity-60'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => toggle(i)}
+                disabled={submitting}
+                className="mt-0.5 flex-shrink-0 accent-yellow-600"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-stone-900">{t.titre}</div>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${PRIORITE_COLORS[t.priorite] || PRIORITE_COLORS['Moyenne']}`}>
+                    {t.priorite}
+                  </span>
+                  <span className="text-[10px] text-stone-600">
+                    Échéance : J+{t.echeance_jours}
+                  </span>
+                </div>
+                {t.raison && (
+                  <div className="text-xs text-stone-600 mt-1 italic">{t.raison}</div>
+                )}
+              </div>
+            </label>
+          );
+        })}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleSubmit}
+          disabled={submitting || selected.length === 0}
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-stone-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition"
+        >
+          {submitting ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Check className="w-3.5 h-3.5" />
+          )}
+          {submitting ? 'Création...' : `Créer ${selected.length} tâche${selected.length > 1 ? 's' : ''}`}
+        </button>
+        <button
+          onClick={handleSkipAll}
+          disabled={submitting}
+          className="px-3 py-2 text-stone-700 hover:bg-stone-100 rounded-lg text-sm font-medium disabled:opacity-50"
+        >
+          Ignorer tout
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MessageDetail({ msg, onReply, onDelete, onCreateOrLink, onOpenClient, onBack, deleting, onSuggestionsValidated }) {
   const date = msg.receivedDateTime ? new Date(msg.receivedDateTime).toLocaleString('fr-FR') : '';
 
   return (
@@ -685,6 +865,9 @@ function MessageDetail({ msg, onReply, onDelete, onCreateOrLink, onOpenClient, o
             </button>
           </div>
         )}
+
+        {/* Panneau jaune des suggestions IA */}
+        <SuggestionsPanel msg={msg} onValidated={onSuggestionsValidated} />
 
         <div className="border-t border-stone-200 pt-4">
           <div className="text-sm text-stone-700 whitespace-pre-wrap leading-relaxed break-words">
