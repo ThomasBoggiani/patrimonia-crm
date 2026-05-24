@@ -72,6 +72,25 @@ export default function InboxTab({ onUnreadCountChange, reload, onOpenClient }) 
 
       setMessages(json.messages || []);
       onUnreadCountChange?.(json.unread_count || 0);
+
+      // Déclenche la classification IA pour les mails non encore classés
+      if (Array.isArray(json.to_classify) && json.to_classify.length > 0) {
+        fetch('/api/microsoft/inbox/classify', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({ messages: json.to_classify })
+        })
+          .then(r => r.json())
+          .then(result => {
+            console.log('[Inbox] Classification terminée:', result);
+            // Recharge l'inbox pour récupérer les catégories
+            load(true);
+          })
+          .catch(e => console.warn('[Inbox] classify error:', e.message));
+      }
     } catch (e) {
       setError(e.message);
     } finally {
