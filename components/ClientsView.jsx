@@ -255,4 +255,331 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
               return (
                 <button key={d.id} onClick={() => mandat && onOpenMandat?.(mandat.id)} className="w-full flex items-center justify-between p-3 bg-stone-50 rounded-lg hover:bg-stone-100 text-left">
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-med
+                    <div className="text-sm font-medium text-stone-900 truncate">{mandat?.nom || 'Mandat inconnu'}</div>
+                    <div className="text-xs text-stone-500">{d.statut}</div>
+                  </div>
+                  <DealStatutBadge statut={d.statut} />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {clientInteractions.length > 0 && (
+        <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
+          <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Historique des échanges ({clientInteractions.length})</h2>
+          <div className="space-y-3">
+            {clientInteractions.slice(0, 10).map(int => (
+              <div key={int.id} className="flex items-start gap-3 pb-3 border-b border-cream-dark last:border-0">
+                <TypeInteractionBadge type={int.type} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-stone-900">{int.objet || int.notes || '—'}</div>
+                  <div className="text-xs text-stone-500 mt-0.5">
+                    {int.date && new Date(int.date).toLocaleDateString('fr-FR')} · {int.par || '—'}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <AIAssistantChat floating context={{ type: 'client', data: client }} />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ClientForm — formulaire d'édition
+// ─────────────────────────────────────────────────────────────────
+
+export function ClientForm({ client, onSave, onClose }) {
+  const { profile } = useAuth();
+  const userInitials = getCurrentUserInitials(profile);
+  const [data, setData] = useState(client || {
+    prenom: '', nom: '', societe: '', email: '', tel: '',
+    adresse: '', ville: '', typologie: '',
+    budgetMin: 0, budgetMax: 0, surfaceMin: 0, surfaceMax: 0,
+    typologiesRecherchees: [], zones: [],
+    rendementMin: 0, statut: 'Actif', maturite: 'Tiède',
+    owner: userInitials, notes: '',
+  });
+  const update = (k, v) => setData({ ...data, [k]: v });
+  const marche = getMarcheFromTypologieClient(data.typologie);
+
+  return (
+    <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-6" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-luxe-hover max-w-2xl w-full max-h-[92vh] overflow-y-auto scrollbar-thin" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-6 border-b border-stone-200 sticky top-0 bg-white z-10">
+          <h2 className="font-display text-2xl font-semibold text-stone-900">{client ? 'Modifier' : 'Nouveau'} client</h2>
+          <button onClick={onClose} className="text-stone-500 hover:text-stone-900"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Prénom"><input type="text" value={data.prenom || ''} onChange={e => update('prenom', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
+            <Field label="Nom"><input type="text" value={data.nom || ''} onChange={e => update('nom', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
+          </div>
+          <Field label="Société (optionnel)"><input type="text" value={data.societe || ''} onChange={e => update('societe', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Email"><input type="email" value={data.email || ''} onChange={e => update('email', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
+            <Field label="Téléphone"><input type="text" value={data.tel || ''} onChange={e => update('tel', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
+          </div>
+          <Field label="Typologie">
+            <select value={data.typologie || ''} onChange={e => update('typologie', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
+              <option value="">— Choisir —</option>
+              {TYPOLOGIES_CLIENT.map(t => <option key={t}>{t}</option>)}
+            </select>
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Budget min (€)"><input type="number" value={data.budgetMin || 0} onChange={e => update('budgetMin', +e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
+            <Field label="Budget max (€)"><input type="number" value={data.budgetMax || 0} onChange={e => update('budgetMax', +e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Surface min (m²)"><input type="number" value={data.surfaceMin || 0} onChange={e => update('surfaceMin', +e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
+            <Field label="Surface max (m²)"><input type="number" value={data.surfaceMax || 0} onChange={e => update('surfaceMax', +e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
+          </div>
+          <Field label="Typologies recherchées">
+            {marche === 'b2c' ? (
+              <CascadeSelectMulti
+                tree={{ 'Habitation': TYPES_HABITATION_B2C }}
+                values={data.typologiesRecherchees || []}
+                onChange={(vals) => update('typologiesRecherchees', vals)}
+              />
+            ) : (
+              <CascadeSelectMulti
+                tree={TYPES_ACTIF_B2B_TREE}
+                values={data.typologiesRecherchees || []}
+                onChange={(vals) => update('typologiesRecherchees', vals)}
+              />
+            )}
+          </Field>
+          <Field label="Zones recherchées">
+            <input
+              type="text"
+              value={(data.zones || []).join(', ')}
+              onChange={e => update('zones', e.target.value.split(',').map(z => z.trim()).filter(Boolean))}
+              placeholder="Paris 1er, Paris 7e, Neuilly..."
+              className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900"
+            />
+          </Field>
+          <Field label="Rendement minimum (%)">
+            <input type="number" step="0.01" value={data.rendementMin || 0} onChange={e => update('rendementMin', +e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Statut">
+              <select value={data.statut || 'Actif'} onChange={e => update('statut', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
+                <option>Actif</option>
+                <option>Inactif</option>
+                <option>Mandant</option>
+              </select>
+            </Field>
+            <Field label="Maturité">
+              <select value={data.maturite || 'Tiède'} onChange={e => update('maturite', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
+                <option>Chaud</option>
+                <option>Tiède</option>
+                <option>Froid</option>
+              </select>
+            </Field>
+          </div>
+          <Field label="Notes">
+            <textarea value={data.notes || ''} onChange={e => update('notes', e.target.value)} rows={3} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" />
+          </Field>
+        </div>
+
+        <div className="flex gap-2 justify-end p-6 border-t border-stone-200 bg-stone-50 sticky bottom-0">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-stone-700 hover:bg-cream-200 rounded-lg">Annuler</button>
+          <button onClick={() => onSave(data)} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ClientsTab — onglet principal "Clients"
+// ─────────────────────────────────────────────────────────────────
+
+export default function ClientsTab({ clients, reload, mandats, deals, interactions, pendingClientId, onPendingClientConsumed, onOpenMandat }) {
+  const { user, profile } = useAuth();
+  const [search, setSearch] = useState('');
+  const [filterTypo, setFilterTypo] = useState('Tous');
+  const [filterMarche, setFilterMarche] = useState('Tous');
+  const [filterMine, setFilterMine] = useState(false);
+  const myInitials = getCurrentUserInitials(profile);
+  const [editingClient, setEditingClient] = useState(null);
+  const [showNew, setShowNew] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [selectedClient, setSelectedClient] = useState(null);
+
+  useEffect(() => {
+    if (pendingClientId && Array.isArray(clients) && clients.length > 0) {
+      const c = clients.find(x => x.id === pendingClientId);
+      if (c) { setSelectedClient(c); onPendingClientConsumed?.(); }
+    }
+  }, [pendingClientId, clients]);
+
+  const filtered = clients.filter(c => {
+    if (filterMine && c.owner !== myInitials) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const hay = `${c.prenom || ''} ${c.nom || ''} ${c.societe || ''} ${c.email || ''} ${c.tel || ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (filterTypo !== 'Tous' && c.typologie !== filterTypo) return false;
+    if (filterMarche !== 'Tous') {
+      const m = getMarcheFromTypologieClient(c.typologie);
+      if (m !== filterMarche) return false;
+    }
+    return true;
+  });
+
+  const handleSave = async (clientData) => {
+    const snakeData = toSnake(clientData);
+    delete snakeData.created_at;
+    delete snakeData.updated_at;
+    let clientId = clientData.id;
+    if (clientData.id) {
+      snakeData.updated_by = user?.id;
+      await supabase.from('clients').update(snakeData).eq('id', clientData.id);
+    } else {
+      delete snakeData.id;
+      snakeData.created_by = user?.id;
+      const { data: created } = await supabase.from('clients').insert(snakeData).select().single();
+      if (created) clientId = created.id;
+    }
+    setEditingClient(null);
+    setShowNew(false);
+    reload();
+    if (clientId) triggerMatchingBatch({ clientId });
+  };
+
+  const handleDelete = async (id) => {
+    if (confirm('Supprimer ce client ?')) {
+      await supabase.from('clients').delete().eq('id', id);
+      reload();
+    }
+  };
+
+  if (selectedClient) {
+    const current = clients.find(c => c.id === selectedClient.id) || selectedClient;
+    return (
+      <>
+        <ClientDetail
+          client={current}
+          onBack={() => setSelectedClient(null)}
+          onEdit={() => setEditingClient(current)}
+          mandats={mandats}
+          deals={deals}
+          interactions={interactions}
+          reload={reload}
+          onOpenMandat={onOpenMandat}
+        />
+        {editingClient && (
+          <ClientForm client={editingClient} onSave={handleSave} onClose={() => setEditingClient(null)} />
+        )}
+      </>
+    );
+  }
+
+  return (
+    <div className="p-6 max-w-none">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div className="flex items-baseline gap-3">
+          <h1 className="font-display text-2xl font-semibold text-stone-900">Clients</h1>
+          <span className="text-stone-500 text-sm">{filtered.length} client{filtered.length > 1 ? 's' : ''}</span>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded-lg hover:bg-cream-50 text-sm">
+            <Upload className="w-4 h-4" /> Importer
+          </button>
+          <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-3 py-2 bg-ink-deep text-white rounded-lg hover:bg-stone-800 text-sm font-medium">
+            <Plus className="w-4 h-4" /> Nouveau client
+          </button>
+        </div>
+      </div>
+
+      <div className="flex gap-3 mb-6 flex-wrap">
+        <div className="flex-1 relative min-w-[280px]">
+          <Search className="w-4 h-4 absolute left-3 top-3 text-stone-400" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher (nom, société, email…)"
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" />
+        </div>
+        <div className="flex bg-white border border-stone-200 rounded-lg overflow-hidden">
+          <button onClick={() => setFilterMarche('Tous')} className={`px-3 py-2.5 text-xs font-medium ${filterMarche === 'Tous' ? 'bg-ink-deep text-white' : 'text-stone-600 hover:bg-stone-50'}`}>Tous</button>
+          <button onClick={() => setFilterMarche('b2b')} className={`px-3 py-2.5 text-xs font-medium border-l border-stone-200 ${filterMarche === 'b2b' ? 'bg-sage-100 text-sage-darker' : 'text-stone-600 hover:bg-stone-50'}`}>B2B</button>
+          <button onClick={() => setFilterMarche('b2c')} className={`px-3 py-2.5 text-xs font-medium border-l border-stone-200 ${filterMarche === 'b2c' ? 'bg-blue-100 text-blue-900' : 'text-stone-600 hover:bg-stone-50'}`}>B2C</button>
+        </div>
+        <select value={filterTypo} onChange={e => setFilterTypo(e.target.value)} className="px-4 py-2.5 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
+          <option>Tous</option>
+          {TYPOLOGIES_CLIENT.map(t => <option key={t}>{t}</option>)}
+        </select>
+        <label className="flex items-center gap-2 px-3 py-2.5 bg-white border border-stone-200 rounded-lg text-sm cursor-pointer">
+          <input type="checkbox" checked={filterMine} onChange={e => setFilterMine(e.target.checked)} />
+          <span>Mes clients</span>
+        </label>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-stone-50 border-b border-cream-dark">
+            <tr>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Nom</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Société</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Typologie</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Budget</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide">Contact</th>
+              <th className="text-center px-3 py-2 text-xs font-semibold text-stone-600 uppercase tracking-wide w-12">Owner</th>
+              <th className="w-12"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(c => (
+              <tr key={c.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer group" onClick={() => setSelectedClient(c)}>
+                <td className="px-3 py-3">
+                  <div className="font-medium text-stone-900 text-sm">{c.prenom} {c.nom}</div>
+                </td>
+                <td className="px-3 py-3 text-sm text-stone-700">{c.societe || '—'}</td>
+                <td className="px-3 py-3 text-sm">
+                  {c.typologie ? (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-sage-50 text-sage-darker border border-sage-light">{c.typologie}</span>
+                  ) : <span className="text-stone-400">—</span>}
+                </td>
+                <td className="px-3 py-3 text-sm text-stone-700">
+                  {c.budgetMin || c.budgetMax ? `${formatPrixCompact(c.budgetMin || 0)} → ${formatPrixCompact(c.budgetMax || 0)}` : '—'}
+                </td>
+                <td className="px-3 py-3 text-sm text-stone-600">
+                  <div className="truncate max-w-[200px]">{c.email || c.tel || '—'}</div>
+                </td>
+                <td className="px-3 py-3 text-center">
+                  <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-sage-100 text-sage-darker text-xs font-semibold border border-sage-light" title={'Owner: ' + (c.owner || '—')}>
+                    {c.owner || '?'}
+                  </div>
+                </td>
+                <td className="px-3 py-2">
+                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100" onClick={e => e.stopPropagation()}>
+                    <button onClick={() => setEditingClient(c)} className="p-1.5 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded"><Edit2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => handleDelete(c.id)} className="p-1.5 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {filtered.length === 0 && <div className="p-12 text-center text-stone-500 text-sm">Aucun client trouvé</div>}
+      </div>
+
+      {(editingClient || showNew) && (
+        <ClientForm
+          client={editingClient}
+          onSave={handleSave}
+          onClose={() => { setEditingClient(null); setShowNew(false); }}
+        />
+      )}
+      {showImport && (
+        <ContactsImportModal onClose={() => setShowImport(false)} onImported={() => { setShowImport(false); reload(); }} />
+      )}
+    </div>
+  );
+}
