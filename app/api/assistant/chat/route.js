@@ -98,6 +98,7 @@ CAPACITÉS ACTUELLES (Phase 4)
 LECTURE
 - search_mandats : chercher dans les mandats
 - search_clients : chercher dans les clients
+- search_interactions : chercher dans l'historique des échanges (emails reçus/envoyés, appels, RDV, notes). À UTILISER dès que Thomas demande "les emails", "qui m'a écrit", "les derniers échanges", "que s'est-il passé sur X"
 CRÉATION (avec confirmation utilisateur obligatoire)
 - propose_create_mandat : créer un mandat
 - propose_create_client : créer un client (acquéreur)
@@ -203,7 +204,7 @@ const tools = [
     type: 'function',
     function: {
       name: 'search_interactions',
-      description: 'Cherche dans l\'historique des interactions (emails, appels, RDV, notes). Filtrable par client ou mandat.',
+      description: 'Cherche dans l\'historique COMPLET des échanges du CRM : emails reçus (type=email_entrant), emails envoyés (type=email_sortant), appels (type=Appel), RDV (type=RDV), notes (type=Note). UTILISER SYSTÉMATIQUEMENT cette fonction dès que Thomas demande "les emails reçus", "les emails envoyés", "les derniers échanges", "qui m\'a contacté", "qu\'est-ce qui s\'est passé avec X", etc. Filtrable par client, mandat, type, ou date.',
       parameters: {
         type: 'object',
         properties: {
