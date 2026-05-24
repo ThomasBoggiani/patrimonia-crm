@@ -79,7 +79,7 @@ async function executeCreateMandat(data, userId, userInitials) {
     description: data.description || null,
     contact: data.contact || null,
     tel: data.tel || null,
-    owner: data.owner || userInitials || 'JD',
+    owner: data.owner || userInitials || null,
     created_by: userId || null
   };
   const { data: inserted, error } = await supabaseAdmin
@@ -109,7 +109,7 @@ async function executeCreateClient(data, userId, userInitials) {
     budget_max: typeof data.budget_max === 'number' ? data.budget_max : 0,
     rendement_min: typeof data.rendement_min === 'number' ? data.rendement_min : 0,
     details_recherche: data.details_recherche || null,
-    owner: data.owner || userInitials || 'JD',
+    owner: data.owner || userInitials || null,
     created_by: userId || null
   };
   const { data: inserted, error } = await supabaseAdmin
