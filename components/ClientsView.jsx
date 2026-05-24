@@ -497,7 +497,7 @@ function InteractionItem({ interaction: int }) {
             {title}
           </div>
           {meta.web_link && (
-            
+            <a
               href={meta.web_link}
               target="_blank"
               rel="noopener noreferrer"
