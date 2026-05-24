@@ -171,6 +171,123 @@ export function OwnerSelector({ mandat, client, entity = 'mandat', reload }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// AddRoleModal — modale pour assigner un rôle à un contact
+// ─────────────────────────────────────────────────────────────────
+
+function AddRoleModal({ contactId, contactName, mandats, onClose, onSuccess }) {
+  const [role, setRole] = useState('mandant');
+  const [mandatId, setMandatId] = useState('');
+  const [estPrincipal, setEstPrincipal] = useState(false);
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const ROLE_OPTIONS = [
+    { value: 'mandant', label: 'Mandant', desc: 'Propriétaire qui confie le mandat' },
+    { value: 'proprietaire', label: 'Propriétaire', desc: 'Co-propriétaire / indivision' },
+    { value: 'apporteur', label: 'Apporteur', desc: 'A apporté ce mandat' },
+    { value: 'notaire_vendeur', label: 'Notaire (côté vendeur)', desc: 'Notaire du mandant' },
+    { value: 'notaire_acquereur', label: 'Notaire (côté acquéreur)', desc: 'Notaire de l\'acheteur' },
+    { value: 'interlocuteur', label: 'Interlocuteur', desc: 'Contact opérationnel sur ce mandat' },
+  ];
+
+  async function handleSave() {
+    if (!mandatId) {
+      alert('Sélectionne un mandat');
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('mandat_contacts').insert({
+        contact_id: contactId,
+        mandat_id: mandatId,
+        role,
+        est_principal: estPrincipal,
+        notes: notes.trim() || null,
+      });
+      if (error) {
+        console.error('[AddRoleModal]', error);
+        if (error.code === '23505') {
+          alert('Ce rôle est déjà attribué à ce contact sur ce mandat.');
+        } else {
+          alert('Erreur : ' + error.message);
+        }
+        return;
+      }
+      onSuccess?.();
+    } catch (e) {
+      console.error('[AddRoleModal] crash', e);
+      alert('Erreur inattendue');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-6" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-luxe-hover max-w-lg w-full max-h-[92vh] overflow-y-auto scrollbar-thin" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-6 border-b border-stone-200">
+          <div>
+            <h2 className="font-display text-xl font-semibold text-stone-900">Ajouter un rôle</h2>
+            <p className="text-xs text-stone-500 mt-1">à {contactName}</p>
+          </div>
+          <button onClick={onClose} className="text-stone-500 hover:text-stone-900"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs uppercase tracking-wide text-stone-600 mb-2 font-semibold">Type de rôle</label>
+            <div className="space-y-1.5">
+              {ROLE_OPTIONS.map(opt => (
+                <label key={opt.value} className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer ${role === opt.value ? 'border-stone-900 bg-stone-50' : 'border-stone-200 hover:bg-cream-50'}`}>
+                  <input type="radio" name="role" value={opt.value} checked={role === opt.value} onChange={e => setRole(e.target.value)} className="mt-0.5" />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-stone-900">{opt.label}</div>
+                    <div className="text-xs text-stone-500">{opt.desc}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs uppercase tracking-wide text-stone-600 mb-2 font-semibold">Mandat concerné</label>
+            <select value={mandatId} onChange={e => setMandatId(e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
+              <option value="">— Sélectionner un mandat —</option>
+              {(mandats || []).map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.nom || m.adresse || `Mandat ${m.id.slice(0, 8)}`}
+                  {m.ville ? ` · ${m.ville}` : ''}
+                  {m.statut ? ` (${m.statut})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {(role === 'mandant' || role === 'proprietaire') && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={estPrincipal} onChange={e => setEstPrincipal(e.target.checked)} />
+              <span className="text-sm text-stone-700">Mandant principal</span>
+            </label>
+          )}
+
+          <div>
+            <label className="block text-xs uppercase tracking-wide text-stone-600 mb-2 font-semibold">Notes (optionnel)</label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Ex : usufruitier, contact préféré..." className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" />
+          </div>
+        </div>
+
+        <div className="flex gap-2 justify-end p-6 border-t border-stone-200 bg-stone-50 sticky bottom-0">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-stone-700 hover:bg-cream-200 rounded-lg">Annuler</button>
+          <button onClick={handleSave} disabled={saving || !mandatId} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink disabled:opacity-50">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin inline" /> : 'Ajouter ce rôle'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
 // ClientDetail — fiche détail d'un contact (côté client/acquéreur)
 // ─────────────────────────────────────────────────────────────────
 
@@ -178,6 +295,7 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
   // Charge les données enrichies du contact (mandats liés, autres liens, etc.)
   const [contactData, setContactData] = useState(null);
   const [loadingContact, setLoadingContact] = useState(true);
+  const [showAddRole, setShowAddRole] = useState(false);
 
   async function loadContact() {
     if (!client?.contactId && !client?.contact_id) {
@@ -255,7 +373,7 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
         <div className="flex items-center gap-2 flex-shrink-0">
           <OwnerSelector client={client} entity="client" reload={reload} />
           <button
-            onClick={() => alert('Ajout de rôle : à venir au prochain commit (3c)')}
+            onClick={() => setShowAddRole(true)}
             className="flex items-center gap-2 px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded-lg text-sm hover:bg-cream-50"
           >
             <Plus className="w-4 h-4" /> Ajouter un rôle
@@ -458,6 +576,15 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
         </div>
       )}
 
+      {showAddRole && client.contactId || client.contact_id ? (
+        <AddRoleModal
+          contactId={client.contactId || client.contact_id}
+          contactName={`${client.prenom || ''} ${client.nom || ''}`.trim()}
+          mandats={mandats}
+          onClose={() => setShowAddRole(false)}
+          onSuccess={() => { setShowAddRole(false); loadContact(); }}
+        />
+      ) : null}
       <AIAssistantChat floating context={{ type: 'client', data: client }} />
     </div>
   );
