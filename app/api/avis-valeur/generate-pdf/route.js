@@ -40,7 +40,7 @@ async function fetchTeamMembers() {
           role: m.role || m.fonction || '',
           email: m.email || '',
           phone: m.phone || m.telephone || '',
-          photo: m.photo_url || m.photo || null,
+          photo: m.avatar_url || m.photo || null,
           initials,
         };
       }
