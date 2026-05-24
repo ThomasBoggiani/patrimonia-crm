@@ -19,7 +19,7 @@ import {
   TYPES_HABITATION_B2C,
   TYPOLOGIES_CLIENT,
   getMarcheFromTypologieClient,
-  CATEGORIES_CONTACT,
+  CATEGORIES_CONTACT, getCategorieLabel,
 } from '@/lib/crm-constants';
 import {
   Field,
@@ -46,9 +46,9 @@ const ROLES_CONFIG = {
   agence:              { label: 'Agence',              bg: 'bg-stone-100',  text: 'text-stone-700',   border: 'border-stone-300',   dot: 'bg-stone-500' },
 };
 
-const ROLE_ORDER = ['acquereur', 'mandant', 'apporteur_mandat', 'apporteur_acquereur', 'notaire', 'agence'];
+const ROLE_ORDER = ['acquereur', 'mandant', 'apporteur_mandat', 'apporteur_acquereur', 'notaire', 'agence']; const NATURE_CONFIG = { particulier: { label: 'Particulier', bg: 'bg-stone-100', text: 'text-stone-800', border: 'border-stone-300', dot: 'bg-stone-500' }, agence: { label: 'Agence', bg: 'bg-blue-50', text: 'text-blue-800', border: 'border-blue-200', dot: 'bg-blue-500' }, notaire: { label: 'Notaire', bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-200', dot: 'bg-amber-500' }, family_office: { label: 'Family Office', bg: 'bg-purple-50', text: 'text-purple-800', border: 'border-purple-200', dot: 'bg-purple-500' }, fonciere: { label: 'Foncière', bg: 'bg-emerald-50', text: 'text-emerald-800', border: 'border-emerald-200', dot: 'bg-emerald-500' }, mdb: { label: 'Marchand de biens', bg: 'bg-orange-50', text: 'text-orange-800', border: 'border-orange-200', dot: 'bg-orange-500' }, apporteur: { label: 'Apporteur', bg: 'bg-fuchsia-50', text: 'text-fuchsia-800', border: 'border-fuchsia-200', dot: 'bg-fuchsia-500' }, autre: { label: 'Autre', bg: 'bg-stone-50', text: 'text-stone-600', border: 'border-stone-200', dot: 'bg-stone-400' }, };
 
-function RoleBadge({ role }) {
+function NatureBadge({ categorie }) { const cfg = NATURE_CONFIG[categorie] || NATURE_CONFIG.autre; return (<span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.text} ${cfg.border}`}><span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />{cfg.label}</span>); } function PostureBadge({ posture }) { const isAcheteur = posture === 'acheteur'; return (<span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium ${isAcheteur ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800'}`}>{isAcheteur ? '↑ Achat' : '↓ Vente'}</span>); } function RoleBadge({ role }) {
   const cfg = ROLES_CONFIG[role];
   if (!cfg) return null;
   return (
