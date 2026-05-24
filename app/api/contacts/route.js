@@ -90,13 +90,14 @@ export async function GET(request) {
         else if (r === 'acquereur') roles.add('acquereur');
       });
       // Catégorie agence → tag agence automatique
-      if (c.categorie === 'agence') roles.add('agence');
+      if (c.categorie === 'agence') roles.add('agence');       
+      const postures = Array.isArray(c.postures) ? c.postures : [];
       return {
         ...c,
         roles: Array.from(roles),
         clients_count: clientsLinked.length,
         client_typologies: [...new Set(clientsLinked.map(x => x.typologie).filter(Boolean))],
-        client_owners: [...new Set(clientsLinked.map(x => x.owner).filter(Boolean))],
+        client_owners: [...new Set(clientsLinked.map(x => x.owner).filter(Boolean))], postures,
       };
     });
 
