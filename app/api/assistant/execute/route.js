@@ -93,11 +93,56 @@ async function executeCreateMandat(data, userId, userInitials) {
 // ==========================================================================
 
 async function executeCreateClient(data, userId, userInitials) {
+  // ═══ 1. Trouve ou crée le contact (table racine) ═══
+  const emailNormalized = (data.email || '').toLowerCase().trim() || null;
+  let contactId = null;
+
+  if (emailNormalized) {
+    // Cherche un contact existant par email
+    const { data: existing } = await supabaseAdmin
+      .from('contacts')
+      .select('id')
+      .eq('email', emailNormalized)
+      .maybeSingle();
+    if (existing?.id) contactId = existing.id;
+  }
+
+  // Si pas trouvé, crée un nouveau contact
+  if (!contactId) {
+    // Déduit la posture depuis data.posture, sinon acheteur par défaut
+    const posture = data.posture || 'acheteur';
+    const categorie = data.categorie || (data.typologie === 'Particuliers' ? 'particulier' : 'autre');
+
+    const { data: newContact, error: contactError } = await supabaseAdmin
+      .from('contacts')
+      .insert({
+        prenom: data.prenom || null,
+        nom: data.nom || 'Sans nom',
+        societe: data.societe || null,
+        email: emailNormalized,
+        tel: data.tel || null,
+        postures: [posture],
+        categorie,
+        qualite: 'neutre',
+        created_by: userId || null
+      })
+      .select('id')
+      .single();
+
+    if (contactError) {
+      console.error('[executeCreateClient] Erreur création contact:', contactError);
+      return { ok: false, error: 'Erreur création contact: ' + contactError.message };
+    }
+    contactId = newContact.id;
+  }
+
+  // ═══ 2. Crée le client (entité business) lié au contact ═══
   const row = {
+    contact_id: contactId, // ← FIX : on lie au contact
     prenom: data.prenom || null,
     nom: data.nom || 'Sans nom',
     societe: data.societe || null,
-    email: data.email || null,
+    email: emailNormalized,
     tel: data.tel || null,
     typologie: data.typologie || 'Particuliers',
     sous_typologie: data.sous_typologie || null,
