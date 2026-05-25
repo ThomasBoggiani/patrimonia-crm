@@ -1017,6 +1017,8 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
   const [search, setSearch] = useState('');
   const [filterNature, setFilterNature] = useState('');
   const [filterPosture, setFilterPosture] = useState('');
+  const [filterMarche, setFilterMarche] = useState('Tous'); // 'Tous' | 'b2b' | 'b2c'
+  const [filterTypologie, setFilterTypologie] = useState('Tous');
   const [filterMine, setFilterMine] = useState(false);
   const myInitials = getCurrentUserInitials(profile);
   const [editingClient, setEditingClient] = useState(null);
@@ -1060,6 +1062,17 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
     }
     if (filterNature && c.categorie !== filterNature) return false;
     if (filterPosture && !(c.postures || []).includes(filterPosture)) return false;
+
+    // Filtre typologie (cible la typologie du client lié, ou la 1ère typologie)
+    const cTypologie = c.client_typologie || c.typologie || (c.client_typologies && c.client_typologies[0]);
+    if (filterTypologie !== 'Tous' && cTypologie !== filterTypologie) return false;
+
+    // Filtre marché : si typologie présente, on utilise getMarcheFromTypologieClient
+    if (filterMarche !== 'Tous') {
+      const cMarche = cTypologie ? getMarcheFromTypologieClient(cTypologie) : null;
+      if (cMarche !== filterMarche) return false;
+    }
+
     return true;
   });
 
@@ -1206,7 +1219,7 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
       </div>
 
       {/* Filtres Posture */}
-      <div className="flex gap-2 mb-6 flex-wrap items-center">
+      <div className="flex gap-2 mb-2 flex-wrap items-center">
         <span className="text-xs uppercase text-stone-500 tracking-wide font-semibold mr-1">Posture :</span>
         <button onClick={() => setFilterPosture('')} className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${filterPosture === '' ? 'bg-ink-deep text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}>
           Toutes
@@ -1217,6 +1230,53 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
         <button onClick={() => setFilterPosture('vendeur')} className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${filterPosture === 'vendeur' ? 'bg-orange-100 text-orange-800 border-orange-300 ring-2 ring-offset-1 ring-stone-300' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}>
           ↓ Vendeur ({postureCounts.vendeur || 0})
         </button>
+      </div>
+
+      {/* Filtres Typologie (B2B/B2C + select détaillé) */}
+      <div className="flex gap-2 mb-6 flex-wrap items-center">
+        <span className="text-xs uppercase text-stone-500 tracking-wide font-semibold mr-1">Typologie :</span>
+        <div className="inline-flex rounded-lg border border-stone-200 overflow-hidden">
+          <button
+            onClick={() => setFilterMarche('Tous')}
+            className={`px-3 py-1.5 text-xs font-medium ${filterMarche === 'Tous' ? 'bg-ink-deep text-white' : 'bg-white text-stone-600 hover:bg-stone-50'}`}
+          >
+            Tous
+          </button>
+          <button
+            onClick={() => setFilterMarche('b2b')}
+            className={`px-3 py-1.5 text-xs font-medium border-l border-stone-200 ${filterMarche === 'b2b' ? 'bg-sage-100 text-sage-darker' : 'bg-white text-stone-600 hover:bg-stone-50'}`}
+            title="Investissement (B2B)"
+          >
+            B2B
+          </button>
+          <button
+            onClick={() => setFilterMarche('b2c')}
+            className={`px-3 py-1.5 text-xs font-medium border-l border-stone-200 ${filterMarche === 'b2c' ? 'bg-amber-100 text-amber-800' : 'bg-white text-stone-600 hover:bg-stone-50'}`}
+            title="Habitation (B2C)"
+          >
+            B2C
+          </button>
+        </div>
+        <select
+          value={filterTypologie}
+          onChange={e => setFilterTypologie(e.target.value)}
+          className="px-3 py-1.5 bg-white border border-stone-200 rounded-lg text-xs focus:outline-none focus:border-stone-900"
+        >
+          <option value="Tous">Typologie : Toutes</option>
+          <optgroup label="Investissement (B2B)">
+            {Object.entries(TYPOLOGIES_CLIENT_TREE).filter(([t]) => t !== 'Particuliers').map(([typo, sousTypos]) => (
+              <Fragment key={typo}>
+                <option value={typo}>{typo}</option>
+                {(sousTypos || []).map(s => (
+                  <option key={`${typo}-${s}`} value={s}>&nbsp;&nbsp;&middot; {s}</option>
+                ))}
+              </Fragment>
+            ))}
+          </optgroup>
+          <optgroup label="Habitation (B2C)">
+            <option value="Particuliers">Particuliers</option>
+          </optgroup>
+        </select>
       </div>
 
       {/* Tableau */}
