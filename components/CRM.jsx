@@ -141,13 +141,27 @@ export default function CRM() {
   }
 
   // Helper : naviguer vers la fiche d'un mandat depuis n'importe où
-  function navigateToMandat(mandatId) {
-    setPendingMandatToOpen(mandatId);
-    setActiveTab('mandats');
-    setTabKey(k => k + 1);
-    pushHistory({ tab: 'mandats', open: mandatId });
-  }
-
+ // ─── Écoute les actions exécutées par l'AI Assistant pour rediriger automatiquement ───
+  useEffect(() => {
+    function onActionExecuted(e) {
+      const { type, result } = e.detail || {};
+      if (!result?.id) return;
+      // Recharge les données pour avoir le nouveau client/mandat
+      loadAll();
+      // Ferme l'AI Assistant pour ne pas masquer la fiche
+      setAssistantOpen(false);
+      // Redirige vers la fiche selon le type
+      setTimeout(() => {
+        if (type === 'create_client' || type === 'update_client') {
+          navigateToClient(result.id);
+        } else if (type === 'create_mandat' || type === 'update_mandat') {
+          navigateToMandat(result.id);
+        }
+      }, 100);
+    }
+    window.addEventListener('patrimonia:action-executed', onActionExecuted);
+    return () => window.removeEventListener('patrimonia:action-executed', onActionExecuted);
+  }, []);
   // ─── Historique navigateur : swipe \u00e0 2 doigts ou bouton retour ─────────
   // Push une entr\u00e9e dans l'historique \u00e0 chaque changement d'onglet/fiche
   function pushHistory(state) {
