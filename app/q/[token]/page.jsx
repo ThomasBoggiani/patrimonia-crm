@@ -697,44 +697,31 @@ function QuestionField({ q, value, answers, sousTypeValue, error, onChange, onCh
         </div>
       )}
 
-      {/* NOUVEAU v2 : families_with_subs — sous-types directement cliquables, pas de checkbox famille */}
+      {/* v3 : families_with_subs — cartes blanches avec badge titre flottant (style V2) */}
       {q.type === 'families_with_subs' && q.tree && (
-        <div className="space-y-4 mt-1">
+        <div className="space-y-5 mt-6">
           {(q.order || Object.keys(q.tree)).map(famille => {
             const sousTypes = q.tree[famille];
-            if (!sousTypes) return null; // famille inconnue dans le tree
+            if (!sousTypes) return null;
             const familles = value || [];
             const subKey = q.subKeys?.[famille];
             const subValues = subKey ? (answers[subKey] || []) : [];
             const hasSubs = Array.isArray(sousTypes) && sousTypes.length > 0;
             const isFamilleSelected = familles.includes(famille);
 
-            // Famille sans sous-types (Terrains, Parking) : bouton pill simple toggle
-            if (!hasSubs) {
-              return (
-                <div key={famille}>
-                  <button
-                    type="button"
-                    onClick={() => onToggleFamille(famille)}
-                    className={`px-4 py-2 text-sm rounded-full border transition ${
-                      isFamilleSelected
-                        ? 'bg-sage-dark text-white border-sage-dark font-medium'
-                        : 'bg-white text-stone-700 border-stone-200 hover:border-sage-dark hover:text-sage-darker'
-                    }`}
-                  >
-                    {famille}
-                  </button>
-                </div>
-              );
-            }
+            // Famille sans sous-types (Terrains, Parking) → on regroupe en fin (cf. ligne dédiée ci-dessous)
+            if (!hasSubs) return null;
 
-            // Famille avec sous-types : label + grille de pills cliquables
+            // Famille avec sous-types : carte blanche avec badge titre flottant en haut
             return (
-              <div key={famille}>
-                <div className="text-xs uppercase tracking-wide text-stone-500 font-semibold mb-2">
+              <div
+                key={famille}
+                className="relative bg-white border border-sage-light rounded-2xl px-5 pt-7 pb-5"
+              >
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-sage-50 border border-sage-light rounded-full text-sm font-medium text-sage-darker whitespace-nowrap">
                   {famille}
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 justify-center">
                   {sousTypes.map(s => {
                     const subSelected = subValues.includes(s);
                     return (
@@ -742,7 +729,7 @@ function QuestionField({ q, value, answers, sousTypeValue, error, onChange, onCh
                         key={s}
                         type="button"
                         onClick={() => onToggleSousType(subKey, s, famille)}
-                        className={`px-3 py-1.5 text-xs rounded-full border transition ${
+                        className={`px-5 py-2.5 text-sm rounded-full border transition min-w-[140px] ${
                           subSelected
                             ? 'bg-sage-dark text-white border-sage-dark font-medium'
                             : 'bg-white text-stone-700 border-stone-200 hover:border-sage-dark hover:text-sage-darker'
@@ -756,6 +743,43 @@ function QuestionField({ q, value, answers, sousTypeValue, error, onChange, onCh
               </div>
             );
           })}
+
+          {/* Familles sans sous-types regroupées en bas (Terrains, Parking) */}
+          {(() => {
+            const orderList = q.order || Object.keys(q.tree);
+            const noSubFams = orderList.filter(f => {
+              const subs = q.tree[f];
+              return subs && subs.length === 0;
+            });
+            if (noSubFams.length === 0) return null;
+            const familles = value || [];
+            return (
+              <div className="relative bg-white border border-sage-light rounded-2xl px-5 pt-7 pb-5">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-sage-50 border border-sage-light rounded-full text-sm font-medium text-sage-darker whitespace-nowrap">
+                  Autres
+                </div>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {noSubFams.map(f => {
+                    const isOn = familles.includes(f);
+                    return (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() => onToggleFamille(f)}
+                        className={`px-5 py-2.5 text-sm rounded-full border transition min-w-[140px] ${
+                          isOn
+                            ? 'bg-sage-dark text-white border-sage-dark font-medium'
+                            : 'bg-white text-stone-700 border-stone-200 hover:border-sage-dark hover:text-sage-darker'
+                        }`}
+                      >
+                        {f}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
       {/* NOUVEAU : file (upload PJ) */}
