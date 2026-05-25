@@ -141,7 +141,14 @@ export default function CRM() {
   }
 
   // Helper : naviguer vers la fiche d'un mandat depuis n'importe où
- // ─── Écoute les actions exécutées par l'AI Assistant pour rediriger automatiquement ───
+ function navigateToMandat(mandatId) {
+    setPendingMandatToOpen(mandatId);
+    setActiveTab('mandats');
+    setTabKey(k => k + 1);
+    pushHistory({ tab: 'mandats', open: mandatId });
+  }
+
+  // ─── Écoute les actions exécutées par l'AI Assistant pour rediriger automatiquement ───
   useEffect(() => {
     function onActionExecuted(e) {
       const { type, result } = e.detail || {};
