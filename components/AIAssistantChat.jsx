@@ -1,20 +1,41 @@
 // components/AIAssistantChat.jsx
 //
-// Assistant Patrimonia - Phase 4.1 UI Chat (v11)
+// Assistant Patrimonia - Phase 4.1 UI Chat (v12)
 // + Cartes de proposition d'actions (création de mandat) avec confirmation utilisateur
 // v11 : tous les champs visibles dans la card, warnings affichés, Budget min/max séparés, Recherche éditable
+// v12 : FieldEditor intelligent — selects, boutons, date pickers, cascade typologie/sous-typologie
 
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { Sparkles, X, Send, Mic, Loader2, Square, Paperclip, FileText, Image as ImageIcon, Check, ExternalLink, AlertTriangle } from 'lucide-react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { Sparkles, X, Send, Mic, Loader2, Square, Paperclip, FileText, Image as ImageIcon, Check, ExternalLink, AlertTriangle, Calendar } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import {
+  TYPOLOGIES_CLIENT_TREE,
+  TYPES_ACTIF_B2B_TREE,
+  TYPES_HABITATION_B2C,
+  CATEGORIES_CONTACT,
+} from '@/lib/crm-constants';
 
 const SAGE_DARK = '#5d6e5d';
 const SAGE_DARKER = '#3d4d3d';
 
 const BUCKET = 'assistant-attachments';
 const SIGNED_URL_TTL = 3600;
+
+// ─── Listes hardcodées (synchro avec les forms du CRM) ─────────────────
+
+const STATUTS_CLIENT = ['Actif', 'Inactif', 'Mandant'];
+const STATUTS_MANDAT = ['Sourcing', 'Prospection', 'Mandat', 'Offre', 'Promesse', 'Acte', 'Perdu', 'Vendu par autres'];
+const COMMERCIALISATIONS = ['Off-market', 'On-market', 'Confidentiel'];
+const MATURITES = ['Chaud', 'Tiède', 'Froid'];
+const PRIORITES = ['Haute', 'Moyenne', 'Basse'];
+const MARCHES = [
+  { value: 'b2b', label: 'B2B' },
+  { value: 'b2c', label: 'B2C' }
+];
+
+// ─── Utils ─────────────────────────────────────────────────────────────
 
 function renderMarkdown(text) {
   if (!text) return '';
@@ -40,11 +61,10 @@ function randomKey() {
 }
 
 // =========================================================================
-// Carte de proposition d'action
-// =========================================================================
-
 // Mapping label → clé data pour les champs éditables (couvre tous les types d'action)
 // Si key est un array, c'est un champ composé (ex: Budget → min + max)
+// =========================================================================
+
 const FIELD_KEYS = {
   'Nom': 'nom',
   'Prénom': 'prenom',
@@ -60,6 +80,8 @@ const FIELD_KEYS = {
   'Contact': 'contact',
   'Typologie': 'typologie',
   'Sous-typologie': 'sous_typologie',
+  'Type': 'type',
+  'Catégorie': 'categorie',
   'Maturité': 'maturite',
   'Origine': 'origine',
   'Marché': 'marche',
@@ -70,7 +92,6 @@ const FIELD_KEYS = {
   'Durée': 'duree_minutes',
   'Lieu': 'lieu',
   'Description': 'description',
-  'Type': 'type',
   'Résumé': 'resume',
   'Prochaine action': 'next_step',
   'Date prochaine action': 'date_next_step',
@@ -78,6 +99,8 @@ const FIELD_KEYS = {
   'Objet': 'subject',
   'Message': 'body',
   'Recherche': 'details_recherche',
+  'Owner': 'owner',
+  'Responsable': 'owner',
   'Mandat ID': null, // non éditable
   'Client ID': null, // non éditable
   'ID mandat': null,
@@ -89,10 +112,15 @@ const FIELD_KEYS = {
 
 const NUMERIC_KEYS = new Set(['prix', 'surface', 'loyers_annuels', 'nb_lots', 'nb_pieces', 'nb_chambres', 'etage', 'budget_min', 'budget_max', 'rendement_min', 'duree_minutes']);
 
+// Clés qui sont des dates (input type="date")
+const DATE_KEYS = new Set(['echeance', 'date_debut', 'date_next_step', 'date_fin']);
+
+// Clés qui doivent être affichées en textarea (long texte)
+const TEXTAREA_KEYS = new Set(['description', 'resume', 'body', 'details_recherche', 'notes']);
+
 function parseNumeric(value) {
   if (typeof value === 'number') return value;
   if (!value) return 0;
-  // Retire espaces et caractères non numériques (sauf . et ,)
   const cleaned = String(value).replace(/[€\s]/g, '').replace(',', '.');
   const n = parseFloat(cleaned);
   return isNaN(n) ? 0 : n;
@@ -105,17 +133,317 @@ function formatFieldValue(key, value) {
     }
     return '';
   }
+  if (DATE_KEYS.has(key) && value) {
+    // Convertit en format YYYY-MM-DD (requis par input type="date")
+    if (typeof value === 'string' && value.length >= 10) {
+      return value.slice(0, 10);
+    }
+    try {
+      return new Date(value).toISOString().slice(0, 10);
+    } catch {
+      return '';
+    }
+  }
   return value || '';
 }
 
-function ProposalCard({ action, onConfirm, onCancel, executing, executed, executedResult, executedError }) {
+// =========================================================================
+// FieldEditor — composant qui choisit le bon UI selon la clé
+// =========================================================================
+
+function FieldEditor({ fieldKey, value, onChange, disabled, actionType, allData, profiles }) {
+  // ─── Marché : boutons B2B/B2C ────────────────────────────────────────
+  if (fieldKey === 'marche') {
+    return (
+      <div className="flex-1 inline-flex rounded border border-stone-200 overflow-hidden">
+        {MARCHES.map(m => (
+          <button
+            key={m.value}
+            type="button"
+            onClick={() => onChange(m.value)}
+            disabled={disabled}
+            className={`flex-1 px-2 py-1 text-xs font-medium transition-colors ${
+              value === m.value
+                ? (m.value === 'b2b' ? 'bg-sage-100 text-sage-darker' : 'bg-amber-100 text-amber-800')
+                : 'bg-white text-stone-600 hover:bg-stone-50'
+            } ${m.value === 'b2c' ? 'border-l border-stone-200' : ''}`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  // ─── Maturité : boutons Chaud/Tiède/Froid ────────────────────────────
+  if (fieldKey === 'maturite') {
+    return (
+      <div className="flex-1 inline-flex rounded border border-stone-200 overflow-hidden">
+        {MATURITES.map(m => {
+          const color = m === 'Chaud' ? 'bg-red-100 text-red-800' : m === 'Tiède' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800';
+          return (
+            <button
+              key={m}
+              type="button"
+              onClick={() => onChange(m)}
+              disabled={disabled}
+              className={`flex-1 px-2 py-1 text-xs font-medium transition-colors border-l border-stone-200 first:border-l-0 ${
+                value === m ? color : 'bg-white text-stone-600 hover:bg-stone-50'
+              }`}
+            >
+              {m}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // ─── Priorité : boutons Haute/Moyenne/Basse ──────────────────────────
+  if (fieldKey === 'priorite') {
+    return (
+      <div className="flex-1 inline-flex rounded border border-stone-200 overflow-hidden">
+        {PRIORITES.map(p => {
+          const color = p === 'Haute' ? 'bg-red-100 text-red-800' : p === 'Moyenne' ? 'bg-amber-100 text-amber-800' : 'bg-stone-100 text-stone-700';
+          return (
+            <button
+              key={p}
+              type="button"
+              onClick={() => onChange(p)}
+              disabled={disabled}
+              className={`flex-1 px-2 py-1 text-xs font-medium transition-colors border-l border-stone-200 first:border-l-0 ${
+                value === p ? color : 'bg-white text-stone-600 hover:bg-stone-50'
+              }`}
+            >
+              {p}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // ─── Statut : select (dépend du type d'action client/mandat) ─────────
+  if (fieldKey === 'statut') {
+    const isMandat = (actionType || '').includes('mandat');
+    const options = isMandat ? STATUTS_MANDAT : STATUTS_CLIENT;
+    return (
+      <select
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className="flex-1 px-2 py-1 border border-stone-200 rounded text-xs text-stone-900 bg-white focus:outline-none focus:border-stone-400 disabled:bg-stone-50"
+      >
+        <option value="">— Choisir —</option>
+        {options.map(s => <option key={s} value={s}>{s}</option>)}
+      </select>
+    );
+  }
+
+  // ─── Commercialisation : select ──────────────────────────────────────
+  if (fieldKey === 'commercialisation') {
+    return (
+      <select
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className="flex-1 px-2 py-1 border border-stone-200 rounded text-xs text-stone-900 bg-white focus:outline-none focus:border-stone-400 disabled:bg-stone-50"
+      >
+        <option value="">— Choisir —</option>
+        {COMMERCIALISATIONS.map(c => <option key={c} value={c}>{c}</option>)}
+      </select>
+    );
+  }
+
+  // ─── Typologie client : select TYPOLOGIES_CLIENT_TREE ────────────────
+  if (fieldKey === 'typologie') {
+    const isClient = (actionType || '').includes('client');
+    if (isClient) {
+      return (
+        <select
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          className="flex-1 px-2 py-1 border border-stone-200 rounded text-xs text-stone-900 bg-white focus:outline-none focus:border-stone-400 disabled:bg-stone-50"
+        >
+          <option value="">— Choisir —</option>
+          {Object.keys(TYPOLOGIES_CLIENT_TREE).map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+      );
+    }
+    // Sinon (mandats), c'est juste un texte libre (rare)
+  }
+
+  // ─── Sous-typologie : cascadé sur typologie ──────────────────────────
+  if (fieldKey === 'sous_typologie') {
+    const parentTypologie = allData?.typologie;
+    const subOptions = parentTypologie ? (TYPOLOGIES_CLIENT_TREE[parentTypologie] || []) : [];
+    if (subOptions.length === 0) {
+      return (
+        <input
+          type="text"
+          value={value || ''}
+          disabled
+          placeholder="— Pas applicable —"
+          className="flex-1 px-2 py-1 border border-stone-200 rounded text-xs text-stone-400 bg-stone-50"
+        />
+      );
+    }
+    return (
+      <select
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className="flex-1 px-2 py-1 border border-stone-200 rounded text-xs text-stone-900 bg-white focus:outline-none focus:border-stone-400 disabled:bg-stone-50"
+      >
+        <option value="">— Choisir —</option>
+        {subOptions.map(s => <option key={s} value={s}>{s}</option>)}
+      </select>
+    );
+  }
+
+  // ─── Type d'actif (mandat) : select avec optgroups ───────────────────
+  if (fieldKey === 'type') {
+    const isMandat = (actionType || '').includes('mandat');
+    if (isMandat) {
+      return (
+        <select
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          className="flex-1 px-2 py-1 border border-stone-200 rounded text-xs text-stone-900 bg-white focus:outline-none focus:border-stone-400 disabled:bg-stone-50"
+        >
+          <option value="">— Choisir —</option>
+          <optgroup label="Investissement (B2B)">
+            {Object.entries(TYPES_ACTIF_B2B_TREE).map(([famille, sousTypes]) => (
+              <optgroup key={famille} label={`  ${famille}`}>
+                {(sousTypes || []).map(s => <option key={s} value={s}>{s}</option>)}
+              </optgroup>
+            ))}
+          </optgroup>
+          <optgroup label="Habitation (B2C)">
+            {TYPES_HABITATION_B2C.map(t => <option key={t} value={t}>{t}</option>)}
+          </optgroup>
+        </select>
+      );
+    }
+  }
+
+  // ─── Catégorie contact : select CATEGORIES_CONTACT ───────────────────
+  if (fieldKey === 'categorie') {
+    return (
+      <select
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className="flex-1 px-2 py-1 border border-stone-200 rounded text-xs text-stone-900 bg-white focus:outline-none focus:border-stone-400 disabled:bg-stone-50"
+      >
+        <option value="">— Choisir —</option>
+        {CATEGORIES_CONTACT.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+      </select>
+    );
+  }
+
+  // ─── Owner : select des profils ──────────────────────────────────────
+  if (fieldKey === 'owner') {
+    return (
+      <select
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled || !profiles}
+        className="flex-1 px-2 py-1 border border-stone-200 rounded text-xs text-stone-900 bg-white focus:outline-none focus:border-stone-400 disabled:bg-stone-50"
+      >
+        <option value="">— Choisir —</option>
+        {(profiles || []).map(p => {
+          const initials = `${(p.prenom || '').charAt(0)}${(p.nom || '').charAt(0)}`.toUpperCase();
+          return (
+            <option key={p.id} value={initials}>
+              {p.prenom} {p.nom} ({initials})
+            </option>
+          );
+        })}
+      </select>
+    );
+  }
+
+  // ─── Date : input type="date" ────────────────────────────────────────
+  if (DATE_KEYS.has(fieldKey)) {
+    return (
+      <input
+        type="date"
+        value={formatFieldValue(fieldKey, value)}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className="flex-1 px-2 py-1 border border-stone-200 rounded text-xs text-stone-900 focus:outline-none focus:border-stone-400 disabled:bg-stone-50"
+      />
+    );
+  }
+
+  // ─── Textarea (description, body, notes...) ──────────────────────────
+  if (TEXTAREA_KEYS.has(fieldKey)) {
+    return (
+      <textarea
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        rows={2}
+        className="flex-1 px-2 py-1 border border-stone-200 rounded text-xs text-stone-900 focus:outline-none focus:border-stone-400 disabled:bg-stone-50 resize-y min-h-[2rem]"
+      />
+    );
+  }
+
+  // ─── Email : input type="email" ──────────────────────────────────────
+  if (fieldKey === 'email') {
+    return (
+      <input
+        type="email"
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        placeholder="exemple@domaine.com"
+        className="flex-1 px-2 py-1 border border-stone-200 rounded text-xs text-stone-900 focus:outline-none focus:border-stone-400 disabled:bg-stone-50"
+      />
+    );
+  }
+
+  // ─── Tel : input type="tel" ──────────────────────────────────────────
+  if (fieldKey === 'tel') {
+    return (
+      <input
+        type="tel"
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        placeholder="+33 6 12 34 56 78"
+        className="flex-1 px-2 py-1 border border-stone-200 rounded text-xs text-stone-900 focus:outline-none focus:border-stone-400 disabled:bg-stone-50"
+      />
+    );
+  }
+
+  // ─── Default : input text ────────────────────────────────────────────
+  return (
+    <input
+      type="text"
+      value={formatFieldValue(fieldKey, value)}
+      onChange={(e) => onChange(NUMERIC_KEYS.has(fieldKey) ? parseNumeric(e.target.value) : e.target.value)}
+      disabled={disabled}
+      className="flex-1 px-2 py-1 border border-stone-200 rounded text-xs text-stone-900 focus:outline-none focus:border-stone-400 disabled:bg-stone-50"
+    />
+  );
+}
+
+// =========================================================================
+// Carte de proposition d'action
+// =========================================================================
+
+function ProposalCard({ action, onConfirm, onCancel, executing, executed, executedResult, executedError, profiles }) {
   // État local des données éditables (initialisé depuis action.data)
   const [editData, setEditData] = useState(() => ({ ...action.data }));
 
   const updateField = (key, value) => {
     setEditData(prev => ({
       ...prev,
-      [key]: NUMERIC_KEYS.has(key) ? parseNumeric(value) : value
+      [key]: NUMERIC_KEYS.has(key) ? (typeof value === 'number' ? value : parseNumeric(value)) : value
     }));
   };
 
@@ -164,7 +492,7 @@ function ProposalCard({ action, onConfirm, onCancel, executing, executed, execut
                     <input
                       type="text"
                       value={formatFieldValue(f.key[0], editData[f.key[0]])}
-                      onChange={(e) => updateField(f.key[0], e.target.value)}
+                      onChange={(e) => updateField(f.key[0], parseNumeric(e.target.value))}
                       disabled={executing}
                       placeholder="min"
                       className="w-full px-2 py-1 border border-stone-200 rounded text-stone-900 focus:outline-none focus:border-stone-400 disabled:bg-stone-50"
@@ -173,7 +501,7 @@ function ProposalCard({ action, onConfirm, onCancel, executing, executed, execut
                     <input
                       type="text"
                       value={formatFieldValue(f.key[1], editData[f.key[1]])}
-                      onChange={(e) => updateField(f.key[1], e.target.value)}
+                      onChange={(e) => updateField(f.key[1], parseNumeric(e.target.value))}
                       disabled={executing}
                       placeholder="max"
                       className="w-full px-2 py-1 border border-stone-200 rounded text-stone-900 focus:outline-none focus:border-stone-400 disabled:bg-stone-50"
@@ -182,16 +510,18 @@ function ProposalCard({ action, onConfirm, onCancel, executing, executed, execut
                 </div>
               );
             }
-            // Champ simple
+            // Champ simple : utilise FieldEditor
             return (
               <div key={f.key} className="flex items-center gap-2 text-xs">
                 <label className="text-stone-500 w-24 flex-shrink-0">{f.label}</label>
-                <input
-                  type="text"
-                  value={formatFieldValue(f.key, editData[f.key])}
-                  onChange={(e) => updateField(f.key, e.target.value)}
+                <FieldEditor
+                  fieldKey={f.key}
+                  value={editData[f.key]}
+                  onChange={(v) => updateField(f.key, v)}
                   disabled={executing}
-                  className="flex-1 px-2 py-1 border border-stone-200 rounded text-stone-900 focus:outline-none focus:border-stone-400 disabled:bg-stone-50"
+                  actionType={action.type}
+                  allData={editData}
+                  profiles={profiles}
                 />
               </div>
             );
@@ -278,12 +608,23 @@ export default function AIAssistantChat({
   const [attachments, setAttachments] = useState([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
 
+  // Profils (commerciaux actifs) — chargés au mount pour le select Owner
+  const [profiles, setProfiles] = useState([]);
+
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const speechRecognitionRef = useRef(null);
+
+  // ─── Chargement profils au premier ouverture ────────────────────────
+  useEffect(() => {
+    if (!open || profiles.length > 0) return;
+    supabase.from('profiles').select('id, prenom, nom').eq('actif', true).order('prenom')
+      .then(({ data }) => setProfiles(data || []))
+      .catch(e => console.warn('[AIAssistantChat] profiles load failed:', e));
+  }, [open]);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -435,7 +776,6 @@ export default function AIAssistantChat({
     const msg = messages[msgIdx];
     if (!msg?.proposed_action) return;
 
-    // Marquer en cours d'exécution
     setMessages(prev => {
       const copy = [...prev];
       copy[msgIdx] = { ...copy[msgIdx], action_state: { executing: true, executed: false } };
@@ -446,7 +786,6 @@ export default function AIAssistantChat({
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token || '';
 
-      // Fusionne data initiale + modifs utilisateur
       const finalData = { ...msg.proposed_action.data, ...editData };
 
       const res = await fetch('/api/assistant/execute', {
@@ -467,7 +806,6 @@ export default function AIAssistantChat({
             ...copy[msgIdx],
             action_state: { executing: false, executed: true, result: data.result }
           };
-          // Émet un event window pour que CRM.jsx puisse recharger ses données + rediriger
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('patrimonia:action-executed', {
               detail: { type: msg.proposed_action.type, result: data.result }
@@ -686,7 +1024,6 @@ export default function AIAssistantChat({
               const hasProposal = msg.proposed_action;
               return (
                 <div key={i} className={`flex ${isUser ? 'justify-end' : 'justify-start'} ${hasProposal ? 'flex-col items-start gap-2' : ''}`}>
-                  {/* Message texte */}
                   {msg.content && (
                     <div
                       style={isUser ? { backgroundColor: SAGE_DARK } : {}}
@@ -699,7 +1036,6 @@ export default function AIAssistantChat({
                     />
                   )}
 
-                  {/* Carte de proposition */}
                   {hasProposal && (
                     <ProposalCard
                       action={msg.proposed_action}
@@ -709,6 +1045,7 @@ export default function AIAssistantChat({
                       executed={msg.action_state?.executed}
                       executedResult={msg.action_state?.result}
                       executedError={msg.action_state?.error}
+                      profiles={profiles}
                     />
                   )}
                 </div>
