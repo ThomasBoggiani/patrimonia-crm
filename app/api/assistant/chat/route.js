@@ -589,7 +589,7 @@ function buildProposeCreateMandat(args) {
 function buildProposeCreateClient(args) {
   const data = {
     prenom: args.prenom || null,
-    nom: args.nom || 'Sans nom',
+    nom: args.nom || null,
     societe: args.societe || null,
     email: args.email || null,
     tel: args.tel || null,
@@ -604,17 +604,50 @@ function buildProposeCreateClient(args) {
     rendement_min: args.rendement_min || 0,
     details_recherche: args.details_recherche || null
   };
+
+  // Validation des champs minimum (au moins nom OU société)
+  const missing = [];
+  if (!data.nom && !data.societe) missing.push('nom ou société');
+
+  // Champs optionnels recommandés mais signalés
+  const warnings = [];
+  if (!data.email) warnings.push('email');
+  if (!data.tel) warnings.push('téléphone');
+  if (!data.budget_min && !data.budget_max) warnings.push('budget');
+
+  const nomComplet = [data.prenom, data.nom].filter(Boolean).join(' ') || data.societe || '—';
+  const formatPrix = (p) => typeof p === 'number' && p > 0 
+    ? new Intl.NumberFormat('fr-FR').format(p) + ' €' 
+    : null;
+
   const fields = [
-    { label: 'Nom', value: [data.prenom, data.nom].filter(Boolean).join(' ') || '—' },
+    { label: 'Prénom', value: data.prenom || '—' },
+    { label: 'Nom', value: data.nom || '—' },
     { label: 'Société', value: data.societe || '—' },
     { label: 'Email', value: data.email || '—' },
     { label: 'Téléphone', value: data.tel || '—' },
-    { label: 'Typologie', value: data.typologie },
+    { label: 'Typologie', value: data.typologie + (data.sous_typologie ? ' / ' + data.sous_typologie : '') },
+    { label: 'Marché', value: data.marche ? data.marche.toUpperCase() : '—' },
+    { label: 'Budget', value: (data.budget_min || data.budget_max) 
+      ? `${formatPrix(data.budget_min) || '0 €'} → ${formatPrix(data.budget_max) || '0 €'}` 
+      : '—' },
     { label: 'Maturité', value: data.maturite },
-    { label: 'Statut', value: data.statut },
-    { label: 'Budget', value: (data.budget_min || data.budget_max) ? `${formatPrix(data.budget_min)} → ${formatPrix(data.budget_max)}` : '—' }
+    { label: 'Statut', value: data.statut }
   ];
-  return { proposed: true, type: 'create_client', summary: 'Client à créer', fields, data };
+
+  if (data.details_recherche) {
+    fields.push({ label: 'Recherche', value: data.details_recherche });
+  }
+
+  return { 
+    proposed: true, 
+    type: 'create_client', 
+    summary: `Client à créer : ${nomComplet}`, 
+    fields, 
+    data,
+    warnings: warnings.length > 0 ? `Champs recommandés manquants : ${warnings.join(', ')}` : null,
+    missing: missing.length > 0 ? `Champs obligatoires manquants : ${missing.join(', ')}` : null
+  };
 }
 
 function buildProposeCreateTask(args) {
