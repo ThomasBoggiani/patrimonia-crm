@@ -1,7 +1,7 @@
 // app/api/assistant/chat/route.js
 //
 // Assistant Patrimonia - Phase 4 complète (tous les outils propose_*)
-// - search_mandats, search_clients : lecture
+// - search_mandats, search_clients, search_interactions : lecture
 // - propose_create_mandat, propose_create_client, propose_create_task, propose_create_event, propose_create_interaction
 // - propose_update_mandat, propose_update_client
 // - propose_send_email, propose_send_plaquette
@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(
 // SYSTEM PROMPT
 // ==========================================================================
 
-async function buildSystemPrompt(context, pdfTexts) {   
+async function buildSystemPrompt(context, pdfTexts) {
   const recentInteractions = await loadRecentInteractions(context);
   const today = new Date().toLocaleDateString('fr-FR', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
@@ -79,6 +79,7 @@ ${recentInteractions.map((i, idx) => {
   return `${idx + 1}. [${date}] ${i.type}${from} : ${(i.resume || '').slice(0, 200)}`;
 }).join('\n')}`;
   }
+
   let pdfBlock = '';
   if (pdfTexts && pdfTexts.length > 0) {
     pdfBlock = '\n\nPIÈCES JOINTES PDF\n';
@@ -138,7 +139,8 @@ CONTEXTE MÉTIER
   * "Promoteurs" → pas de sous-typologie
   * "Family Office" → pas de sous-typologie (gestion patrimoine familial)
   N'INVENTE PAS de typologie hors de cette liste. Si tu n'es pas sûr, choisis "Particuliers" pour personne physique, "Family Office" pour gestion patrimoine, "Foncières" pour société d'investissement.
-- Marché client : déduit automatiquement de la typologie. "Particuliers" = b2c, tous les autres = b2b.- Maturité client : "Faible", "Moyen", "Élevé".
+- Marché client : déduit automatiquement de la typologie. "Particuliers" = b2c, tous les autres = b2b.
+- Maturité client : "Faible", "Moyen", "Élevé".
 - Statut client : "Actif", "Inactif".
 - Origine client : "Apporteur", "Site", "Recommandation", etc.
 - Owner : initiales du commercial.
@@ -270,12 +272,12 @@ const tools = [
           societe: { type: 'string' },
           email: { type: 'string' },
           tel: { type: 'string' },
-          typologie: { 
+          typologie: {
             type: 'string',
             enum: ['Foncières', 'Marchands de biens', 'Particuliers', 'Fonds', 'Promoteurs', 'Family Office'],
             description: 'Typologie OBLIGATOIRE parmi la liste. Si pas certain, demande à Thomas plutôt que d\'inventer.'
           },
-          sous_typologie: { 
+          sous_typologie: {
             type: 'string',
             enum: ['Privées', 'Publiques'],
             description: 'UNIQUEMENT pour typologie="Foncières" : "Privées" ou "Publiques". Vide pour les autres typologies.'
@@ -454,6 +456,7 @@ async function loadRecentInteractions(context) {
     .limit(10);
   return data || [];
 }
+
 async function executeSearchMandats(args) {
   const { query_text, ville, statut, type, prix_min, prix_max, owner, limit = 10 } = args;
   let query = supabaseAdmin
@@ -462,7 +465,7 @@ async function executeSearchMandats(args) {
     .limit(Math.min(limit, 20));
   if (query_text && query_text.trim()) {
     const q = `%${query_text.trim()}%`;
-    const safe = q.replace(/[,()]/g, '');     
+    const safe = q.replace(/[,()]/g, '');
     query = query.or(`nom.ilike.${safe},adresse.ilike.${safe},ville.ilike.${safe}`);
   }
   if (ville) query = query.ilike('ville', `%${ville}%`);
@@ -506,6 +509,7 @@ async function executeSearchInteractions(args) {
   });
   return { count: enriched.length, results: enriched };
 }
+
 async function executeSearchClients(args) {
   const { query_text, typologie, marche, maturite, statut, owner, budget_min, budget_max, limit = 10 } = args;
   let query = supabaseAdmin
@@ -540,7 +544,7 @@ async function executeSearchClients(args) {
 // BUILDERS DE PROPOSITION (ne créent RIEN, retournent juste la structure)
 // ==========================================================================
 
-const formatPrix = (p) => typeof p === 'number' ? new Intl.NumberFormat('fr-FR').format(p) + ' €' : null;
+const formatPrix = (p) => typeof p === 'number' && p > 0 ? new Intl.NumberFormat('fr-FR').format(p) + ' €' : null;
 const formatDate = (d) => {
   if (!d) return null;
   try {
@@ -616,9 +620,6 @@ function buildProposeCreateClient(args) {
   if (!data.budget_min && !data.budget_max) warnings.push('budget');
 
   const nomComplet = [data.prenom, data.nom].filter(Boolean).join(' ') || data.societe || '—';
-  const formatPrix = (p) => typeof p === 'number' && p > 0 
-    ? new Intl.NumberFormat('fr-FR').format(p) + ' €' 
-    : null;
 
   const fields = [
     { label: 'Prénom', value: data.prenom || '—' },
@@ -628,8 +629,8 @@ function buildProposeCreateClient(args) {
     { label: 'Téléphone', value: data.tel || '—' },
     { label: 'Typologie', value: data.typologie + (data.sous_typologie ? ' / ' + data.sous_typologie : '') },
     { label: 'Marché', value: data.marche ? data.marche.toUpperCase() : '—' },
-    { label: 'Budget', value: (data.budget_min || data.budget_max) 
-      ? `${formatPrix(data.budget_min) || '0 €'} → ${formatPrix(data.budget_max) || '0 €'}` 
+    { label: 'Budget', value: (data.budget_min || data.budget_max)
+      ? `${formatPrix(data.budget_min) || '0 €'} → ${formatPrix(data.budget_max) || '0 €'}`
       : '—' },
     { label: 'Maturité', value: data.maturite },
     { label: 'Statut', value: data.statut }
@@ -639,22 +640,11 @@ function buildProposeCreateClient(args) {
     fields.push({ label: 'Recherche', value: data.details_recherche });
   }
 
-  return { 
-    proposed: true, 
-    type: 'create_client', 
-    summary: `Client à créer : ${nomComplet}`, 
-    fields, 
-    data,
-    warnings: warnings.length > 0 ? `Champs recommandés manquants : ${warnings.join(', ')}` : null,
-    missing: missing.length > 0 ? `Champs obligatoires manquants : ${missing.join(', ')}` : null
-  };
-}
-
-  return { 
-    proposed: true, 
-    type: 'create_client', 
-    summary: `Client à créer : ${nomComplet}`, 
-    fields, 
+  return {
+    proposed: true,
+    type: 'create_client',
+    summary: `Client à créer : ${nomComplet}`,
+    fields,
     data,
     warnings: warnings.length > 0 ? `Champs recommandés manquants : ${warnings.join(', ')}` : null,
     missing: missing.length > 0 ? `Champs obligatoires manquants : ${missing.join(', ')}` : null
@@ -740,7 +730,7 @@ function buildProposeUpdateClient(args) {
   if (data.typologie !== undefined) fields.push({ label: 'Typologie', value: data.typologie });
   if (data.maturite !== undefined) fields.push({ label: 'Maturité', value: data.maturite });
   if (data.budget_min !== undefined || data.budget_max !== undefined) {
-    fields.push({ label: 'Budget', value: `${formatPrix(data.budget_min || 0)} → ${formatPrix(data.budget_max || 0)}` });
+    fields.push({ label: 'Budget', value: `${formatPrix(data.budget_min || 0) || '0 €'} → ${formatPrix(data.budget_max || 0) || '0 €'}` });
   }
   return { proposed: true, type: 'update_client', summary: 'Client à modifier', fields, data };
 }
@@ -777,7 +767,7 @@ function buildProposeSendPlaquette(args) {
 async function executeTool(name, args) {
   switch (name) {
     case 'search_mandats': return await executeSearchMandats(args);
-    case 'search_clients': return await executeSearchClients(args);     
+    case 'search_clients': return await executeSearchClients(args);
     case 'search_interactions': return await executeSearchInteractions(args);
     case 'propose_create_mandat': return buildProposeCreateMandat(args);
     case 'propose_create_client': return buildProposeCreateClient(args);
@@ -922,7 +912,9 @@ export async function POST(req) {
               type: toolResult.type,
               summary: toolResult.summary,
               fields: toolResult.fields,
-              data: toolResult.data
+              data: toolResult.data,
+              warnings: toolResult.warnings || null,
+              missing: toolResult.missing || null
             };
           }
 
