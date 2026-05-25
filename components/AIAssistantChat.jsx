@@ -1,12 +1,13 @@
 // components/AIAssistantChat.jsx
 //
-// Assistant Patrimonia - Phase 4.1 UI Chat (v10)
+// Assistant Patrimonia - Phase 4.1 UI Chat (v11)
 // + Cartes de proposition d'actions (création de mandat) avec confirmation utilisateur
+// v11 : tous les champs visibles dans la card, warnings affichés, Budget min/max séparés, Recherche éditable
 
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Sparkles, X, Send, Mic, Loader2, Square, Paperclip, FileText, Image as ImageIcon, Check, ExternalLink } from 'lucide-react';
+import { Sparkles, X, Send, Mic, Loader2, Square, Paperclip, FileText, Image as ImageIcon, Check, ExternalLink, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 const SAGE_DARK = '#5d6e5d';
@@ -43,6 +44,7 @@ function randomKey() {
 // =========================================================================
 
 // Mapping label → clé data pour les champs éditables (couvre tous les types d'action)
+// Si key est un array, c'est un champ composé (ex: Budget → min + max)
 const FIELD_KEYS = {
   'Nom': 'nom',
   'Prénom': 'prenom',
@@ -57,6 +59,7 @@ const FIELD_KEYS = {
   'Commercialisation': 'commercialisation',
   'Contact': 'contact',
   'Typologie': 'typologie',
+  'Sous-typologie': 'sous_typologie',
   'Maturité': 'maturite',
   'Origine': 'origine',
   'Marché': 'marche',
@@ -74,13 +77,14 @@ const FIELD_KEYS = {
   'À': 'to',
   'Objet': 'subject',
   'Message': 'body',
+  'Recherche': 'details_recherche',
   'Mandat ID': null, // non éditable
   'Client ID': null, // non éditable
   'ID mandat': null,
   'ID client': null,
   'Participants': null, // tableau, non géré simplement
   'Lié à': null,
-  'Budget': null // composé
+  'Budget': ['budget_min', 'budget_max'] // composé : 2 inputs côte à côte
 };
 
 const NUMERIC_KEYS = new Set(['prix', 'surface', 'loyers_annuels', 'nb_lots', 'nb_pieces', 'nb_chambres', 'etage', 'budget_min', 'budget_max', 'rendement_min', 'duree_minutes']);
@@ -120,9 +124,10 @@ function ProposalCard({ action, onConfirm, onCancel, executing, executed, execut
   };
 
   // Champs à afficher (utilise action.fields pour l'ordre)
+  // Chaque champ peut avoir une `key` string OU un array (pour champ composé Budget)
   const editableFields = action.fields
     .map(f => ({ label: f.label, key: FIELD_KEYS[f.label] }))
-    .filter(f => f.key);
+    .filter(f => f.key !== null && f.key !== undefined);
 
   return (
     <div className="bg-white border border-stone-200 rounded-2xl rounded-bl-sm p-3 max-w-[90%]">
@@ -131,20 +136,66 @@ function ProposalCard({ action, onConfirm, onCancel, executing, executed, execut
         {action.summary || 'Action proposée'}
       </div>
 
+      {/* Warnings (champs recommandés manquants) */}
+      {!executed && action.warnings && (
+        <div className="flex items-start gap-1.5 px-2 py-1.5 mb-2 rounded-lg bg-amber-50 text-amber-800 text-xs">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          <span>{action.warnings}</span>
+        </div>
+      )}
+
+      {/* Missing (champs obligatoires manquants - bloque la création) */}
+      {!executed && action.missing && (
+        <div className="flex items-start gap-1.5 px-2 py-1.5 mb-2 rounded-lg bg-red-50 text-red-800 text-xs">
+          <X className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          <span>{action.missing}</span>
+        </div>
+      )}
+
       {!executed ? (
         <div className="space-y-1.5 mb-3">
-          {editableFields.map((f) => (
-            <div key={f.key} className="flex items-center gap-2 text-xs">
-              <label className="text-stone-500 w-24 flex-shrink-0">{f.label}</label>
-              <input
-                type="text"
-                value={formatFieldValue(f.key, editData[f.key])}
-                onChange={(e) => updateField(f.key, e.target.value)}
-                disabled={executing}
-                className="flex-1 px-2 py-1 border border-stone-200 rounded text-stone-900 focus:outline-none focus:border-stone-400 disabled:bg-stone-50"
-              />
-            </div>
-          ))}
+          {editableFields.map((f) => {
+            // Champ composé (ex: Budget = budget_min + budget_max)
+            if (Array.isArray(f.key)) {
+              return (
+                <div key={f.label} className="flex items-center gap-2 text-xs">
+                  <label className="text-stone-500 w-24 flex-shrink-0">{f.label}</label>
+                  <div className="flex-1 flex items-center gap-1">
+                    <input
+                      type="text"
+                      value={formatFieldValue(f.key[0], editData[f.key[0]])}
+                      onChange={(e) => updateField(f.key[0], e.target.value)}
+                      disabled={executing}
+                      placeholder="min"
+                      className="w-full px-2 py-1 border border-stone-200 rounded text-stone-900 focus:outline-none focus:border-stone-400 disabled:bg-stone-50"
+                    />
+                    <span className="text-stone-400">→</span>
+                    <input
+                      type="text"
+                      value={formatFieldValue(f.key[1], editData[f.key[1]])}
+                      onChange={(e) => updateField(f.key[1], e.target.value)}
+                      disabled={executing}
+                      placeholder="max"
+                      className="w-full px-2 py-1 border border-stone-200 rounded text-stone-900 focus:outline-none focus:border-stone-400 disabled:bg-stone-50"
+                    />
+                  </div>
+                </div>
+              );
+            }
+            // Champ simple
+            return (
+              <div key={f.key} className="flex items-center gap-2 text-xs">
+                <label className="text-stone-500 w-24 flex-shrink-0">{f.label}</label>
+                <input
+                  type="text"
+                  value={formatFieldValue(f.key, editData[f.key])}
+                  onChange={(e) => updateField(f.key, e.target.value)}
+                  disabled={executing}
+                  className="flex-1 px-2 py-1 border border-stone-200 rounded text-stone-900 focus:outline-none focus:border-stone-400 disabled:bg-stone-50"
+                />
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="bg-stone-50 rounded-lg p-2.5 text-xs space-y-1 mb-3">
@@ -175,9 +226,10 @@ function ProposalCard({ action, onConfirm, onCancel, executing, executed, execut
         <div className="flex gap-2">
           <button
             onClick={handleConfirm}
-            disabled={executing}
+            disabled={executing || action.missing}
             style={{ backgroundColor: SAGE_DARK }}
             className="flex-1 px-3 py-2 rounded-lg text-white text-xs font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+            title={action.missing ? 'Complète les champs obligatoires avant de créer' : ''}
           >
             {executing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
             {executing ? 'En cours…' : (action.type?.startsWith('update_') ? 'Modifier' : action.type?.startsWith('send_') ? 'Envoyer' : 'Créer')}
@@ -415,7 +467,7 @@ export default function AIAssistantChat({
             ...copy[msgIdx],
             action_state: { executing: false, executed: true, result: data.result }
           };
-          // Émet un event window pour que CRM.jsx puisse recharger ses données
+          // Émet un event window pour que CRM.jsx puisse recharger ses données + rediriger
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('patrimonia:action-executed', {
               detail: { type: msg.proposed_action.type, result: data.result }
