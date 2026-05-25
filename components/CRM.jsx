@@ -2496,6 +2496,77 @@ function NewClientMiniForm({ prefillName, onSave, onCancel }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// MandatContactsSection — Contacts du mandat (5 rôles)
+// ═══════════════════════════════════════════════════════════════════
+
+const MANDAT_CONTACT_ROLES = [
+  { key: 'mandant', label: 'Mandant', description: 'Propriétaire du bien', categorie: null },
+  { key: 'apporteur_mandat', label: 'Apporteur du mandat', description: 'Qui nous a apporté le bien', categorie: null },
+  { key: 'apporteur_acquereur', label: 'Apporteur d\'acquéreur', description: 'Qui nous apporte des acheteurs', categorie: null },
+  { key: 'notaire_vendeur', label: 'Notaire vendeur', description: 'Côté vendeur', categorie: 'notaire' },
+  { key: 'notaire_acquereur', label: 'Notaire acquéreur', description: 'Côté acquéreur', categorie: 'notaire' },
+];
+
+function MandatContactsSection({ mandatContacts, onAdd, onRemove }) {
+  return (
+    <div id="mandant" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
+      <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
+        <UserIcon className="w-5 h-5 text-sage-dark" />
+        Contacts du mandat
+      </h2>
+      <div className="space-y-4">
+        {MANDAT_CONTACT_ROLES.map(role => {
+          const link = mandatContacts.find(mc => mc.role === role.key);
+          const contact = link?.contact;
+          return (
+            <div key={role.key} className="border-b border-cream-dark last:border-0 pb-4 last:pb-0">
+              <div className="flex items-baseline justify-between mb-2">
+                <div>
+                  <div className="text-sm font-medium text-stone-900">{role.label}</div>
+                  <div className="text-xs text-stone-500">{role.description}</div>
+                </div>
+              </div>
+              {contact ? (
+                <div className="flex items-start gap-3 bg-cream-50 px-3 py-2 rounded-lg">
+                  <UserIcon className="w-4 h-4 text-sage-dark flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-stone-900 truncate">
+                      {[contact.prenom, contact.nom].filter(Boolean).join(' ') || contact.societe || '(sans nom)'}
+                      {contact.societe && [contact.prenom, contact.nom].filter(Boolean).length > 0 && (
+                        <span className="text-stone-500 font-normal"> · {contact.societe}</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-stone-500 flex items-center gap-2 flex-wrap mt-0.5">
+                      {contact.email && <span>{contact.email}</span>}
+                      {contact.email && contact.tel && <span>·</span>}
+                      {contact.tel && <span>{contact.tel}</span>}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onRemove(link.id)}
+                    className="p-1 text-stone-400 hover:text-red-600 flex-shrink-0"
+                    title="Retirer ce contact"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <ContactSelector
+                  value={null}
+                  onChange={(contactId) => onAdd(role.key, contactId)}
+                  categorie={role.categorie}
+                  placeholder={`Ajouter ${role.label.toLowerCase()}...`}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, annonces, allProfiles = [], onOpenMatching, onOpenEmailDrafts }) {
   const [openModal, setOpenModal] = useState(null); // 'photos' | 'visite' | 'mandant' | null
   const [aiAnalyzeOpen, setAiAnalyzeOpen] = useState(false);
@@ -2795,46 +2866,12 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
               </div>
             </div>
 
-            {/* ═══ BLOC MANDANT ═══ */}
-            <div id="mandant" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
-              <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
-                <UserIcon className="w-5 h-5 text-sage-dark" />Mandant
-              </h2>
-              {(() => {
-                const mandantClient = mandat.mandantClientId ? clients.find(c => c.id === mandat.mandantClientId) : null;
-                const mandantInfo = mandat.mandantInfo || mandat.mandant_info || {};
-                if (!mandantClient && !Object.values(mandantInfo).some(v => v)) {
-                  return (
-                    <div className="text-center py-6 text-stone-400">
-                      <UserIcon className="w-8 h-8 mx-auto mb-2 text-stone-300" />
-                      <p className="text-sm">Aucun mandant renseigné</p>
-                      <button onClick={() => setOpenModal('mandant')} className="text-xs text-sage-dark hover:underline mt-2">
-                        + Ajouter les informations du mandant
-                      </button>
-                    </div>
-                  );
-                }
-                return (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      {mandantClient && (
-                        <>
-                          <DetailItem label="Nom" value={`${mandantClient.prenom || ''} ${mandantClient.nom || ''}`.trim() || '—'} />
-                          <DetailItem label="Société" value={mandantClient.societe || '—'} />
-                          <DetailItem label="Email" value={mandantClient.email || '—'} />
-                          <DetailItem label="Téléphone" value={mandantClient.tel || '—'} />
-                        </>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      {Object.entries(mandantInfo).filter(([k, v]) => v).map(([k, v]) => (
-                        <DetailItem key={k} label={k.charAt(0).toUpperCase() + k.slice(1)} value={String(v)} />
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
+            {/* ═══ CONTACTS DU MANDAT ═══ */}
+            <MandatContactsSection
+              mandatContacts={mandatContacts}
+              onAdd={addMandatContact}
+              onRemove={removeMandatContact}
+            />
 
             {/* ═══ DESCRIPTION ═══ */}
             {mandat.description && (
