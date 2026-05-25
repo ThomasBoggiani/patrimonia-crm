@@ -650,6 +650,17 @@ function buildProposeCreateClient(args) {
   };
 }
 
+  return { 
+    proposed: true, 
+    type: 'create_client', 
+    summary: `Client à créer : ${nomComplet}`, 
+    fields, 
+    data,
+    warnings: warnings.length > 0 ? `Champs recommandés manquants : ${warnings.join(', ')}` : null,
+    missing: missing.length > 0 ? `Champs obligatoires manquants : ${missing.join(', ')}` : null
+  };
+}
+
 function buildProposeCreateTask(args) {
   const data = {
     titre: args.titre || 'Nouvelle tâche',
