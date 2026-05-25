@@ -4,7 +4,7 @@
 // Vue Contacts unifiée — modèle Nature (catégorie) + Postures (acheteur/vendeur)
 // Source : table contacts + agrégation roles via /api/contacts
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Fragment } from 'react';
 import {
   Building2, Users, Handshake, MapPin, Trash2, Edit2, X, Check, Loader2,
   Search, Plus, Upload, ExternalLink, Paperclip, ChevronRight, User as UserIcon, ArrowLeft,
@@ -18,6 +18,7 @@ import {
   TYPES_ACTIF_B2B_TREE,
   TYPES_HABITATION_B2C,
   TYPOLOGIES_CLIENT,
+  TYPOLOGIES_CLIENT_TREE,
   getMarcheFromTypologieClient,
   CATEGORIES_CONTACT, getCategorieLabel,
 } from '@/lib/crm-constants';
