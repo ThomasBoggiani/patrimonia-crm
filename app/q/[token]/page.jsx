@@ -167,14 +167,27 @@ export default function PublicQuestionnairePage() {
     setErrors(errs => errs.filter(e => e.field !== q.id));
   }
 
-  function toggleSousType(subKey, sousType) {
+  function toggleSousType(subKey, sousType, famille) {
     setAnswers(a => {
       const arr = a[subKey] || [];
       const isOn = arr.includes(sousType);
-      return { ...a, [subKey]: isOn ? arr.filter(s => s !== sousType) : [...arr, sousType] };
+      const newSubs = isOn ? arr.filter(s => s !== sousType) : [...arr, sousType];
+
+      // Auto-gère la présence de la famille dans familles_recherchees
+      const updates = { ...a, [subKey]: newSubs };
+      if (famille) {
+        const familles = a.familles_recherchees || [];
+        if (newSubs.length > 0 && !familles.includes(famille)) {
+          // Au moins 1 sous-type coché → famille présente
+          updates.familles_recherchees = [...familles, famille];
+        } else if (newSubs.length === 0 && familles.includes(famille)) {
+          // Plus aucun sous-type → famille retirée
+          updates.familles_recherchees = familles.filter(f => f !== famille);
+        }
+      }
+      return updates;
     });
   }
-
   async function handleSubmit() {
     setErrorSubmit(null);
     const errs = validateAnswers(template, answers);
