@@ -47,6 +47,7 @@ import { VisiteModal, MandantModal } from './MandatModals';
 import CascadeSelect from './CascadeSelect';
 import MediasModal from './MediasModal'; 
 import MediasInline from './MediasInline'; 
+import ContactSelector from './ContactSelector';
 import DocumentsInline from './DocumentsInline';
 import ReferencesView from './ReferencesView';
 import AvisDeValeurEditor from './AvisDeValeurEditor';
@@ -2501,6 +2502,53 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [showAvisValeur, setShowAvisValeur] = useState(false);
   const [showRapportMandant, setShowRapportMandant] = useState(false);
+  const [mandatContacts, setMandatContacts] = useState([]);
+
+  // Charge les contacts liés au mandat
+  useEffect(() => {
+    if (!mandat?.id) return;
+    (async () => {
+      const { data, error } = await supabase
+        .from('mandat_contacts')
+        .select('id, role, est_principal, notes, contact:contacts(id, prenom, nom, societe, email, tel, categorie)')
+        .eq('mandat_id', mandat.id);
+      if (error) {
+        console.error('[MandatDetail] load mandat_contacts', error);
+        return;
+      }
+      setMandatContacts(data || []);
+    })();
+  }, [mandat?.id]);
+
+  // Helpers pour ajouter / supprimer un contact lié
+  async function addMandatContact(role, contactId) {
+    if (!contactId) return;
+    const { error } = await supabase.from('mandat_contacts').insert({
+      mandat_id: mandat.id,
+      contact_id: contactId,
+      role,
+    });
+    if (error) {
+      alert('Erreur ajout contact : ' + error.message);
+      return;
+    }
+    // Recharge
+    const { data } = await supabase
+      .from('mandat_contacts')
+      .select('id, role, est_principal, notes, contact:contacts(id, prenom, nom, societe, email, tel, categorie)')
+      .eq('mandat_id', mandat.id);
+    setMandatContacts(data || []);
+  }
+
+  async function removeMandatContact(linkId) {
+    if (!confirm('Retirer ce contact du mandat ?')) return;
+    const { error } = await supabase.from('mandat_contacts').delete().eq('id', linkId);
+    if (error) {
+      alert('Erreur suppression contact : ' + error.message);
+      return;
+    }
+    setMandatContacts(prev => prev.filter(mc => mc.id !== linkId));
+  }
   const mandatDeals = deals.filter(d => d.mandatId === mandat.id);
   const alerts = mandat.alerts || [];
   const highlights = mandat.highlights || [];
