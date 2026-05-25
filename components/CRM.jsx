@@ -1297,8 +1297,8 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
                       {m.owner || '?'}
                     </div>
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    <div className="flex gap-1 items-center justify-end opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                  <td className="px-3 py-2 whitespace-nowrap w-[120px]">
+                    <div className="flex gap-1 items-center justify-end opacity-100" onClick={e => e.stopPropagation()}>
                       <button onClick={() => setEditingMandat(m)} className="p-1.5 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded" title="Modifier"><Edit2 className="w-3.5 h-3.5" /></button>
                       <button onClick={(e) => { e.stopPropagation(); setSellingMandat(m); }} className="p-1.5 text-stone-500 hover:text-amber-600 hover:bg-amber-50 rounded" title="Marquer comme vendu (par autres)"><Trophy className="w-3.5 h-3.5" /></button>
                       <button onClick={(e) => { e.stopPropagation(); handleDelete(m.id); }} className="p-1.5 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded" title="Supprimer"><Trash2 className="w-3.5 h-3.5" /></button>
