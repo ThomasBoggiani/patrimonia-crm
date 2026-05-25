@@ -684,64 +684,67 @@ function QuestionField({ q, value, answers, sousTypeValue, error, onChange, onCh
         </div>
       )}
 
-      {/* NOUVEAU : familles_with_subs (catégories + sous-boutons) */}
+      {/* NOUVEAU v2 : families_with_subs — sous-types directement cliquables, pas de checkbox famille */}
       {q.type === 'families_with_subs' && q.tree && (
-        <div className="space-y-2 mt-1">
-          {Object.entries(q.tree).map(([famille, sousTypes]) => {
+        <div className="space-y-4 mt-1">
+          {(q.order || Object.keys(q.tree)).map(famille => {
+            const sousTypes = q.tree[famille];
+            if (!sousTypes) return null; // famille inconnue dans le tree
             const familles = value || [];
-            const isOn = familles.includes(famille);
             const subKey = q.subKeys?.[famille];
             const subValues = subKey ? (answers[subKey] || []) : [];
             const hasSubs = Array.isArray(sousTypes) && sousTypes.length > 0;
+            const isFamilleSelected = familles.includes(famille);
 
-            return (
-              <div
-                key={famille}
-                className={`border rounded-lg transition-all ${
-                  isOn ? 'border-sage-dark bg-sage-50/40' : 'border-stone-200 bg-white'
-                }`}
-              >
-                <label className="flex items-center gap-3 px-3 py-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isOn}
-                    onChange={() => onToggleFamille(famille)}
-                    className="w-4 h-4 rounded border-stone-300 text-sage-dark focus:ring-sage-light"
-                  />
-                  <span className={`text-sm flex-1 ${isOn ? 'font-medium text-stone-900' : 'text-stone-700'}`}>
+            // Famille sans sous-types (Terrains, Parking) : bouton pill simple toggle
+            if (!hasSubs) {
+              return (
+                <div key={famille}>
+                  <button
+                    type="button"
+                    onClick={() => onToggleFamille(famille)}
+                    className={`px-4 py-2 text-sm rounded-full border transition ${
+                      isFamilleSelected
+                        ? 'bg-sage-dark text-white border-sage-dark font-medium'
+                        : 'bg-white text-stone-700 border-stone-200 hover:border-sage-dark hover:text-sage-darker'
+                    }`}
+                  >
                     {famille}
-                  </span>
-                  <span className="text-[11px] text-stone-400">
-                    {hasSubs ? `${sousTypes.length} sous-type${sousTypes.length > 1 ? 's' : ''}` : 'Pas de sous-type'}
-                  </span>
-                </label>
-                {isOn && hasSubs && subKey && (
-                  <div className="px-3 pb-2.5 flex flex-wrap gap-1.5 border-t border-dashed border-stone-200 pt-2.5">
-                    {sousTypes.map(s => {
-                      const subSelected = subValues.includes(s);
-                      return (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => onToggleSousType(subKey, s)}
-                          className={`px-3 py-1 text-xs rounded-full border transition ${
-                            subSelected
-                              ? 'bg-sage-dark text-white border-sage-dark'
-                              : 'bg-white text-stone-700 border-stone-200 hover:border-stone-400'
-                          }`}
-                        >
-                          {s}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                  </button>
+                </div>
+              );
+            }
+
+            // Famille avec sous-types : label + grille de pills cliquables
+            return (
+              <div key={famille}>
+                <div className="text-xs uppercase tracking-wide text-stone-500 font-semibold mb-2">
+                  {famille}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {sousTypes.map(s => {
+                    const subSelected = subValues.includes(s);
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => onToggleSousType(subKey, s, famille)}
+                        className={`px-3 py-1.5 text-xs rounded-full border transition ${
+                          subSelected
+                            ? 'bg-sage-dark text-white border-sage-dark font-medium'
+                            : 'bg-white text-stone-700 border-stone-200 hover:border-sage-dark hover:text-sage-darker'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             );
           })}
         </div>
       )}
-
       {/* NOUVEAU : file (upload PJ) */}
       {q.type === 'file' && (
         <FileInput q={q} value={value} onChange={onChange} token={token} />
