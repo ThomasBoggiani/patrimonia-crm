@@ -130,8 +130,15 @@ CONTEXTE MÉTIER
 - Type mandat : "Immeubles", "Appartements", "Locaux commerciaux", "Maisons", etc.
 - Commercialisation : "Off-market" (défaut) ou "Public".
 - Marché : "B2B" ou "B2C".
-- Typologie client : "Foncières", "Family Office", "Particuliers", "Marchand de Biens", etc.
-- Maturité client : "Faible", "Moyen", "Élevé".
+- Typologie client (CASCADE STRICTE — choisir dans cette liste UNIQUEMENT) :
+  * "Foncières" → sous_typologie : "Privées" ou "Publiques" (sociétés d'investissement immobilier)
+  * "Marchands de biens" → pas de sous-typologie (achat-revente)
+  * "Particuliers" → pas de sous-typologie (clients B2C)
+  * "Fonds" → pas de sous-typologie (fonds d'investissement)
+  * "Promoteurs" → pas de sous-typologie
+  * "Family Office" → pas de sous-typologie (gestion patrimoine familial)
+  N'INVENTE PAS de typologie hors de cette liste. Si tu n'es pas sûr, choisis "Particuliers" pour personne physique, "Family Office" pour gestion patrimoine, "Foncières" pour société d'investissement.
+- Marché client : déduit automatiquement de la typologie. "Particuliers" = b2c, tous les autres = b2b.- Maturité client : "Faible", "Moyen", "Élevé".
 - Statut client : "Actif", "Inactif".
 - Origine client : "Apporteur", "Site", "Recommandation", etc.
 - Owner : initiales du commercial.
@@ -254,7 +261,7 @@ const tools = [
     type: 'function',
     function: {
       name: 'propose_create_client',
-      description: 'PROPOSE la création d\'un client. Ne crée RIEN, Thomas valide avant exécution.',
+      description: 'PROPOSE la création d\'un client (acquéreur). Ne crée RIEN, Thomas valide. Utilise OBLIGATOIREMENT la cascade typologie/sous_typologie ci-dessous. TYPOLOGIES VALIDES : "Foncières" (sous_typologies : "Privées" ou "Publiques") - "Marchands de biens" - "Particuliers" - "Fonds" - "Promoteurs" - "Family Office". MARCHE déduit auto : "Particuliers" = B2C, tous les autres = B2B. N\'INVENTE PAS de typologies, choisis dans cette liste.',
       parameters: {
         type: 'object',
         properties: {
@@ -263,9 +270,17 @@ const tools = [
           societe: { type: 'string' },
           email: { type: 'string' },
           tel: { type: 'string' },
-          typologie: { type: 'string', description: 'Ex: "Foncières", "Family Office", "Particuliers". Défaut "Particuliers".' },
-          sous_typologie: { type: 'string' },
-          marche: { type: 'string', description: '"B2B" ou "B2C".' },
+          typologie: { 
+            type: 'string',
+            enum: ['Foncières', 'Marchands de biens', 'Particuliers', 'Fonds', 'Promoteurs', 'Family Office'],
+            description: 'Typologie OBLIGATOIRE parmi la liste. Si pas certain, demande à Thomas plutôt que d\'inventer.'
+          },
+          sous_typologie: { 
+            type: 'string',
+            enum: ['Privées', 'Publiques'],
+            description: 'UNIQUEMENT pour typologie="Foncières" : "Privées" ou "Publiques". Vide pour les autres typologies.'
+          },
+          marche: { type: 'string', enum: ['b2b', 'b2c'], description: 'Déduit auto : "Particuliers"=b2c, tous les autres=b2b. Mets la valeur cohérente.' },
           maturite: { type: 'string', description: 'Défaut "Moyen".' },
           statut: { type: 'string', description: 'Défaut "Actif".' },
           origine: { type: 'string', description: 'Défaut "Apporteur".' },
