@@ -1163,8 +1163,8 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
       ) : view === 'kanban' ? (
         <MandatsKanban mandats={filtered} onSelectMandat={setSelectedMandat} reload={reload} secondaryDisplay={secondaryDisplay} />
       ) : (
-        <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-hidden">
-        <table className="w-full">
+        <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-x-auto">
+        <table className="w-full min-w-[1000px]">
               <colgroup>
                 <col style={{ width: '100px' }} />
                 <col />
