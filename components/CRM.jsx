@@ -2912,10 +2912,18 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
                 </div>
               </div>
               <DetailItem label="Prix au m²" value={mandat.prixM2 ? `${parseFloat(mandat.prixM2).toLocaleString('fr')}€` : '—'} />
-              <DetailItem label="Loyers annuels" value={mandat.loyersAnnuels ? `${parseFloat(mandat.loyersAnnuels).toLocaleString('fr')}€` : '—'} />
+              <DetailItem label="Loyers annuels" value={(() => {
+                const lots = mandat.etat_locatif || mandat.etatLocatif || [];
+                const loyerMensuelLots = totalLoyerMensuel(lots);
+                const annuel = parseFloat(mandat.loyersAnnuels) > 0
+                  ? parseFloat(mandat.loyersAnnuels)
+                  : (loyerMensuelLots > 0 ? loyerMensuelLots * 12 : 0);
+                return annuel > 0 ? `${annuel.toLocaleString('fr')}€` : '—';
+              })()} />
               <DetailItem label="Rendement" value={(() => {
-                const rPresent = parseFloat(mandat.rendement) > 0 ? mandat.rendement : null;
-                const rOpt = parseFloat(mandat.rendementOptimise) > 0 ? mandat.rendementOptimise : null;
+                const _rdt = computeRendements(mandat);
+                const rPresent = _rdt.actuel != null && !isNaN(_rdt.actuel) && _rdt.actuel > 0 ? _rdt.actuel : null;
+                const rOpt = _rdt.optimise != null && !isNaN(_rdt.optimise) && _rdt.optimise > 0 ? _rdt.optimise : null;
                 if (!rPresent && !rOpt) return <span>&mdash;</span>;
                 return (
                   <div className="flex flex-col gap-0.5">
