@@ -17,7 +17,7 @@ import { ArrowLeft, Edit, Briefcase } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
 import { matchMandatsForClient } from '@/lib/matching';
-import { computeRendementsAuto, totalLoyerMensuel, totalLoyerMensuelOptimise, totalSurface, comptageStatuts } from '@/lib/rendements';
+import { computeRendements, computeRendementsAuto, totalLoyerMensuel, totalLoyerMensuelOptimise, totalSurface, comptageStatuts } from '@/lib/rendements';
 import { getPriceTTC, getPriceNV, isNVEstimated, getCommission, isCommissionEstimated } from '@/lib/priceDisplay';
 import AIAssistantChat from './AIAssistantChat';
 import MarkAsSoldModal from './MarkAsSoldModal';
@@ -1273,10 +1273,11 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
                   </td>
                  <td className="px-3 py-3">
                     {(() => {
-                      const hasP = m.rendement !== null && m.rendement !== undefined && m.rendement !== '';
-                      const hasO = m.rendementOptimise !== null && m.rendementOptimise !== undefined && m.rendementOptimise !== '';
-                      const rP = hasP ? parseFloat(m.rendement) : null;
-                      const rO = hasO ? parseFloat(m.rendementOptimise) : null;
+                      const _rdt = computeRendements(m);
+                      const rP = _rdt.actuel;
+                      const rO = _rdt.optimise;
+                      const hasP = rP !== null && rP !== undefined && !isNaN(rP);
+                      const hasO = rO !== null && rO !== undefined && !isNaN(rO);
                       return (
                         <div className="flex flex-col leading-tight">
                           <span className={`font-medium text-sm ${hasP ? 'text-emerald-700' : 'text-stone-300'}`} title="Rendement présent">
