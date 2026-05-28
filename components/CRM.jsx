@@ -1686,9 +1686,75 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   const [filledFields, setFilledFields] = useState(new Set());
   const [showNewClient, setShowNewClient] = useState(false);
   const [newClientPrefill, setNewClientPrefill] = useState('');
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergeTargetId, setMergeTargetId] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [merging, setMerging] = useState(false);
   const folderInputRef = React.useRef(null);
 
-  const update = (k, v) => setData({ ...data, [k]: v });  
+  const update = (k, v) => setData({ ...data, [k]: v });
+
+  // ═══ Suppression du mandat ═══
+  async function handleDeleteMandat() {
+    if (!mandat?.id) return;
+    if (!confirm(`Supprimer définitivement le mandat "${mandat.nom}" ?\n\nCette action est irréversible (interactions et documents liés seront aussi supprimés).`)) return;
+    setDeleting(true);
+    try {
+      // Supprime les dépendances d'abord
+      await supabase.from('mandat_contacts').delete().eq('mandat_id', mandat.id);
+      await supabase.from('mandat_documents').delete().eq('mandat_id', mandat.id);
+      await supabase.from('interactions').delete().eq('mandat_id', mandat.id);
+      await supabase.from('todos').delete().eq('lien_type', 'mandat').eq('lien_id', mandat.id);
+      // Puis le mandat
+      const { error } = await supabase.from('mandats').delete().eq('id', mandat.id);
+      if (error) throw error;
+      alert('Mandat supprimé.');
+      onClose();
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('mandats-changed'));
+      // Redirige proprement vers la liste
+      const url = new URL(window.location.href);
+      url.searchParams.delete('open');
+      window.history.pushState({ tab: 'mandats' }, '', url.toString());
+      window.location.reload();
+    } catch (e) {
+      alert('Erreur suppression : ' + e.message);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  // ═══ Fusion : transfère tout du mandat courant (source) vers la cible, puis supprime la source ═══
+  async function handleMergeMandat() {
+    if (!mandat?.id || !mergeTargetId) { alert('Choisis un mandat cible.'); return; }
+    if (mergeTargetId === mandat.id) { alert('Impossible de fusionner un mandat avec lui-même.'); return; }
+    const target = mandats.find(m => m.id === mergeTargetId);
+    if (!confirm(`Fusionner "${mandat.nom}" DANS "${target?.nom || 'cible'}" ?\n\nTous les documents, interactions, contacts et tâches du mandat courant seront transférés vers la cible. Le mandat courant sera ensuite supprimé.`)) return;
+    setMerging(true);
+    try {
+      // Transfère les dépendances vers la cible
+      await supabase.from('mandat_documents').update({ mandat_id: mergeTargetId }).eq('mandat_id', mandat.id);
+      await supabase.from('interactions').update({ mandat_id: mergeTargetId }).eq('mandat_id', mandat.id);
+      await supabase.from('todos').update({ lien_id: mergeTargetId }).eq('lien_type', 'mandat').eq('lien_id', mandat.id);
+      // Pour mandat_contacts : on tente le transfert, en ignorant les doublons éventuels
+      const { data: srcContacts } = await supabase.from('mandat_contacts').select('*').eq('mandat_id', mandat.id);
+      for (const mc of (srcContacts || [])) {
+        await supabase.from('mandat_contacts').update({ mandat_id: mergeTargetId }).eq('id', mc.id);
+      }
+      // Supprime le mandat source
+      const { error } = await supabase.from('mandats').delete().eq('id', mandat.id);
+      if (error) throw error;
+      alert('Fusion terminée. Le mandat a été fusionné dans la cible.');
+      onClose();
+      const url = new URL(window.location.href);
+      url.searchParams.set('open', mergeTargetId);
+      window.history.pushState({ tab: 'mandats', open: mergeTargetId }, '', url.toString());
+      window.location.reload();
+    } catch (e) {
+      alert('Erreur fusion : ' + e.message);
+    } finally {
+      setMerging(false);
+    }
+  }  
   
   // Si le marché change, on reset type + sousType pour éviter de garder un sous-type incohérent 
   const updateMarche = (m) => setData({ ...data, marche: m, type: '', sousType: '' });
@@ -2207,10 +2273,64 @@ async function handleFolderImport(event) {
           )}
         </div>
 
-        <div className="flex gap-2 justify-end p-6 border-t border-stone-200 bg-stone-50 sticky bottom-0">
+        <div className="flex gap-2 items-center p-6 border-t border-stone-200 bg-stone-50 sticky bottom-0">
+          {/* Actions destructives à gauche (uniquement en édition) */}
+          {mandat?.id && (
+            <div className="flex gap-2 mr-auto">
+              <button
+                onClick={handleDeleteMandat}
+                disabled={deleting}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-600 border border-red-200 hover:bg-red-50 rounded-lg disabled:opacity-50"
+              >
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Supprimer
+              </button>
+              <button
+                onClick={() => setShowMergeModal(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm text-amber-700 border border-amber-200 hover:bg-amber-50 rounded-lg"
+              >
+                <FolderOpen className="w-4 h-4" />
+                Fusionner
+              </button>
+            </div>
+          )}
           <button onClick={onClose} className="px-4 py-2 text-sm text-stone-700 hover:bg-cream-200 rounded-lg">Annuler</button>
           <button onClick={() => onSave(data, [])} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Enregistrer</button>
         </div>
+
+        {/* Modale de fusion */}
+        {showMergeModal && (
+          <div className="fixed inset-0 bg-stone-900/60 flex items-center justify-center z-[70] p-4" onClick={() => setShowMergeModal(false)}>
+            <div className="bg-white rounded-xl shadow-luxe-hover max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+              <h3 className="font-display text-lg font-semibold text-stone-900 mb-1">Fusionner ce mandat</h3>
+              <p className="text-sm text-stone-600 mb-4">
+                Tout le contenu de <strong>{mandat?.nom}</strong> (documents, interactions, contacts, tâches) sera transféré vers le mandat cible, puis ce mandat sera supprimé.
+              </p>
+              <label className="block text-xs font-medium text-stone-500 uppercase tracking-wide mb-1.5">Mandat cible (à conserver)</label>
+              <select
+                value={mergeTargetId}
+                onChange={e => setMergeTargetId(e.target.value)}
+                className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-white mb-4"
+              >
+                <option value="">— Choisir un mandat —</option>
+                {mandats.filter(m => m.id !== mandat?.id).map(m => (
+                  <option key={m.id} value={m.id}>{m.nom}{m.adresse ? ' — ' + m.adresse : ''}</option>
+                ))}
+              </select>
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setShowMergeModal(false)} className="px-4 py-2 text-sm text-stone-700 hover:bg-stone-100 rounded-lg">Annuler</button>
+                <button
+                  onClick={handleMergeMandat}
+                  disabled={merging || !mergeTargetId}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700 disabled:opacity-50"
+                >
+                  {merging ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderOpen className="w-4 h-4" />}
+                  Fusionner
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
