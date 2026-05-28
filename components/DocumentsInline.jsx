@@ -1,10 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════
 // components/DocumentsInline.jsx
-// Version inline de DocumentsModal pour affichage dans la fiche mandat
+// Version inline pour la fiche mandat
+// REFONTE : 1 seul bouton "Importer" (multi-fichiers + dossiers via drag&drop)
+//           + Lien + Dropbox séparés. L'IA catégorise automatiquement.
 // ═══════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Upload, Link2, Trash2, FileText, Image as ImageIcon, FileArchive, File, Download, ExternalLink, Loader2, FolderOpen, Sparkles, Folder } from 'lucide-react';
+import { X, Upload, Link2, Trash2, FileText, Image as ImageIcon, FileArchive, File, Download, ExternalLink, Loader2, FolderOpen, Sparkles } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 const CATEGORIES = [
@@ -75,17 +77,75 @@ async function compressImage(file) {
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// Drag & drop : parcours récursif des dossiers (API webkitGetAsEntry)
+// Renvoie un tableau plat de File à partir d'un DataTransferItemList
+// ═══════════════════════════════════════════════════════════════════
+async function readEntryFile(entry) {
+  return new Promise((resolve) => {
+    entry.file((file) => resolve(file), () => resolve(null));
+  });
+}
+
+async function readDirectory(dirReader) {
+  return new Promise((resolve) => {
+    const entries = [];
+    const readBatch = () => {
+      dirReader.readEntries((batch) => {
+        if (batch.length === 0) {
+          resolve(entries);
+        } else {
+          entries.push(...batch);
+          readBatch(); // readEntries renvoie par paquets, il faut boucler
+        }
+      }, () => resolve(entries));
+    };
+    readBatch();
+  });
+}
+
+async function traverseEntry(entry, out) {
+  if (!entry) return;
+  if (entry.isFile) {
+    const file = await readEntryFile(entry);
+    if (file) out.push(file);
+  } else if (entry.isDirectory) {
+    const reader = entry.createReader();
+    const entries = await readDirectory(reader);
+    for (const child of entries) {
+      await traverseEntry(child, out);
+    }
+  }
+}
+
+async function extractFilesFromDataTransfer(dataTransfer) {
+  const items = dataTransfer.items;
+  const out = [];
+  if (items && items.length > 0 && typeof items[0].webkitGetAsEntry === 'function') {
+    const entries = [];
+    for (let i = 0; i < items.length; i++) {
+      const entry = items[i].webkitGetAsEntry?.();
+      if (entry) entries.push(entry);
+    }
+    for (const entry of entries) {
+      await traverseEntry(entry, out);
+    }
+    if (out.length > 0) return out;
+  }
+  // Fallback : fichiers simples sans structure de dossier
+  return Array.from(dataTransfer.files || []);
+}
+
 export default function DocumentsInline({ mandat, onUpdate }) {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
   const [showLinkForm, setShowLinkForm] = useState(false);
   const [linkData, setLinkData] = useState({ nom: '', url: '', category: 'autre' });
-  const [uploadCategory, setUploadCategory] = useState('autre');
   const [importProgress, setImportProgress] = useState(null);
   const [importResult, setImportResult] = useState(null);
-  const fileInputRef = useRef(null);
-  const folderInputRef = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const importInputRef = useRef(null);
+  const dragCounter = useRef(0);
 
   async function loadDocuments() {
     setLoading(true);
@@ -157,33 +217,11 @@ export default function DocumentsInline({ mandat, onUpdate }) {
     return { ok: true, category: aiCategory, filled: filledFields };
   }
 
-  async function handleFileUpload(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) { alert('Session expirée'); return; }
-
-      const compressed = await compressImage(file);
-      const result = await uploadOneFile(compressed, token, uploadCategory, false);
-      if (!result.ok) {
-        alert('Erreur upload : ' + result.error);
-        return;
-      }
-      await loadDocuments();
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    } catch (e) {
-      alert('Erreur : ' + e.message);
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  async function handleFolderUpload(event) {
-    const files = Array.from(event.target.files || []);
-    if (files.length === 0) return;
+  // ═══════════════════════════════════════════════════════════════════
+  // IMPORT UNIVERSEL : 1 ou N fichiers, dossiers — tout passe par l'IA
+  // ═══════════════════════════════════════════════════════════════════
+  async function importFiles(files) {
+    if (!files || files.length === 0) return;
 
     setImportResult(null);
     setImportProgress({ current: 0, total: files.length, fileName: 'Préparation...', totalFilled: 0 });
@@ -217,7 +255,7 @@ export default function DocumentsInline({ mandat, onUpdate }) {
             errors++;
           }
         }
-        setImportProgress({ current: processed, total: files.length, fileName: 'Batch ' + (Math.floor(i / BATCH_SIZE) + 1), totalFilled });
+        setImportProgress({ current: processed, total: files.length, fileName: 'Traitement...', totalFilled });
         if (i + BATCH_SIZE < files.length) {
           await new Promise(r => setTimeout(r, 500));
         }
@@ -232,12 +270,53 @@ export default function DocumentsInline({ mandat, onUpdate }) {
         categoriesByLabel,
       });
       await loadDocuments();
-      if (folderInputRef.current) folderInputRef.current.value = '';
+      if (importInputRef.current) importInputRef.current.value = '';
       if (totalFilled > 0 && typeof onUpdate === 'function') onUpdate();
     } catch (e) {
       alert('Erreur : ' + e.message);
       setImportProgress(null);
     }
+  }
+
+  // Picker classique (bouton)
+  async function handleImportInput(event) {
+    const files = Array.from(event.target.files || []);
+    await importFiles(files);
+  }
+
+  // Drag & drop (fichiers ET dossiers)
+  async function handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+    if (importProgress !== null) return;
+    const files = await extractFilesFromDataTransfer(e.dataTransfer);
+    if (files.length > 0) {
+      await importFiles(files);
+    }
+  }
+
+  function handleDragEnter(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current <= 0) {
+      dragCounter.current = 0;
+      setIsDragging(false);
+    }
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
   }
 
   async function handleAddLink() {
@@ -267,7 +346,7 @@ export default function DocumentsInline({ mandat, onUpdate }) {
       currentUrl ? 'Modifier le lien Dropbox du dossier :' : 'Collez le lien Dropbox du dossier :',
       currentUrl
     );
-    if (newUrl === null) return; // Annulé
+    if (newUrl === null) return;
     const trimmed = newUrl.trim();
     if (trimmed && !trimmed.startsWith('https://')) {
       alert('Le lien doit commencer par https://');
@@ -284,6 +363,7 @@ export default function DocumentsInline({ mandat, onUpdate }) {
       alert('Erreur sauvegarde : ' + e.message);
     }
   }
+
   async function handleDelete(docId) {
     if (!confirm('Supprimer ce document définitivement ?')) return;
     try {
@@ -308,28 +388,35 @@ export default function DocumentsInline({ mandat, onUpdate }) {
     docs: documents.filter(d => d.category === cat.id),
   })).filter(cat => cat.docs.length > 0);
 
+  const isImporting = importProgress !== null;
+
   return (
     <>
-      {/* Barre d'actions */}
+      {/* Barre d'actions simplifiée */}
       <div className="flex items-center gap-2 flex-wrap mb-4 pb-3 border-b border-stone-100">
-        <input type="file" ref={folderInputRef} onChange={handleFolderUpload} className="hidden" multiple webkitdirectory="" directory="" />
-        <button onClick={() => folderInputRef.current?.click()} disabled={importProgress !== null} className="flex items-center gap-2 px-3 py-2 bg-sage-dark text-white rounded-lg text-sm hover:bg-sage-darker disabled:opacity-50">
-          <Folder className="w-4 h-4" /> Importer un dossier ✨
+        {/* Bouton Importer unique (picker multi-fichiers) */}
+        <input
+          type="file"
+          ref={importInputRef}
+          onChange={handleImportInput}
+          className="hidden"
+          multiple
+        />
+        <button
+          onClick={() => importInputRef.current?.click()}
+          disabled={isImporting}
+          className="flex items-center gap-2 px-4 py-2 bg-sage-dark text-white rounded-lg text-sm hover:bg-sage-darker disabled:opacity-50 font-medium"
+        >
+          {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+          {isImporting ? 'Import en cours...' : 'Importer'}
         </button>
 
         <span className="text-stone-300">|</span>
 
-        <select value={uploadCategory} onChange={e => setUploadCategory(e.target.value)} className="px-3 py-2 border border-stone-200 rounded-lg text-sm bg-white">
-          {CATEGORIES.map(c => (
-            <option key={c.id} value={c.id}>{c.icon} {c.label}</option>
-          ))}
-        </select>
-        <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-        <button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="flex items-center gap-2 px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded-lg text-sm hover:bg-stone-100 disabled:opacity-50">
-          {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-          {uploading ? 'Upload...' : 'Fichier seul'}
-        </button>
-        <button onClick={() => setShowLinkForm(!showLinkForm)} className="flex items-center gap-2 px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded-lg text-sm hover:bg-stone-100">
+        <button
+          onClick={() => setShowLinkForm(!showLinkForm)}
+          className="flex items-center gap-2 px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded-lg text-sm hover:bg-stone-100"
+        >
           <Link2 className="w-4 h-4" /> Lien
         </button>
 
@@ -343,7 +430,7 @@ export default function DocumentsInline({ mandat, onUpdate }) {
           </div>
         ) : (
           <button onClick={handleLinkDropbox} className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-sm hover:bg-amber-100" title="Lier un dossier Dropbox">
-            📁 Lier un dossier Dropbox
+            📁 Dropbox
           </button>
         )}
       </div>
@@ -411,17 +498,34 @@ export default function DocumentsInline({ mandat, onUpdate }) {
         </div>
       )}
 
-      {/* Contenu */}
-      <div>
+      {/* Zone de contenu + drag & drop global */}
+      <div
+        onDrop={handleDrop}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        className={`relative rounded-xl transition-colors ${isDragging ? 'ring-2 ring-sage-dark ring-offset-2 bg-sage-50/40' : ''}`}
+      >
+        {/* Overlay drag actif */}
+        {isDragging && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-sage-50/80 border-2 border-dashed border-sage-dark rounded-xl pointer-events-none">
+            <div className="text-center">
+              <Upload className="w-10 h-10 mx-auto mb-2 text-sage-dark" />
+              <p className="text-sm font-medium text-sage-darker">Déposez vos fichiers ou dossiers ici</p>
+              <p className="text-xs text-sage-dark mt-0.5">L'IA catégorise automatiquement</p>
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="text-center py-12 text-stone-400">
             <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" /> Chargement...
           </div>
         ) : documents.length === 0 ? (
-          <div className="text-center py-12 text-stone-400">
+          <div className="text-center py-12 text-stone-400 border-2 border-dashed border-stone-200 rounded-xl">
             <FolderOpen className="w-10 h-10 mx-auto mb-3 text-stone-300" />
             <p className="text-sm">Aucun document pour ce mandat.</p>
-            <p className="text-xs mt-1">Importe un dossier ou ajoute des fichiers.</p>
+            <p className="text-xs mt-1">Glissez-déposez des fichiers ou un dossier ici, ou cliquez sur <strong>Importer</strong>.</p>
           </div>
         ) : (
           <div className="space-y-6">
@@ -471,7 +575,7 @@ export default function DocumentsInline({ mandat, onUpdate }) {
       </div>
 
       <div className="mt-4 pt-3 border-t border-stone-100 text-xs text-stone-500 text-center">
-        ✨ L'IA catégorise et extrait les données automatiquement lors de l'import dossier
+        ✨ L'IA catégorise et extrait les données automatiquement lors de l'import
       </div>
     </>
   );
