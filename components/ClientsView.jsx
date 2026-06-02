@@ -164,6 +164,8 @@ function QualiteSelector({ value, motif, onChange }) {
 
 // Helper : notifier le matching (fire-and-forget)
 async function triggerMatchingBatch({ mandatId, clientId }) {
+  // (QW2) Batch de matching désactivé — voir note dans CRM.jsx.
+  return;
   try {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
@@ -863,7 +865,7 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
           onSuccess={() => { setShowAddRole(false); loadContact(); }}
         />
       )}
-      <AIAssistantChat floating context={{ type: 'client', data: client }} />
+      {/* (QW3) AIAssistantChat local retiré — instance globale unique dans CRM(). */}
     </div>
   );
 }
