@@ -104,6 +104,10 @@ function getFamilleIcon(famille) {
 // === COMPOSANT PRINCIPAL ===
 // Helper : déclenche le matching auto batch en fire-and-forget après save d'un mandat ou client
 async function triggerMatchingBatch({ mandatId, clientId }) {
+  // (QW2) Batch de matching désactivé : le matching est calculé en mémoire
+  // dans les fiches client/mandat (lib/matching.js, instantané, sans réseau ni IA).
+  // Ce batch ne servait qu'aux notifications de fond — réactivable plus tard si besoin.
+  return;
   try {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
@@ -294,14 +298,8 @@ export default function CRM() {
     }
   }
 
-  // Écoute les actions exécutées depuis l'Assistant Patrimonia pour recharger les données
-  useEffect(() => {
-    const handler = () => {
-      loadAll();
-    };
-    window.addEventListener('patrimonia:action-executed', handler);
-    return () => window.removeEventListener('patrimonia:action-executed', handler);
-  }, []);
+  // (QW1) Listener 'patrimonia:action-executed' redondant supprimé :
+  // le premier useEffect (onActionExecuted) recharge déjà via loadAll() puis redirige.
   
   async function loadAll() {
     setLoading(true);
@@ -3240,8 +3238,8 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
       )}
     {/* Quelque chose */}
 
-      {/* Assistant Patrimonia — bouton flottant avec contexte du mandat */}
-      <AIAssistantChat floating context={{ type: 'mandat', data: mandat }} />
+      {/* (QW3) AIAssistantChat local retiré : une seule instance globale est montée dans CRM().
+          Doublon = deux assistants actifs simultanément sur la fiche. */}
       {/* Modal Analyser avec l'IA — analyse complète des documents du mandat */}
       <AIAnalyzeModal
         open={aiAnalyzeOpen}
