@@ -25,7 +25,7 @@ const supabaseAdmin = createClient(
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const MODEL = 'claude-sonnet-4-6';
+const MODEL = 'claude-haiku-4-5';
 
 // ==========================================================================
 // SYSTEM PROMPT
@@ -841,7 +841,7 @@ export async function POST(req) {
       }
     }
 
-    const MAX_ITERATIONS = 8;
+    const MAX_ITERATIONS = 4;
     let finalMessage = null;
     let proposedAction = null;
 
