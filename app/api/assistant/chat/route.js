@@ -1,13 +1,18 @@
 // app/api/assistant/chat/route.js
 //
-// Assistant Patrimonia - Phase 4 complète (tous les outils propose_*)
+// Assistant Patrimonia - migré sur Anthropic Claude Sonnet 4.6
 // - search_mandats, search_clients, search_interactions : lecture
 // - propose_create_mandat, propose_create_client, propose_create_task, propose_create_event, propose_create_interaction
 // - propose_update_mandat, propose_update_client
 // - propose_send_email, propose_send_plaquette
+//
+// NOTE MIGRATION : le format des outils et la boucle d'agent sont au format Anthropic.
+// La logique métier (executeTool, builders propose_*, searches) est INCHANGÉE.
+// execute/route.js n'est pas concerné par cette migration.
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import Anthropic from '@anthropic-ai/sdk';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -17,6 +22,10 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+const MODEL = 'claude-sonnet-4-6';
 
 // ==========================================================================
 // SYSTEM PROMPT
@@ -95,7 +104,7 @@ Date du jour : ${today}.
 RÔLE
 Tu aides Thomas (le fondateur) à naviguer dans son CRM, créer/modifier des données, envoyer des emails et plaquettes, et analyser des documents.
 
-CAPACITÉS ACTUELLES (Phase 4)
+CAPACITÉS ACTUELLES
 LECTURE
 - search_mandats : chercher dans les mandats
 - search_clients : chercher dans les clients
@@ -151,7 +160,7 @@ CONTEXTE MÉTIER
 - Origine client : "Apporteur", "Site", "Recommandation", etc.
 - Owner : initiales du commercial.
 - Type interaction : "Appel", "Email", "RDV", "Note", "WhatsApp", "SMS".
-- Statut tâche : "À faire", "En cours", "Fait".
+- Statut tâche : "À faire", "En cours", "Terminé".
 - Priorité tâche : "Faible", "Normale", "Haute", "Urgente".
 - Les prix sont en euros. Convertis "2,5 M€" en 2500000.
 
@@ -167,280 +176,244 @@ UTILISATION DES OUTILS
 }
 
 // ==========================================================================
-// OUTILS — Définitions
+// OUTILS — Définitions (format ANTHROPIC : name / description / input_schema)
 // ==========================================================================
 
 const tools = [
   // LECTURE
   {
-    type: 'function',
-    function: {
-      name: 'search_mandats',
-      description: 'Cherche dans la table des mandats. Sans filtre, retourne les plus récents.',
-      parameters: {
-        type: 'object',
-        properties: {
-          query_text: { type: 'string' },
-          ville: { type: 'string' },
-          statut: { type: 'string' },
-          type: { type: 'string' },
-          prix_min: { type: 'number' },
-          prix_max: { type: 'number' },
-          owner: { type: 'string' },
-          limit: { type: 'integer' }
-        },
-        required: []
-      }
+    name: 'search_mandats',
+    description: 'Cherche dans la table des mandats. Sans filtre, retourne les plus récents.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query_text: { type: 'string' },
+        ville: { type: 'string' },
+        statut: { type: 'string' },
+        type: { type: 'string' },
+        prix_min: { type: 'number' },
+        prix_max: { type: 'number' },
+        owner: { type: 'string' },
+        limit: { type: 'integer' }
+      },
+      required: []
     }
   },
   {
-    type: 'function',
-    function: {
-      name: 'search_clients',
-      description: 'Cherche dans la table des clients. Sans filtre, retourne les plus récents.',
-      parameters: {
-        type: 'object',
-        properties: {
-          query_text: { type: 'string' },
-          typologie: { type: 'string' },
-          marche: { type: 'string' },
-          maturite: { type: 'string' },
-          statut: { type: 'string' },
-          owner: { type: 'string' },
-          budget_min: { type: 'number' },
-          budget_max: { type: 'number' },
-          limit: { type: 'integer' }
-        },
-        required: []
-      }
+    name: 'search_clients',
+    description: 'Cherche dans la table des clients. Sans filtre, retourne les plus récents.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query_text: { type: 'string' },
+        typologie: { type: 'string' },
+        marche: { type: 'string' },
+        maturite: { type: 'string' },
+        statut: { type: 'string' },
+        owner: { type: 'string' },
+        budget_min: { type: 'number' },
+        budget_max: { type: 'number' },
+        limit: { type: 'integer' }
+      },
+      required: []
     }
   },
   {
-    type: 'function',
-    function: {
-      name: 'search_interactions',
-      description: 'Cherche dans l\'historique COMPLET des échanges du CRM : emails reçus (type=email_entrant), emails envoyés (type=email_sortant), appels (type=Appel), RDV (type=RDV), notes (type=Note). UTILISER SYSTÉMATIQUEMENT cette fonction dès que Thomas demande "les emails reçus", "les emails envoyés", "les derniers échanges", "qui m\'a contacté", "qu\'est-ce qui s\'est passé avec X", etc. Filtrable par client, mandat, type, ou date.',
-      parameters: {
-        type: 'object',
-        properties: {
-          client_id: { type: 'string', description: 'UUID du client pour filtrer ses interactions.' },
-          mandat_id: { type: 'string', description: 'UUID du mandat pour filtrer ses interactions.' },
-          type: { type: 'string', description: 'Type : "Appel", "Email", "RDV", "Note", "email_entrant", "email_sortant"...' },
-          since_days: { type: 'integer', description: 'Limiter aux X derniers jours (ex: 14 pour 2 semaines).' },
-          limit: { type: 'integer', description: 'Nombre max de résultats. Défaut 20.' }
-        },
-        required: []
-      }
+    name: 'search_interactions',
+    description: 'Cherche dans l\'historique COMPLET des échanges du CRM : emails reçus (type=email_entrant), emails envoyés (type=email_sortant), appels (type=Appel), RDV (type=RDV), notes (type=Note). UTILISER SYSTÉMATIQUEMENT cette fonction dès que Thomas demande "les emails reçus", "les emails envoyés", "les derniers échanges", "qui m\'a contacté", "qu\'est-ce qui s\'est passé avec X", etc. Filtrable par client, mandat, type, ou date.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string', description: 'UUID du client pour filtrer ses interactions.' },
+        mandat_id: { type: 'string', description: 'UUID du mandat pour filtrer ses interactions.' },
+        type: { type: 'string', description: 'Type : "Appel", "Email", "RDV", "Note", "email_entrant", "email_sortant"...' },
+        since_days: { type: 'integer', description: 'Limiter aux X derniers jours (ex: 14 pour 2 semaines).' },
+        limit: { type: 'integer', description: 'Nombre max de résultats. Défaut 20.' }
+      },
+      required: []
     }
   },
   // CRÉATION
   {
-    type: 'function',
-    function: {
-      name: 'propose_create_mandat',
-      description: 'PROPOSE la création d\'un mandat. Ne crée RIEN, Thomas valide avant exécution.',
-      parameters: {
-        type: 'object',
-        properties: {
-          nom: { type: 'string', description: 'Titre du mandat. OBLIGATOIRE.' },
-          adresse: { type: 'string' },
-          ville: { type: 'string' },
-          type: { type: 'string', description: 'Défaut "Immeubles".' },
-          sous_type: { type: 'string' },
-          prix: { type: 'number' },
-          surface: { type: 'number' },
-          nb_lots: { type: 'integer' },
-          nb_pieces: { type: 'integer' },
-          nb_chambres: { type: 'integer' },
-          etage: { type: 'integer' },
-          loyers_annuels: { type: 'number' },
-          statut: { type: 'string', description: 'Défaut "Sourcing".' },
-          commercialisation: { type: 'string', description: 'Défaut "Off-market".' },
-          marche: { type: 'string' },
-          description: { type: 'string' },
-          contact: { type: 'string' },
-          tel: { type: 'string' }
-        },
-        required: ['nom']
-      }
+    name: 'propose_create_mandat',
+    description: 'PROPOSE la création d\'un mandat. Ne crée RIEN, Thomas valide avant exécution.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        nom: { type: 'string', description: 'Titre du mandat. OBLIGATOIRE.' },
+        adresse: { type: 'string' },
+        ville: { type: 'string' },
+        type: { type: 'string', description: 'Défaut "Immeubles".' },
+        sous_type: { type: 'string' },
+        prix: { type: 'number' },
+        surface: { type: 'number' },
+        nb_lots: { type: 'integer' },
+        nb_pieces: { type: 'integer' },
+        nb_chambres: { type: 'integer' },
+        etage: { type: 'integer' },
+        loyers_annuels: { type: 'number' },
+        statut: { type: 'string', description: 'Défaut "Sourcing".' },
+        commercialisation: { type: 'string', description: 'Défaut "Off-market".' },
+        marche: { type: 'string' },
+        description: { type: 'string' },
+        contact: { type: 'string' },
+        tel: { type: 'string' }
+      },
+      required: ['nom']
     }
   },
   {
-    type: 'function',
-    function: {
-      name: 'propose_create_client',
-      description: 'PROPOSE la création d\'un client (acquéreur). Ne crée RIEN, Thomas valide. Utilise OBLIGATOIREMENT la cascade typologie/sous_typologie ci-dessous. TYPOLOGIES VALIDES : "Foncières" (sous_typologies : "Privées" ou "Publiques") - "Marchands de biens" - "Particuliers" - "Fonds" - "Promoteurs" - "Family Office". MARCHE déduit auto : "Particuliers" = B2C, tous les autres = B2B. N\'INVENTE PAS de typologies, choisis dans cette liste.',
-      parameters: {
-        type: 'object',
-        properties: {
-          prenom: { type: 'string' },
-          nom: { type: 'string', description: 'OBLIGATOIRE.' },
-          societe: { type: 'string' },
-          email: { type: 'string' },
-          tel: { type: 'string' },
-          typologie: {
-            type: 'string',
-            enum: ['Foncières', 'Marchands de biens', 'Particuliers', 'Fonds', 'Promoteurs', 'Family Office'],
-            description: 'Typologie OBLIGATOIRE parmi la liste. Si pas certain, demande à Thomas plutôt que d\'inventer.'
-          },
-          sous_typologie: {
-            type: 'string',
-            enum: ['Privées', 'Publiques'],
-            description: 'UNIQUEMENT pour typologie="Foncières" : "Privées" ou "Publiques". Vide pour les autres typologies.'
-          },
-          marche: { type: 'string', enum: ['b2b', 'b2c'], description: 'Déduit auto : "Particuliers"=b2c, tous les autres=b2b. Mets la valeur cohérente.' },
-          maturite: { type: 'string', description: 'Défaut "Moyen".' },
-          statut: { type: 'string', description: 'Défaut "Actif".' },
-          origine: { type: 'string', description: 'Défaut "Apporteur".' },
-          budget_min: { type: 'number' },
-          budget_max: { type: 'number' },
-          rendement_min: { type: 'number' },
-          details_recherche: { type: 'string', description: 'Texte libre décrivant ce que le client cherche.' }
+    name: 'propose_create_client',
+    description: 'PROPOSE la création d\'un client (acquéreur). Ne crée RIEN, Thomas valide. Utilise OBLIGATOIREMENT la cascade typologie/sous_typologie ci-dessous. TYPOLOGIES VALIDES : "Foncières" (sous_typologies : "Privées" ou "Publiques") - "Marchands de biens" - "Particuliers" - "Fonds" - "Promoteurs" - "Family Office". MARCHE déduit auto : "Particuliers" = B2C, tous les autres = B2B. N\'INVENTE PAS de typologies, choisis dans cette liste.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        prenom: { type: 'string' },
+        nom: { type: 'string', description: 'OBLIGATOIRE.' },
+        societe: { type: 'string' },
+        email: { type: 'string' },
+        tel: { type: 'string' },
+        typologie: {
+          type: 'string',
+          enum: ['Foncières', 'Marchands de biens', 'Particuliers', 'Fonds', 'Promoteurs', 'Family Office'],
+          description: 'Typologie OBLIGATOIRE parmi la liste. Si pas certain, demande à Thomas plutôt que d\'inventer.'
         },
-        required: ['nom']
-      }
+        sous_typologie: {
+          type: 'string',
+          enum: ['Privées', 'Publiques'],
+          description: 'UNIQUEMENT pour typologie="Foncières" : "Privées" ou "Publiques". Vide pour les autres typologies.'
+        },
+        marche: { type: 'string', enum: ['b2b', 'b2c'], description: 'Déduit auto : "Particuliers"=b2c, tous les autres=b2b. Mets la valeur cohérente.' },
+        maturite: { type: 'string', description: 'Défaut "Moyen".' },
+        statut: { type: 'string', description: 'Défaut "Actif".' },
+        origine: { type: 'string', description: 'Défaut "Apporteur".' },
+        budget_min: { type: 'number' },
+        budget_max: { type: 'number' },
+        rendement_min: { type: 'number' },
+        details_recherche: { type: 'string', description: 'Texte libre décrivant ce que le client cherche.' }
+      },
+      required: ['nom']
     }
   },
   {
-    type: 'function',
-    function: {
-      name: 'propose_create_task',
-      description: 'PROPOSE la création d\'une tâche todo. Ne crée RIEN, Thomas valide avant exécution.',
-      parameters: {
-        type: 'object',
-        properties: {
-          titre: { type: 'string', description: 'OBLIGATOIRE.' },
-          echeance: { type: 'string', description: 'Date au format YYYY-MM-DD. Optionnel.' },
-          priorite: { type: 'string', description: 'Défaut "Normale".' },
-          statut: { type: 'string', description: 'Défaut "À faire".' },
-          lien_type: { type: 'string', description: '"mandat" ou "client" si la tâche est liée à un mandat ou client.' },
-          lien_id: { type: 'string', description: 'UUID du mandat ou client lié.' }
-        },
-        required: ['titre']
-      }
+    name: 'propose_create_task',
+    description: 'PROPOSE la création d\'une tâche todo. Ne crée RIEN, Thomas valide avant exécution.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        titre: { type: 'string', description: 'OBLIGATOIRE.' },
+        echeance: { type: 'string', description: 'Date au format YYYY-MM-DD. Optionnel.' },
+        priorite: { type: 'string', description: 'Défaut "Normale".' },
+        statut: { type: 'string', description: 'Défaut "À faire".' },
+        lien_type: { type: 'string', description: '"mandat" ou "client" si la tâche est liée à un mandat ou client.' },
+        lien_id: { type: 'string', description: 'UUID du mandat ou client lié.' }
+      },
+      required: ['titre']
     }
   },
   {
-    type: 'function',
-    function: {
-      name: 'propose_create_event',
-      description: 'PROPOSE la création d\'un RDV dans Outlook. Ne crée RIEN, Thomas valide avant exécution.',
-      parameters: {
-        type: 'object',
-        properties: {
-          titre: { type: 'string', description: 'Sujet du RDV. OBLIGATOIRE.' },
-          date_debut: { type: 'string', description: 'Date+heure ISO format (ex: 2026-05-23T14:00:00). OBLIGATOIRE.' },
-          duree_minutes: { type: 'integer', description: 'Durée en minutes. Défaut 60.' },
-          lieu: { type: 'string' },
-          description: { type: 'string' },
-          participants: { type: 'array', items: { type: 'string' }, description: 'Liste d\'emails des participants.' }
-        },
-        required: ['titre', 'date_debut']
-      }
+    name: 'propose_create_event',
+    description: 'PROPOSE la création d\'un RDV dans Outlook. Ne crée RIEN, Thomas valide avant exécution.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        titre: { type: 'string', description: 'Sujet du RDV. OBLIGATOIRE.' },
+        date_debut: { type: 'string', description: 'Date+heure ISO format (ex: 2026-05-23T14:00:00). OBLIGATOIRE.' },
+        duree_minutes: { type: 'integer', description: 'Durée en minutes. Défaut 60.' },
+        lieu: { type: 'string' },
+        description: { type: 'string' },
+        participants: { type: 'array', items: { type: 'string' }, description: 'Liste d\'emails des participants.' }
+      },
+      required: ['titre', 'date_debut']
     }
   },
   {
-    type: 'function',
-    function: {
-      name: 'propose_create_interaction',
-      description: 'PROPOSE la création d\'une note/interaction dans l\'historique d\'un client ou mandat. Ne crée RIEN, Thomas valide.',
-      parameters: {
-        type: 'object',
-        properties: {
-          type: { type: 'string', description: 'Type : "Appel", "Email", "RDV", "Note", "WhatsApp", "SMS". OBLIGATOIRE.' },
-          resume: { type: 'string', description: 'Résumé de l\'interaction. OBLIGATOIRE.' },
-          client_id: { type: 'string', description: 'UUID du client concerné (au moins client_id OU mandat_id).' },
-          mandat_id: { type: 'string', description: 'UUID du mandat concerné (au moins client_id OU mandat_id).' },
-          next_step: { type: 'string', description: 'Prochaine action si applicable.' },
-          date_next_step: { type: 'string', description: 'Date prochaine action YYYY-MM-DD.' }
-        },
-        required: ['type', 'resume']
-      }
+    name: 'propose_create_interaction',
+    description: 'PROPOSE la création d\'une note/interaction dans l\'historique d\'un client ou mandat. Ne crée RIEN, Thomas valide.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        type: { type: 'string', description: 'Type : "Appel", "Email", "RDV", "Note", "WhatsApp", "SMS". OBLIGATOIRE.' },
+        resume: { type: 'string', description: 'Résumé de l\'interaction. OBLIGATOIRE.' },
+        client_id: { type: 'string', description: 'UUID du client concerné (au moins client_id OU mandat_id).' },
+        mandat_id: { type: 'string', description: 'UUID du mandat concerné (au moins client_id OU mandat_id).' },
+        next_step: { type: 'string', description: 'Prochaine action si applicable.' },
+        date_next_step: { type: 'string', description: 'Date prochaine action YYYY-MM-DD.' }
+      },
+      required: ['type', 'resume']
     }
   },
   // MODIFICATION
   {
-    type: 'function',
-    function: {
-      name: 'propose_update_mandat',
-      description: 'PROPOSE la modification d\'un mandat existant. Ne modifie RIEN, Thomas valide.',
-      parameters: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', description: 'UUID du mandat à modifier. OBLIGATOIRE.' },
-          nom: { type: 'string' },
-          adresse: { type: 'string' },
-          ville: { type: 'string' },
-          type: { type: 'string' },
-          sous_type: { type: 'string' },
-          prix: { type: 'number' },
-          surface: { type: 'number' },
-          statut: { type: 'string' },
-          commercialisation: { type: 'string' },
-          marche: { type: 'string' },
-          description: { type: 'string' }
-        },
-        required: ['id']
-      }
+    name: 'propose_update_mandat',
+    description: 'PROPOSE la modification d\'un mandat existant. Ne modifie RIEN, Thomas valide.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'UUID du mandat à modifier. OBLIGATOIRE.' },
+        nom: { type: 'string' },
+        adresse: { type: 'string' },
+        ville: { type: 'string' },
+        type: { type: 'string' },
+        sous_type: { type: 'string' },
+        prix: { type: 'number' },
+        surface: { type: 'number' },
+        statut: { type: 'string' },
+        commercialisation: { type: 'string' },
+        marche: { type: 'string' },
+        description: { type: 'string' }
+      },
+      required: ['id']
     }
   },
   {
-    type: 'function',
-    function: {
-      name: 'propose_update_client',
-      description: 'PROPOSE la modification d\'un client existant. Ne modifie RIEN, Thomas valide.',
-      parameters: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', description: 'UUID du client à modifier. OBLIGATOIRE.' },
-          prenom: { type: 'string' },
-          nom: { type: 'string' },
-          societe: { type: 'string' },
-          email: { type: 'string' },
-          tel: { type: 'string' },
-          typologie: { type: 'string' },
-          marche: { type: 'string' },
-          maturite: { type: 'string' },
-          statut: { type: 'string' },
-          budget_min: { type: 'number' },
-          budget_max: { type: 'number' }
-        },
-        required: ['id']
-      }
+    name: 'propose_update_client',
+    description: 'PROPOSE la modification d\'un client existant. Ne modifie RIEN, Thomas valide.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'UUID du client à modifier. OBLIGATOIRE.' },
+        prenom: { type: 'string' },
+        nom: { type: 'string' },
+        societe: { type: 'string' },
+        email: { type: 'string' },
+        tel: { type: 'string' },
+        typologie: { type: 'string' },
+        marche: { type: 'string' },
+        maturite: { type: 'string' },
+        statut: { type: 'string' },
+        budget_min: { type: 'number' },
+        budget_max: { type: 'number' }
+      },
+      required: ['id']
     }
   },
   // ENVOI
   {
-    type: 'function',
-    function: {
-      name: 'propose_send_email',
-      description: 'PROPOSE l\'envoi d\'un email simple. Ne fait RIEN, Thomas valide avant envoi.',
-      parameters: {
-        type: 'object',
-        properties: {
-          to: { type: 'string', description: 'Email du destinataire. OBLIGATOIRE.' },
-          subject: { type: 'string', description: 'Objet. OBLIGATOIRE.' },
-          body: { type: 'string', description: 'Corps de l\'email. OBLIGATOIRE.' },
-          client_id: { type: 'string', description: 'UUID du client destinataire (optionnel mais recommandé pour traçabilité).' }
-        },
-        required: ['to', 'subject', 'body']
-      }
+    name: 'propose_send_email',
+    description: 'PROPOSE l\'envoi d\'un email simple. Ne fait RIEN, Thomas valide avant envoi.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: 'Email du destinataire. OBLIGATOIRE.' },
+        subject: { type: 'string', description: 'Objet. OBLIGATOIRE.' },
+        body: { type: 'string', description: 'Corps de l\'email. OBLIGATOIRE.' },
+        client_id: { type: 'string', description: 'UUID du client destinataire (optionnel mais recommandé pour traçabilité).' }
+      },
+      required: ['to', 'subject', 'body']
     }
   },
   {
-    type: 'function',
-    function: {
-      name: 'propose_send_plaquette',
-      description: 'PROPOSE l\'envoi d\'une plaquette PDF d\'un mandat à un client. Ne fait RIEN, Thomas valide.',
-      parameters: {
-        type: 'object',
-        properties: {
-          mandat_id: { type: 'string', description: 'UUID du mandat dont envoyer la plaquette. OBLIGATOIRE.' },
-          client_id: { type: 'string', description: 'UUID du client destinataire. OBLIGATOIRE.' },
-          custom_message: { type: 'string', description: 'Message personnalisé optionnel à ajouter au mail.' }
-        },
-        required: ['mandat_id', 'client_id']
-      }
+    name: 'propose_send_plaquette',
+    description: 'PROPOSE l\'envoi d\'une plaquette PDF d\'un mandat à un client. Ne fait RIEN, Thomas valide.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        mandat_id: { type: 'string', description: 'UUID du mandat dont envoyer la plaquette. OBLIGATOIRE.' },
+        client_id: { type: 'string', description: 'UUID du client destinataire. OBLIGATOIRE.' },
+        custom_message: { type: 'string', description: 'Message personnalisé optionnel à ajouter au mail.' }
+      },
+      required: ['mandat_id', 'client_id']
     }
   }
 ];
@@ -449,7 +422,6 @@ const tools = [
 // EXÉCUTION OUTILS LECTURE
 // ==========================================================================
 
-// Charge les N dernières interactions pour un contexte client ou mandat
 async function loadRecentInteractions(context) {
   if (!context || !context.data?.id) return [];
   const filterCol = context.type === 'mandat' ? 'mandat_id' : context.type === 'client' ? 'client_id' : null;
@@ -503,7 +475,6 @@ async function executeSearchInteractions(args) {
   query = query.order('date', { ascending: false });
   const { data, error } = await query;
   if (error) return { error: error.message, results: [] };
-  // Enrichit avec from_name pour les emails
   const enriched = (data || []).map(i => {
     const out = { ...i };
     if (i.metadata && (i.type === 'email_entrant' || i.type === 'email_sortant')) {
@@ -615,11 +586,9 @@ function buildProposeCreateClient(args) {
     details_recherche: args.details_recherche || null
   };
 
-  // Validation des champs minimum (au moins nom OU société)
   const missing = [];
   if (!data.nom && !data.societe) missing.push('nom ou société');
 
-  // Champs optionnels recommandés mais signalés
   const warnings = [];
   if (!data.email) warnings.push('email');
   if (!data.tel) warnings.push('téléphone');
@@ -800,7 +769,7 @@ async function downloadFromSignedUrl(signedUrl) {
 
 async function extractPdfTextFromBuffer(buffer) {
   try {
-    const pdfParse = (await import('pdf-parse')).default;
+    const pdfParse = (await import('pdf-parse/lib/pdf-parse.js')).default;
     const data = await pdfParse(buffer);
     return data.text || '';
   } catch (e) {
@@ -809,12 +778,8 @@ async function extractPdfTextFromBuffer(buffer) {
   }
 }
 
-function bufferToDataUrl(buffer, mimeType) {
-  return `data:${mimeType};base64,${buffer.toString('base64')}`;
-}
-
 // ==========================================================================
-// BOUCLE PRINCIPALE
+// BOUCLE PRINCIPALE (format Anthropic)
 // ==========================================================================
 
 export async function POST(req) {
@@ -827,12 +792,13 @@ export async function POST(req) {
     if (!userMessages.length) {
       return NextResponse.json({ error: 'messages requis' }, { status: 400 });
     }
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json({ error: 'OPENAI_API_KEY manquante' }, { status: 500 });
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return NextResponse.json({ error: 'ANTHROPIC_API_KEY manquante' }, { status: 500 });
     }
 
+    // Traitement des pièces jointes
     const pdfTexts = [];
-    const imageAttachments = [];
+    const imageBlocks = [];
     for (const att of attachments) {
       if (!att?.type || !att?.signedUrl) continue;
       try {
@@ -841,9 +807,9 @@ export async function POST(req) {
           const text = await extractPdfTextFromBuffer(buffer);
           if (text) pdfTexts.push({ name: att.name || 'document.pdf', text: text.slice(0, 50000) });
         } else if (att.type.startsWith('image/')) {
-          imageAttachments.push({
-            type: 'image_url',
-            image_url: { url: bufferToDataUrl(buffer, att.type) }
+          imageBlocks.push({
+            type: 'image',
+            source: { type: 'base64', media_type: att.type, data: buffer.toString('base64') }
           });
         }
       } catch (e) {
@@ -852,21 +818,24 @@ export async function POST(req) {
     }
 
     const systemPromptText = await buildSystemPrompt(context, pdfTexts);
-    const conversation = [
-      { role: 'system', content: systemPromptText },
-      ...userMessages
-    ];
 
-    if (imageAttachments.length > 0) {
-      const lastUserIdx = conversation.length - 1;
-      const lastMsg = conversation[lastUserIdx];
-      if (lastMsg && lastMsg.role === 'user') {
-        const textContent = typeof lastMsg.content === 'string' ? lastMsg.content : '';
-        conversation[lastUserIdx] = {
+    // Construit l'historique au format Anthropic (content peut être string ou array de blocks)
+    const messages = userMessages.map(m => ({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: m.content
+    }));
+
+    // Ajoute les images au dernier message user
+    if (imageBlocks.length > 0) {
+      const lastIdx = messages.length - 1;
+      const last = messages[lastIdx];
+      if (last && last.role === 'user') {
+        const textContent = typeof last.content === 'string' ? last.content : '';
+        messages[lastIdx] = {
           role: 'user',
           content: [
             { type: 'text', text: textContent || 'Analyse cette/ces image(s).' },
-            ...imageAttachments
+            ...imageBlocks
           ]
         };
       }
@@ -877,39 +846,26 @@ export async function POST(req) {
     let proposedAction = null;
 
     for (let i = 0; i < MAX_ITERATIONS; i++) {
-      const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: conversation,
-          tools,
-          tool_choice: 'auto',
-          temperature: 0.3
-        })
+      const response = await anthropic.messages.create({
+        model: MODEL,
+        max_tokens: 1500,
+        system: systemPromptText,
+        tools,
+        messages
       });
 
-      if (!openaiRes.ok) {
-        const errText = await openaiRes.text();
-        console.error('[assistant/chat] OpenAI error:', errText);
-        return NextResponse.json({ error: 'Erreur OpenAI', detail: errText }, { status: 500 });
-      }
+      // Cherche les blocs tool_use dans la réponse
+      const toolUseBlocks = (response.content || []).filter(b => b.type === 'tool_use');
 
-      const openaiData = await openaiRes.json();
-      const msg = openaiData?.choices?.[0]?.message;
-      if (!msg) return NextResponse.json({ error: 'Réponse OpenAI vide' }, { status: 500 });
+      if (toolUseBlocks.length > 0) {
+        // On rejoue le message assistant (avec ses tool_use) dans l'historique
+        messages.push({ role: 'assistant', content: response.content });
 
-      if (msg.tool_calls && msg.tool_calls.length > 0) {
-        conversation.push(msg);
-        for (const toolCall of msg.tool_calls) {
-          const toolName = toolCall.function.name;
-          let toolArgs = {};
-          try { toolArgs = JSON.parse(toolCall.function.arguments || '{}'); }
-          catch (e) { console.error('[assistant/chat] JSON parse args error:', e); }
-
+        // Puis on construit un message user contenant les tool_result
+        const toolResults = [];
+        for (const block of toolUseBlocks) {
+          const toolName = block.name;
+          const toolArgs = block.input || {};
           console.log(`[assistant/chat] Tool call: ${toolName}`, toolArgs);
           const toolResult = await executeTool(toolName, toolArgs);
 
@@ -924,27 +880,34 @@ export async function POST(req) {
             };
           }
 
-          conversation.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: block.id,
             content: JSON.stringify(toolResult)
           });
         }
+        messages.push({ role: 'user', content: toolResults });
         continue;
       }
 
-      finalMessage = msg.content || '';
+      // Pas de tool_use → réponse textuelle finale
+      finalMessage = (response.content || [])
+        .filter(b => b.type === 'text')
+        .map(b => b.text)
+        .join('\n')
+        .trim();
       break;
     }
 
     if (finalMessage === null) {
-      return NextResponse.json({ error: 'Limite d\'itérations atteinte' }, { status: 500 });
+      // Limite d'itérations atteinte mais on a peut-être une proposition à renvoyer
+      finalMessage = proposedAction ? '' : 'Limite d\'itérations atteinte';
     }
 
-    const response = { message: finalMessage, role: 'assistant' };
-    if (proposedAction) response.proposed_action = proposedAction;
+    const result = { message: finalMessage, role: 'assistant' };
+    if (proposedAction) result.proposed_action = proposedAction;
 
-    return NextResponse.json(response);
+    return NextResponse.json(result);
 
   } catch (e) {
     console.error('[assistant/chat] Erreur:', e);
