@@ -886,6 +886,15 @@ export async function POST(req) {
             content: JSON.stringify(toolResult)
           });
         }
+
+        // Si une proposition a été générée, on sort immédiatement :
+        // la carte de proposition se suffit à elle-même, pas besoin d'un 2e appel
+        // Sonnet pour "reformuler" (c'est ce 2e appel qui faisait timeout).
+        if (proposedAction) {
+          finalMessage = '';
+          break;
+        }
+
         messages.push({ role: 'user', content: toolResults });
         continue;
       }
