@@ -611,6 +611,17 @@ export default function AIAssistantChat({
   // Profils (commerciaux actifs) — chargés au mount pour le select Owner
   const [profiles, setProfiles] = useState([]);
 
+  // P1d : contexte reçu via event de fenêtre (fiche mandat/client ouverte)
+  const [liveContext, setLiveContext] = useState(null);
+  useEffect(() => {
+    function onContext(e) {
+      setLiveContext(e.detail?.context || null);
+    }
+    window.addEventListener('patrimonia:context', onContext);
+    return () => window.removeEventListener('patrimonia:context', onContext);
+  }, []);
+  const activeContext = liveContext || context;
+
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -726,7 +737,7 @@ export default function AIAssistantChat({
 
     try {
       const payload = { messages: newMessages.map(m => ({ role: m.role, content: m.content })) };
-      if (context) payload.context = context;
+      if (activeContext) payload.context = activeContext;
       if (currentAttachments.length > 0) {
         payload.attachments = currentAttachments.map(a => ({
           name: a.name, type: a.type, signedUrl: a.signedUrl
@@ -941,12 +952,12 @@ export default function AIAssistantChat({
     : input;
 
   const getContextLabel = () => {
-    if (!context) return null;
-    if (context.type === 'mandat' && context.data) {
-      return `Mandat : ${context.data.nom || context.data.adresse || 'sans nom'}`;
+    if (!activeContext) return null;
+    if (activeContext.type === 'mandat' && activeContext.data) {
+      return `Mandat : ${activeContext.data.nom || activeContext.data.adresse || 'sans nom'}`;
     }
-    if (context.type === 'client' && context.data) {
-      const c = context.data;
+    if (activeContext.type === 'client' && activeContext.data) {
+      const c = activeContext.data;
       const nom = [c.prenom, c.nom].filter(Boolean).join(' ') || c.societe || 'sans nom';
       return `Client : ${nom}`;
     }
