@@ -955,14 +955,14 @@ export function ClientForm({ client, onSave, onClose }) {
           <Field label="Typologies recherchées">
             {marche === 'b2c' ? (
               <CascadeSelectMulti
-                tree={{ 'Habitation': TYPES_HABITATION_B2C }}
-                values={data.typologiesRecherchees || []}
+                tree={{ 'Résidentiel': TYPES_HABITATION_B2C }}
+                value={data.typologiesRecherchees || []}
                 onChange={(vals) => update('typologiesRecherchees', vals)}
               />
             ) : (
               <CascadeSelectMulti
                 tree={TYPES_ACTIF_B2B_TREE}
-                values={data.typologiesRecherchees || []}
+                value={data.typologiesRecherchees || []}
                 onChange={(vals) => update('typologiesRecherchees', vals)}
               />
             )}
