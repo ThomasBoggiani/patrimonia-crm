@@ -37,6 +37,7 @@ import ClientAnalysisPanel from './ClientAnalysisPanel';
 import InboxTab from './InboxTab'; 
 import QuestionnaireResponseModal from './QuestionnaireResponseModal'; 
 import ClientMatches from './ClientMatches';
+import MandatMatches from './MandatMatches';
 import ContactsImportModal from './ContactsImportModal';
 import PdfExportButtons from '@/components/PdfExportButtons';
 import DiffusionInline from './DiffusionInline';
@@ -3064,6 +3065,14 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
               <button onClick={() => onOpenMatching?.(mandat.id)} className="text-left transition-all hover:scale-[1.02] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-sage-dark rounded-xl">
                 <KpiBox label="Visites" value={nbVisites} icon={Eye} />
               </button>
+            </div>
+
+            {/* Liste des clients compatibles (matching au fil de l'eau) */}
+            <div className="mt-4 pt-4 border-t border-cream-dark">
+              <h3 className="text-sm font-semibold text-stone-700 mb-2 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-sage-dark" /> Clients compatibles
+              </h3>
+              <MandatMatches mandat={mandat} clients={clients} onOpenClient={(id) => { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('crm:openClient', { detail: { clientId: id } })); }} />
             </div>
           </div>
 
