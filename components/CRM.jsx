@@ -2007,8 +2007,8 @@ async function handleFolderImport(event) {
 
        {/* Documents : import + lien + Dropbox (composant unifié avec validation IA) */}
         <div className="p-6 border-b border-stone-200 bg-gradient-to-br from-sage-50/70 to-cream-50">
-          {formData.id ? (
-            <DocumentsInline mandat={formData} onUpdate={onUpdated} />
+          {data.id ? (
+            <DocumentsInline mandat={data} onUpdate={() => {}} />
           ) : (
             <p className="text-xs text-stone-500 text-center">Enregistrez le mandat pour pouvoir importer des documents.</p>
           )}
