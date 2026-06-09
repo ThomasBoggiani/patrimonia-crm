@@ -967,6 +967,7 @@ export function ClientForm({ client, onSave, onClose }) {
               />
             )}
           </Field>
+          </Field>
           <Field label="Zones recherchées">
             <ZonesSelectMulti
               value={data.zones || []}
