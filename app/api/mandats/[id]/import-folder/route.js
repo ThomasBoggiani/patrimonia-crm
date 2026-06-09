@@ -102,6 +102,7 @@ ATTENTION PARTICULIÈRE AU DPE / AUDIT ÉNERGÉTIQUE (document prioritaire) :
 - "dpe_date" : la date de réalisation du diagnostic (YYYY-MM-DD).
 - "cout_energie_annuel" : le coût annuel d'énergie estimé, en euros (un nombre, ex : 1850). Souvent présenté comme une fourchette "entre X et Y €/an" : prends la valeur haute, ou la moyenne si une seule fourchette.
 - "surface" : la surface mentionnée. Pour un lot/appartement c'est la surface loi Carrez ou habitable ; pour un immeuble c'est la surface utile/habitable totale. Mets la surface en m² (un nombre).
+- "code_postal" : le code postal de l'adresse du bien (5 chiffres, ex : "75008"). Présent sur tout DPE, mandat ou avis. Extrais-le précisément, c'est essentiel pour la localisation.
 
 Réponds UNIQUEMENT avec un JSON valide (pas de backticks markdown). Format exact :
 
@@ -111,6 +112,7 @@ Réponds UNIQUEMENT avec un JSON valide (pas de backticks markdown). Format exac
     "nom": "...",
     "adresse": "...",
     "ville": "...",
+    "code_postal": "75008",
     "type": "Appartement|Studio|Maison|Immeuble|Terrain|Local commercial|Bureau",
     "sous_type": "T1|T2|T3|...",
     "surface": 28.36,
