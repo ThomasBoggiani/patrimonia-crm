@@ -1,11 +1,14 @@
 // ═══════════════════════════════════════════════════════════════════
 // app/api/mandats/[id]/import-folder/route.js
-// Pour 1 fichier : catégorise + analyse + auto-fill BDD du mandat
-// Le client appelle cette route 1x par fichier (en parallèle limité)
+// Pour 1 fichier : catégorise + analyse + (propose ou applique) l'auto-fill
 //
-// MAJ : fallback PDF-image. Si pdf-parse ne renvoie aucun texte (DPE / scan),
-//       on rend les pages en images via mupdf et on les envoie à la vision Claude.
-//       Prompt d'extraction enrichi (DPE complet, coût énergie, surface).
+// MODES :
+//  - mode 'propose' (NOUVEAU) : lit le doc, renvoie le détail des champs
+//    { key, label, current, proposed } SANS écrire dans le mandat.
+//    Le fichier est quand même catégorisé/rangé (le doc lui-même est déjà stocké).
+//  - applyToMandat: true (ANCIEN, conservé) : écrit directement (fallback).
+//
+// Fallback PDF-image via mupdf (DPE / scans) + prompt enrichi (coût énergie, surface).
 // ═══════════════════════════════════════════════════════════════════
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -31,6 +34,45 @@ const VALID_CATEGORIES = ['mandat', 'diagnostics', 'plans_photos', 'notes', 'man
 
 // Nombre max de pages rendues en image pour un PDF scanné (sécurité anti-timeout)
 const MAX_VISION_PAGES = 12;
+
+// Libellés lisibles pour l'écran de validation (clé technique -> label affiché)
+const FIELD_LABELS = {
+  nom: 'Nom du bien',
+  adresse: 'Adresse',
+  ville: 'Ville',
+  type: "Type d'actif",
+  sous_type: 'Sous-type',
+  surface: 'Surface (m²)',
+  nb_pieces: 'Nombre de pièces',
+  nb_chambres: 'Nombre de chambres',
+  etage: 'Étage',
+  annee_construction: 'Année de construction',
+  prix: 'Prix (TTC)',
+  prix_net_vendeur: 'Prix net vendeur',
+  prix_m2: 'Prix au m²',
+  honoraires_charge: 'Honoraires à charge',
+  honoraires_taux: 'Honoraires (%)',
+  honoraires_montant: 'Honoraires (€)',
+  loyers_annuels: 'Loyers annuels',
+  rendement: 'Rendement (%)',
+  charges_annuelles: 'Charges annuelles',
+  taxe_fonciere: 'Taxe foncière',
+  dpe_consommation: 'DPE — Consommation (kWh/m²/an)',
+  dpe_emissions: 'DPE — Émissions (kgCO₂/m²/an)',
+  dpe_date: 'DPE — Date du diagnostic',
+  cout_energie_annuel: "Coût annuel d'énergie estimé (€)",
+  mandat_numero: 'N° de mandat',
+  mandat_type: 'Type de mandat',
+  date_signature: 'Date de signature',
+  mandat_date_echeance: 'Échéance du mandat',
+  nb_lots: 'Nombre de lots',
+  description: 'Description',
+  commercialisation: 'Commercialisation',
+};
+
+function labelFor(key) {
+  return FIELD_LABELS[key] || key;
+}
 
 async function verifyToken(token) {
   if (!token) return null;
@@ -105,15 +147,13 @@ Règles :
 
 // ───────────────────────────────────────────────────────────────────
 // Rend les premières pages d'un PDF en images PNG (base64) via mupdf.
-// Utilisé en fallback quand pdf-parse ne renvoie aucun texte.
-// Renvoie { images: [{media_type, data}], pageCount, rendered }
 // ───────────────────────────────────────────────────────────────────
 async function renderPdfToImages(buffer) {
   const mupdf = await import('mupdf');
   const doc = mupdf.Document.openDocument(buffer, 'application/pdf');
   const pageCount = doc.countPages();
   const toRender = Math.min(pageCount, MAX_VISION_PAGES);
-  const zoom = 150 / 72; // 150 DPI : bon compromis lisibilité / taille
+  const zoom = 150 / 72;
   const matrix = mupdf.Matrix.scale(zoom, zoom);
 
   const images = [];
@@ -133,10 +173,76 @@ async function renderPdfToImages(buffer) {
   return { images, pageCount, rendered: toRender };
 }
 
+// ───────────────────────────────────────────────────────────────────
+// Analyse un document : renvoie { category, extractedData, visionNote }
+// ───────────────────────────────────────────────────────────────────
+async function analyzeDocument(buffer, mimeType) {
+  let userContent;
+  let visionNote = null;
+
+  if (mimeType === 'application/pdf' || mimeType.includes('pdf')) {
+    let pdfText = '';
+    try {
+      const parsed = await pdfParse(buffer);
+      pdfText = (parsed.text || '').trim();
+    } catch (parseErr) {
+      pdfText = '';
+    }
+
+    if (pdfText && pdfText.length > 40) {
+      const MAX_CHARS = 30000;
+      if (pdfText.length > MAX_CHARS) {
+        pdfText = pdfText.slice(0, MAX_CHARS) + '\n\n[... suite tronquée ...]';
+      }
+      userContent = [{ type: 'text', text: 'Voici le contenu textuel du document :\n\n' + pdfText }];
+    } else {
+      const { images, pageCount, rendered } = await renderPdfToImages(buffer);
+      if (images.length === 0) {
+        return { category: 'autre', extractedData: {}, unreadable: true, visionNote: 'PDF illisible (aucune page rendue)' };
+      }
+      if (pageCount > rendered) {
+        visionNote = `Document de ${pageCount} pages — seules les ${rendered} premières ont été analysées. Si une info manque, dépose les pages suivantes séparément.`;
+      }
+      userContent = [
+        ...images.map(img => ({ type: 'image', source: { type: 'base64', media_type: img.media_type, data: img.data } })),
+        { type: 'text', text: 'Analyse ce document immobilier (rendu en image' + (images.length > 1 ? 's' : '') + '). Extrais les informations selon les règles.' },
+      ];
+    }
+  } else if (mimeType.startsWith('image/')) {
+    const base64 = buffer.toString('base64');
+    userContent = [
+      { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
+      { type: 'text', text: 'Analyse cette image (probablement photo ou scan d\'un bien immobilier).' },
+    ];
+  } else {
+    return { category: 'autre', extractedData: {}, skipped: true, visionNote: null };
+  }
+
+  const response = await anthropic.messages.create({
+    model: 'claude-haiku-4-5',
+    max_tokens: 2000,
+    system: PROMPT,
+    messages: [{ role: 'user', content: userContent }],
+  });
+
+  const text = response.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+
+  let parsed = { category: 'autre', data: {} };
+  try {
+    const cleaned = text.replace(/^```json\s*/i, '').replace(/\s*```$/, '').trim();
+    parsed = JSON.parse(cleaned);
+  } catch (parseErr) {
+    console.error('[import-folder] JSON parse error:', parseErr.message, '\nRaw:', text);
+  }
+
+  const category = VALID_CATEGORIES.includes(parsed.category) ? parsed.category : 'autre';
+  return { category, extractedData: parsed.data || {}, visionNote, usage: response.usage };
+}
+
 export async function POST(request, { params }) {
   try {
     const body = await request.json();
-    const { token, storage_path, applyToMandat } = body;
+    const { token, storage_path, applyToMandat, mode } = body;
 
     const user = await verifyToken(token);
     if (!user) {
@@ -158,102 +264,47 @@ export async function POST(request, { params }) {
     const buffer = Buffer.from(arrayBuffer);
     const mimeType = fileData.type || 'application/octet-stream';
 
-    let userContent;
-    let visionNote = null; // message à remonter si on a dû tronquer un PDF long
+    // Analyse du document (commune aux deux modes)
+    const { category, extractedData, visionNote, unreadable, skipped } = await analyzeDocument(buffer, mimeType);
 
-    if (mimeType === 'application/pdf' || mimeType.includes('pdf')) {
-      // 1) On tente d'abord l'extraction texte (rapide, gratuite, illimitée en pages)
-      let pdfText = '';
-      try {
-        const parsed = await pdfParse(buffer);
-        pdfText = (parsed.text || '').trim();
-      } catch (parseErr) {
-        pdfText = '';
-      }
-
-      if (pdfText && pdfText.length > 40) {
-        // PDF avec vrai texte → on lit tout le texte
-        const MAX_CHARS = 30000;
-        if (pdfText.length > MAX_CHARS) {
-          pdfText = pdfText.slice(0, MAX_CHARS) + '\n\n[... suite tronquée ...]';
-        }
-        userContent = [{
-          type: 'text',
-          text: 'Voici le contenu textuel du document :\n\n' + pdfText,
-        }];
-      } else {
-        // 2) PDF sans texte (DPE, scan) → fallback VISION : on rend les pages en images
-        try {
-          const { images, pageCount, rendered } = await renderPdfToImages(buffer);
-          if (images.length === 0) {
-            return new Response(JSON.stringify({
-              ok: true, category: 'autre', data: {}, unreadable: true,
-              message: 'PDF illisible (aucune page rendue)',
-            }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    // ═══ MODE PROPOSE : on ne touche PAS au mandat, on renvoie le détail ═══
+    if (mode === 'propose') {
+      let changes = [];
+      if (Object.keys(extractedData).length > 0) {
+        const { data: currentMandat } = await supabaseAdmin.from('mandats').select('*').eq('id', mandatId).maybeSingle();
+        if (currentMandat) {
+          for (const [key, value] of Object.entries(extractedData)) {
+            if (value === null || value === undefined || value === '') continue;
+            if (key === 'highlights') continue; // géré ailleurs, pas un champ scalaire
+            const current = currentMandat[key];
+            // On propose seulement si la valeur change réellement
+            if (current !== value) {
+              changes.push({
+                key,
+                label: labelFor(key),
+                current: current ?? null,
+                proposed: value,
+              });
+            }
           }
-          if (pageCount > rendered) {
-            visionNote = `Document de ${pageCount} pages — seules les ${rendered} premières ont été analysées. Si une info manque, dépose les pages suivantes séparément.`;
-          }
-          userContent = [
-            ...images.map(img => ({
-              type: 'image',
-              source: { type: 'base64', media_type: img.media_type, data: img.data },
-            })),
-            { type: 'text', text: 'Analyse ce document immobilier (rendu en image' + (images.length > 1 ? 's' : '') + '). Extrais les informations selon les règles.' },
-          ];
-        } catch (renderErr) {
-          console.error('[import-folder] render fallback error:', renderErr);
-          return new Response(JSON.stringify({
-            ok: true, category: 'autre', data: {}, unreadable: true,
-            message: 'PDF non analysable : ' + renderErr.message,
-          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
         }
       }
-    } else if (mimeType.startsWith('image/')) {
-      // Image directe : vision Claude
-      const base64 = buffer.toString('base64');
-      userContent = [
-        { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
-        { type: 'text', text: 'Analyse cette image (probablement photo ou scan d\'un bien immobilier).' },
-      ];
-    } else {
-      // Type inconnu → on classe en "autre" sans analyser
       return new Response(JSON.stringify({
-        ok: true, category: 'autre', data: {}, skipped: true,
+        ok: true,
+        mode: 'propose',
+        category,
+        changes,
+        note: visionNote || null,
+        unreadable: unreadable || false,
+        skipped: skipped || false,
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Appel Claude
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5',
-      max_tokens: 2000,
-      system: PROMPT,
-      messages: [{ role: 'user', content: userContent }],
-    });
-
-    const text = response.content
-      .filter(b => b.type === 'text')
-      .map(b => b.text)
-      .join('\n')
-      .trim();
-
-    let parsed = { category: 'autre', data: {} };
-    try {
-      const cleaned = text.replace(/^```json\s*/i, '').replace(/\s*```$/, '').trim();
-      parsed = JSON.parse(cleaned);
-    } catch (parseErr) {
-      console.error('[import-folder] JSON parse error:', parseErr.message, '\nRaw:', text);
-    }
-
-    const category = VALID_CATEGORIES.includes(parsed.category) ? parsed.category : 'autre';
-    const extractedData = parsed.data || {};
-
-    // Si on a un mandatId valide ET applyToMandat=true ET des données extraites → mettre à jour le mandat
+    // ═══ MODE ANCIEN (applyToMandat direct) — conservé pour ne rien casser ═══
     let filled = [];
     if (applyToMandat && Object.keys(extractedData).length > 0) {
       const { data: currentMandat } = await supabaseAdmin.from('mandats').select('*').eq('id', mandatId).maybeSingle();
       if (currentMandat) {
-        // Vérification adresse (anti-écrasement)
         const extractedAddr = (extractedData.adresse || '').trim().toLowerCase();
         const currentAddr = (currentMandat.adresse || '').trim().toLowerCase();
         const normalize = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
@@ -274,27 +325,16 @@ export async function POST(request, { params }) {
             await supabaseAdmin.from('mandats').update(updates).eq('id', mandatId);
           }
         } else {
-          // Conflit d'adresse → on n'extrait pas, on le signale
           return new Response(JSON.stringify({
-            ok: true,
-            category,
-            data: extractedData,
-            filled: [],
-            addressConflict: true,
-            extractedAddress: extractedData.adresse,
-            currentAddress: currentMandat.adresse,
+            ok: true, category, data: extractedData, filled: [],
+            addressConflict: true, extractedAddress: extractedData.adresse, currentAddress: currentMandat.adresse,
           }), { status: 200, headers: { 'Content-Type': 'application/json' } });
         }
       }
     }
 
     return new Response(JSON.stringify({
-      ok: true,
-      category,
-      data: extractedData,
-      filled,
-      note: visionNote,
-      usage: response.usage,
+      ok: true, category, data: extractedData, filled, note: visionNote || null,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (err) {
     console.error('[/api/mandats/[id]/import-folder] Erreur:', err);
