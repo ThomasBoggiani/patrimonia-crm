@@ -15,6 +15,7 @@ import { matchMandatsForClient } from '@/lib/matching';
 import {
   formatPrixCompact,
   toSnake,
+  toCamel,
   TYPES_ACTIF_B2B_TREE,
   TYPES_HABITATION_B2C,
   TYPOLOGIES_CLIENT,
