@@ -611,15 +611,28 @@ export default function AIAssistantChat({
   // Profils (commerciaux actifs) — chargés au mount pour le select Owner
   const [profiles, setProfiles] = useState([]);
 
-  // P1d : contexte reçu via event de fenêtre (fiche mandat/client ouverte)
+  // P1d : contexte déduit de l'URL (?tab=mandats&open=<id>)
   const [liveContext, setLiveContext] = useState(null);
   useEffect(() => {
-    function onContext(e) {
-      setLiveContext(e.detail?.context || null);
+    if (!open || typeof window === 'undefined') return;
+    let cancelled = false;
+    async function loadFromUrl() {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const tab = params.get('tab');
+        const id = params.get('open');
+        if (!id) { if (!cancelled) setLiveContext(null); return; }
+        if (tab === 'mandats') {
+          const { data } = await supabase.from('mandats').select('*').eq('id', id).maybeSingle();
+          if (!cancelled && data) setLiveContext({ type: 'mandat', data });
+        }
+      } catch (e) {
+        console.warn('[AIAssistantChat] context from URL failed:', e);
+      }
     }
-    window.addEventListener('patrimonia:context', onContext);
-    return () => window.removeEventListener('patrimonia:context', onContext);
-  }, []);
+    loadFromUrl();
+    return () => { cancelled = true; };
+  }, [open]);
   const activeContext = liveContext || context;
 
   const messagesEndRef = useRef(null);
