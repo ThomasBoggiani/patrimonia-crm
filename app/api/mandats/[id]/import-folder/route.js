@@ -93,6 +93,9 @@ const PROMPT = `Tu es un expert immobilier. Tu analyses un document fourni en pi
 
 2. EXTRAIRE les données immobilières utiles, UNIQUEMENT celles explicitement présentes dans le document. N'invente JAMAIS.
 
+ATTENTION PARTICULIÈRE À L'AVIS DE TAXE FONCIÈRE :
+- "taxe_fonciere" : sur un avis d'imposition de taxe foncière, extrais le MONTANT TOTAL À PAYER (un nombre en euros, ex : 4820). C'est le total de la taxe foncière, PAS les revenus, PAS les bases d'imposition, PAS les taux. Cherche la ligne "Montant de votre taxe foncière" ou "Total à payer".
+
 ATTENTION PARTICULIÈRE AU DPE / AUDIT ÉNERGÉTIQUE (document prioritaire) :
 - "dpe_consommation" : la consommation en énergie primaire, en kWh/m²/an (un nombre, ex : 208).
 - "dpe_emissions" : les émissions de gaz à effet de serre, en kgCO2/m²/an (un nombre, ex : 45).
