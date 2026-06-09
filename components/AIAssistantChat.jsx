@@ -621,10 +621,24 @@ export default function AIAssistantChat({
         const params = new URLSearchParams(window.location.search);
         const tab = params.get('tab');
         const id = params.get('open');
-        if (!id) { if (!cancelled) setLiveContext(null); return; }
+        if (!id && tab === 'mandats') { if (!cancelled) setLiveContext(null); return; }
         if (tab === 'mandats') {
           const { data } = await supabase.from('mandats').select('*').eq('id', id).maybeSingle();
           if (!cancelled && data) setLiveContext({ type: 'mandat', data });
+        }
+        if (tab === 'clients' || tab === 'contacts') {
+          // Pas d'id dans l'URL pour les clients : on lit le nom affiché en titre
+          const h1 = document.querySelector('h1');
+          const titre = h1 ? h1.textContent.split('·')[0].trim() : '';
+          if (titre) {
+            const parts = titre.split(/\s+/);
+            const last = parts[parts.length - 1];
+            const { data } = await supabase.from('clients')
+              .select('*')
+              .or(`nom.ilike.%${last}%,societe.ilike.%${titre}%`)
+              .limit(1);
+            if (!cancelled && data && data[0]) setLiveContext({ type: 'client', data: data[0] });
+          }
         }
       } catch (e) {
         console.warn('[AIAssistantChat] context from URL failed:', e);
