@@ -878,13 +878,24 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
 export function ClientForm({ client, onSave, onClose }) {
   const { profile } = useAuth();
   const userInitials = getCurrentUserInitials(profile);
-  const [data, setData] = useState(client || {
-    prenom: '', nom: '', societe: '', email: '', tel: '',
-    adresse: '', ville: '', typologie: '', categorie: '',
-    budgetMin: 0, budgetMax: 0, surfaceMin: 0, surfaceMax: 0,
-    typologiesRecherchees: [], zones: [],
-    rendementMin: 0, statut: 'Actif', maturite: 'Tiède',
-    owner: userInitials, notes: '',
+  const [data, setData] = useState(() => {
+    const base = {
+      prenom: '', nom: '', societe: '', email: '', tel: '',
+      adresse: '', ville: '', typologie: '', categorie: '',
+      budgetMin: 0, budgetMax: 0, surfaceMin: 0, surfaceMax: 0,
+      typologiesRecherchees: [], zones: [],
+      rendementMin: 0, statut: 'Actif', maturite: 'Tiède',
+      owner: userInitials, notes: '',
+    };
+    if (!client) return base;
+    // Normalise le client (snake_case BDD) en camelCase pour le formulaire
+    const c = toCamel(client);
+    return {
+      ...base,
+      ...c,
+      typologiesRecherchees: c.typologiesRecherchees || [],
+      zones: c.zones || [],
+    };
   });
 
   useEffect(() => {
