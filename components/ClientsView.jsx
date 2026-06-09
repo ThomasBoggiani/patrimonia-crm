@@ -33,6 +33,7 @@ import AIAssistantChat from './AIAssistantChat';
 import ClientMatches from './ClientMatches';
 import ContactsImportModal from './ContactsImportModal';
 import CascadeSelectMulti from './CascadeSelectMulti';
+import ZonesSelectMulti from './ZonesSelectMulti';
 
 // ─────────────────────────────────────────────────────────────────
 // Configuration NATURE (catégorie du contact, 1 valeur)
@@ -967,12 +968,9 @@ export function ClientForm({ client, onSave, onClose }) {
             )}
           </Field>
           <Field label="Zones recherchées">
-            <input
-              type="text"
-              value={(data.zones || []).join(', ')}
-              onChange={e => update('zones', e.target.value.split(',').map(z => z.trim()).filter(Boolean))}
-              placeholder="Paris 1er, Paris 7e, Neuilly..."
-              className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900"
+            <ZonesSelectMulti
+              value={data.zones || []}
+              onChange={(vals) => update('zones', vals)}
             />
           </Field>
           <Field label="Rendement minimum (%)">
