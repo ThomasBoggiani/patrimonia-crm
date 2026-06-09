@@ -2005,27 +2005,12 @@ async function handleFolderImport(event) {
           <button onClick={onClose} className="text-stone-500 hover:text-stone-900"><X className="w-5 h-5" /></button>
         </div>
 
-        {/* Zone d'import dossier (toujours visible) */}
+       {/* Documents : import + lien + Dropbox (composant unifié avec validation IA) */}
         <div className="p-6 border-b border-stone-200 bg-gradient-to-br from-sage-50/70 to-cream-50">
-          <input type="file" ref={folderInputRef} onChange={handleFolderImport} className="hidden" multiple webkitdirectory="" directory="" />
-          <button type="button" onClick={() => folderInputRef.current?.click()} disabled={importProgress !== null}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-sage-dark text-white rounded-xl hover:bg-sage-darker disabled:opacity-50 transition-colors">
-            <Wand2 className="w-5 h-5" />
-            <span className="font-medium">{importProgress ? 'Import en cours...' : 'Importer un dossier ✨'}</span>
-          </button>
-          <p className="text-xs text-stone-600 text-center mt-2">L'IA lira tous les fichiers, les classera et pré-remplira la fiche</p>
-
-          {importProgress && (
-            <div className="mt-3 p-3 bg-white rounded-xl border border-sage-light">
-              <div className="flex items-center gap-2 text-sm">
-                <Loader2 className="w-4 h-4 animate-spin text-sage-dark flex-shrink-0" />
-                <span className="text-sage-darker font-medium">{importProgress.current}/{importProgress.total}</span>
-                <span className="text-stone-600 truncate">— {importProgress.fileName}</span>
-              </div>
-              <div className="mt-2 h-1.5 bg-sage-100 rounded-full overflow-hidden">
-                <div className="h-full bg-sage-dark transition-all" style={{ width: (importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0) + '%' }} />
-              </div>
-            </div>
+          {formData.id ? (
+            <DocumentsInline mandat={formData} onUpdate={onUpdated} />
+          ) : (
+            <p className="text-xs text-stone-500 text-center">Enregistrez le mandat pour pouvoir importer des documents.</p>
           )}
 
           {importResult && (
