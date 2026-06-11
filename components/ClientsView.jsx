@@ -1022,7 +1022,7 @@ export function ClientForm({ client, onSave, onClose }) {
 // ClientsTab — onglet principal "Contacts"
 // ─────────────────────────────────────────────────────────────────
 
-export default function ClientsTab({ clients, contacts, loadingContacts, loadContacts, reload, updateClientLocal, mandats, deals, interactions, pendingClientId, onPendingClientConsumed, onOpenMandat }) {
+export default function ClientsTab({ clients, contacts, loadingContacts, loadContacts, reload, updateClientLocal, mandats, deals, interactions, allProfiles = [], pendingClientId, onPendingClientConsumed, onOpenMandat }) {
   const { user, profile } = useAuth();
   const [search, setSearch] = useState('');
   const [filterNature, setFilterNature] = useState('');
@@ -1168,7 +1168,7 @@ export default function ClientsTab({ clients, contacts, loadingContacts, loadCon
           onOpenMandat={onOpenMandat}
         />
         {editingClient && (
-          <ClientForm client={editingClient} onSave={handleSave} onClose={() => setEditingClient(null)} />
+          <ClientForm client={editingClient} onSave={handleSave} onClose={() => setEditingClient(null)} allProfiles={allProfiles} />
         )}
       </>
     );
@@ -1346,6 +1346,7 @@ export default function ClientsTab({ clients, contacts, loadingContacts, loadCon
           client={editingClient}
           onSave={handleSave}
           onClose={() => { setEditingClient(null); setShowNew(false); }}
+          allProfiles={allProfiles}
         />
       )}
       {showImport && (
