@@ -1039,7 +1039,8 @@ export default function ClientsTab({ clients, reload, updateClientLocal, mandats
   const [selectedClient, setSelectedClient] = useState(null);
 
   async function loadContacts() {
-    setLoadingContacts(true);
+    // Ne montrer le spinner QUE si on n'a pas encore de contacts (1er chargement)
+    setContacts(prev => { if (prev.length === 0) setLoadingContacts(true); return prev; });
     try {
       const params = new URLSearchParams();
       if (search.trim()) params.set('q', search.trim());
