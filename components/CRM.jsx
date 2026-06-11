@@ -1682,7 +1682,7 @@ function MandatsKanban({ mandats, onSelectMandat, reload, secondaryDisplay = 'm2
     </div>
   );
 }
-function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
+function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [], allProfiles = [] }) {
   const { profile } = useAuth();
   const userInitials = (profile?.prenom && profile?.nom) ? getCurrentUserInitials(profile) : 'TB';
   const [data, setData] = useState((mandat && {
