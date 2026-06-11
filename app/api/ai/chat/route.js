@@ -39,6 +39,44 @@ async function verifyToken(token) {
   return user;
 }
 
+// Charge le tone of voice entreprise (settings) + celui du commercial courant (profiles).
+// Renvoie { entreprise, commercial } (chaînes, vides si non renseignées).
+async function loadTones(userId) {
+  let entreprise = '';
+  let commercial = '';
+  try {
+    const { data: s } = await supabaseAdmin
+      .from('settings').select('value').eq('key', 'tone_of_voice_entreprise').maybeSingle();
+    // value est jsonb : soit {"texte": "..."} soit une chaîne
+    if (s?.value) {
+      if (typeof s.value === 'string') entreprise = s.value;
+      else if (typeof s.value === 'object' && typeof s.value.texte === 'string') entreprise = s.value.texte;
+    }
+  } catch (e) { /* ignore */ }
+  try {
+    if (userId) {
+      const { data: p } = await supabaseAdmin
+        .from('profiles').select('tone_of_voice').eq('id', userId).maybeSingle();
+      if (p?.tone_of_voice && typeof p.tone_of_voice === 'string') commercial = p.tone_of_voice;
+    }
+  } catch (e) { /* ignore */ }
+  return { entreprise: entreprise.trim(), commercial: commercial.trim() };
+}
+
+// Construit le bloc de prompt "tone of voice" hiérarchisé (entreprise prioritaire).
+function buildToneBlock(tones) {
+  if (!tones || (!tones.entreprise && !tones.commercial)) return '';
+  const parts = ['\n\n# TON DE VOIX (pour les emails et messages rédigés au nom du commercial)'];
+  if (tones.entreprise) {
+    parts.push(`\n## Ton de l'entreprise (SOCLE — à respecter absolument, prioritaire)\n${tones.entreprise}`);
+  }
+  if (tones.commercial) {
+    parts.push(`\n## Ton personnel du commercial (à appliquer DANS LE RESPECT du ton entreprise ci-dessus ; en cas de contradiction, le ton entreprise prime)\n${tones.commercial}`);
+  }
+  parts.push(`\nN.B. : ce ton de voix s'applique aux emails et messages signés par le commercial. Les descriptifs commerciaux d'un bien suivent, eux, le STYLE MAISON défini plus haut.`);
+  return parts.join('\n');
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // STYLE MAISON — descriptifs Immeubles & Patrimoine
 // ═══════════════════════════════════════════════════════════════════
@@ -292,9 +330,9 @@ const tools = [
   { name: 'propose_send_email', description: 'PROPOSE l\'envoi d\'un email simple. Ne fait RIEN, l\'utilisateur valide.',
     input_schema: { type: 'object', properties: {
       to: { type: 'string' }, subject: { type: 'string' }, body: { type: 'string' }, client_id: { type: 'string' } }, required: ['to', 'subject', 'body'] } },
-  { name: 'propose_send_plaquette', description: 'PROPOSE l\'envoi d\'une plaquette PDF d\'un mandat à un client. Ne fait RIEN, l\'utilisateur valide.',
+  { name: 'propose_send_plaquette', description: 'PROPOSE l\'envoi d\'une plaquette PDF d\'un mandat à un client. Ne fait RIEN, l\'utilisateur valide. IMPORTANT : tu DOIS toujours rédiger un custom_message d\'accompagnement chaleureux et professionnel (jamais vide), dans le ton de voix du commercial, adressé au client et signé Immeubles & Patrimoine.',
     input_schema: { type: 'object', properties: {
-      mandat_id: { type: 'string' }, client_id: { type: 'string' }, custom_message: { type: 'string' } }, required: ['mandat_id', 'client_id'] } },
+      mandat_id: { type: 'string' }, client_id: { type: 'string' }, custom_message: { type: 'string', description: 'Message d\'accompagnement à rédiger OBLIGATOIREMENT (ne jamais laisser vide).' } }, required: ['mandat_id', 'client_id', 'custom_message'] } },
 ];
 
 // ═══════════════════════════════════════════════════════════════════
@@ -524,7 +562,7 @@ async function clearConversation(scope, entityId, userId) {
 // ═══════════════════════════════════════════════════════════════════
 // SYSTEM PROMPT par scope
 // ═══════════════════════════════════════════════════════════════════
-async function buildSystemPrompt(scope, entity) {
+async function buildSystemPrompt(scope, entity, tones) {
   const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   let contextBlock = '';
@@ -564,6 +602,7 @@ RÉFÉRENTIELS MÉTIER
 - Prix en euros : convertis "2,5 M€" en 2500000.
 
 ${STYLE_MAISON}
+${buildToneBlock(tones)}
 ${contextBlock}`;
 }
 
@@ -644,7 +683,7 @@ export async function POST(request) {
       { role: 'user', content: userMessage },
     ];
 
-    const systemPrompt = await buildSystemPrompt(scope, entity);
+    const systemPrompt = await buildSystemPrompt(scope, entity, await loadTones(user.id));
 
     // Stream SSE
     const encoder = new TextEncoder();
