@@ -1101,6 +1101,7 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
 
   const handleSave = async (clientData) => {
     const snakeData = toSnake(clientData);
+    console.log('[SAVE] zones=', snakeData.zones, ' typologies=', snakeData.typologies_recherchees, ' FULL=', snakeData);
     delete snakeData.created_at;
     delete snakeData.updated_at;
 
