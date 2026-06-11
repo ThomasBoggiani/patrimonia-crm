@@ -35,6 +35,7 @@ import ClientMatches from './ClientMatches';
 import ContactsImportModal from './ContactsImportModal';
 import CascadeSelectMulti from './CascadeSelectMulti';
 import ZonesSelectMulti from './ZonesSelectMulti';
+import OwnerSelect from './OwnerSelect';
 
 // ─────────────────────────────────────────────────────────────────
 // Configuration NATURE (catégorie du contact, 1 valeur)
@@ -876,7 +877,7 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
 // ClientForm — formulaire d'édition
 // ─────────────────────────────────────────────────────────────────
 
-export function ClientForm({ client, onSave, onClose }) {
+export function ClientForm({ client, onSave, onClose, allProfiles = [] }) {
   const { profile } = useAuth();
   const userInitials = getCurrentUserInitials(profile);
   const [data, setData] = useState(() => {
@@ -1004,6 +1005,12 @@ export function ClientForm({ client, onSave, onClose }) {
               </select>
             </Field>
           </div>
+          <OwnerSelect
+            value={data.owner || ''}
+            onChange={(v) => update('owner', v)}
+            profiles={allProfiles}
+            label="Titulaire (responsable)"
+          />
           <Field label="Notes">
             <textarea value={data.notes || ''} onChange={e => update('notes', e.target.value)} rows={3} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" />
           </Field>
