@@ -1022,7 +1022,7 @@ export function ClientForm({ client, onSave, onClose }) {
 // ClientsTab — onglet principal "Contacts"
 // ─────────────────────────────────────────────────────────────────
 
-export default function ClientsTab({ clients, reload, mandats, deals, interactions, pendingClientId, onPendingClientConsumed, onOpenMandat }) {
+export default function ClientsTab({ clients, reload, updateClientLocal, mandats, deals, interactions, pendingClientId, onPendingClientConsumed, onOpenMandat }) {
   const { user, profile } = useAuth();
   const [contacts, setContacts] = useState([]);
   const [loadingContacts, setLoadingContacts] = useState(true);
@@ -1143,16 +1143,15 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
     }
 
     setShowNew(false);
-    if (clientId) triggerMatchingBatch({ clientId });
-    // Rester sur la fiche du client qu'on vient d'éditer (au lieu de revenir à la liste)
-    if (clientId) {
-      setSelectedClient({ ...clientData, id: clientId });
-    }
     setEditingClient(null);
-    reload();
+    // Rechargement ciblé du seul client (pas de reload global qui casse la navigation et ralentit)
+    if (clientId) {
+      await updateClientLocal(clientId);
+      setSelectedClient({ ...clientData, id: clientId });
+      triggerMatchingBatch({ clientId });
+    }
     loadContacts();
   };
-
   // Compteurs par nature et posture
   const natureCounts = useMemo(() => {
     const counts = {};
