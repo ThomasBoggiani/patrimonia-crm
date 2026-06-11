@@ -271,6 +271,8 @@ export default function CRM() {
   }, []);
   
   const [mandats, setMandats] = useState([]);
+  const [contacts, setContacts] = useState([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
   const [clients, setClients] = useState([]);
   const [deals, setDeals] = useState([]);
   const [todos, setTodos] = useState([]);
@@ -283,6 +285,7 @@ export default function CRM() {
   // Chargement initial depuis Supabase
   useEffect(() => {
     loadAll();
+    loadContacts();
   }, []);
 
   // Recharge UN SEUL mandat depuis Supabase et met \u00e0 jour le state local
@@ -313,6 +316,23 @@ export default function CRM() {
       });
     } catch (e) {
       console.warn('[updateClientLocal] error:', e.message);
+    }
+  }
+  
+  // Charge les contacts (gardés en mémoire au niveau CRM pour éviter les rechargements à chaque onglet)
+  async function loadContacts(searchTerm = '') {
+    setContacts(prev => { if (prev.length === 0) setLoadingContacts(true); return prev; });
+    try {
+      const params = new URLSearchParams();
+      if (searchTerm.trim()) params.set('q', searchTerm.trim());
+      params.set('limit', '500');
+      const res = await fetch(`/api/contacts?${params.toString()}`);
+      const data = await res.json();
+      setContacts(data?.contacts || []);
+    } catch (e) {
+      console.error('[CRM loadContacts] error:', e);
+    } finally {
+      setLoadingContacts(false);
     }
   }
 
@@ -500,7 +520,7 @@ export default function CRM() {
           <div className="fade-in" key={`${activeTab}-${tabKey}`}>
             {activeTab === 'dashboard' && <Dashboard mandats={mandats} clients={clients} deals={deals} todos={todos} reload={loadAll} allProfiles={allProfiles} onNavigate={(t, opts) => { setPendingMandatFilterMine(!!opts?.filterMine); setActiveTabWithHistory(t); setTabKey(k => k + 1); }} />}
             {activeTab === 'mandats' && <MandatsTab mandats={mandats} reload={loadAll} updateMandatLocal={updateMandatLocal} clients={clients} deals={deals} interactions={interactions} todos={todos} annonces={annonces} allProfiles={allProfiles} pendingMandatId={pendingMandatToOpen} onPendingMandatConsumed={() => setPendingMandatToOpen(null)} onOpenMatching={navigateToMatching} onOpenEmailDrafts={openEmailDrafts} initialFilterMine={pendingMandatFilterMine} />}
-            {activeTab === 'clients' && <ClientsTab clients={clients} reload={loadAll} updateClientLocal={updateClientLocal} mandats={mandats} deals={deals} interactions={interactions} pendingClientId={pendingClientToOpen} onPendingClientConsumed={() => setPendingClientToOpen(null)} onOpenMandat={navigateToMandat} />}
+            {activeTab === 'clients' && <ClientsTab clients={clients} contacts={contacts} loadingContacts={loadingContacts} loadContacts={loadContacts} reload={loadAll} updateClientLocal={updateClientLocal} mandats={mandats} deals={deals} interactions={interactions} pendingClientId={pendingClientToOpen} onPendingClientConsumed={() => setPendingClientToOpen(null)} onOpenMandat={navigateToMandat} />}
             {activeTab === 'inbox' && <InboxTab onUnreadCountChange={setInboxUnreadCount} reload={loadAll} onOpenClient={navigateToClient} />}
             {activeTab === 'deals' && <DealsTab deals={deals} reload={loadAll} mandats={mandats} clients={clients} />}
             {activeTab === 'matching' && <MatchingTab mandats={mandats} clients={clients} deals={deals} reload={loadAll} initialMandatId={pendingMatchingMandatId} onInitialMandatConsumed={() => setPendingMatchingMandatId(null)} />}
