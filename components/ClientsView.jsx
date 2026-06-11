@@ -1147,6 +1147,11 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
     reload();
     loadContacts();
     if (clientId) triggerMatchingBatch({ clientId });
+    // Rester sur la fiche du client qu'on vient d'éditer (au lieu de revenir à la liste)
+    if (clientId) {
+      const updated = { ...clientData, id: clientId };
+      setSelectedClient(updated);
+    }
   };
 
   // Compteurs par nature et posture
