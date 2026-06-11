@@ -1,18 +1,22 @@
-// app/api/assistant/chat/route.js
+// ═══════════════════════════════════════════════════════════════════
+// app/api/ai/chat/route.js — ROUTE IA UNIFIÉE (v1.0)
 //
-// Assistant Patrimonia - migré sur Anthropic Claude Sonnet 4.6
-// - search_mandats, search_clients, search_interactions : lecture
-// - propose_create_mandat, propose_create_client, propose_create_task, propose_create_event, propose_create_interaction
-// - propose_update_mandat, propose_update_client
-// - propose_send_email, propose_send_plaquette
+// Un seul assistant pour 3 scopes : global / mandat / client.
+//   POST { token, scope, entity_id, message|action, attachments } → streaming SSE
+//   POST { token, scope, entity_id, mode:'load' }                 → historique JSON
+//   POST { token, scope, entity_id, mode:'clear' }                → efface
 //
-// NOTE MIGRATION : le format des outils et la boucle d'agent sont au format Anthropic.
-// La logique métier (executeTool, builders propose_*, searches) est INCHANGÉE.
-// execute/route.js n'est pas concerné par cette migration.
+// Combine le meilleur des 3 anciennes routes :
+//   - streaming SSE              (ex mandats/[id]/ai)
+//   - 12 outils propose_*        (ex assistant/chat, philosophie "propose → valide")
+//   - contexte + matching        (ex clients/[id]/ai-chat + lib/matching réutilisé)
+//   - persistance unifiée        (ai_conversations : scope/entity_id/user_id)
+//   - style maison I&P           (prompt, action "descriptif")
+// ═══════════════════════════════════════════════════════════════════
 
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import Anthropic from '@anthropic-ai/sdk';
+import { createClient } from '@supabase/supabase-js';
+import { matchClientsForMandat, matchMandatsForClient } from '@/lib/matching';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -24,426 +28,285 @@ const supabaseAdmin = createClient(
 );
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
 const MODEL = 'claude-haiku-4-5';
+const VALID_SCOPES = ['global', 'mandat', 'client'];
+const ACTIVE_MANDAT_STATUTS = ['Sourcing', 'Analyse', 'Commercialisation'];
 
-// ==========================================================================
-// SYSTEM PROMPT
-// ==========================================================================
+async function verifyToken(token) {
+  if (!token) return null;
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !user) return null;
+  return user;
+}
 
-async function buildSystemPrompt(context, pdfTexts) {
-  const recentInteractions = await loadRecentInteractions(context);
-  const today = new Date().toLocaleDateString('fr-FR', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+// ═══════════════════════════════════════════════════════════════════
+// STYLE MAISON — descriptifs Immeubles & Patrimoine
+// ═══════════════════════════════════════════════════════════════════
+const STYLE_MAISON = `STYLE MAISON IMMEUBLES & PATRIMOINE (à respecter pour tout descriptif commercial).
+Il existe DEUX déclinaisons selon le marché du bien (marche = b2b investissement OU b2c habitation). Choisis la bonne selon le mandat.
+
+═══ DÉCLINAISON B2B / INVESTISSEMENT (immeubles, hôtels, locaux, terrains) ═══
+1. TITRE entre guillemets : accroche + bénéfice clé (ex : "Hôtel à restructurer avec fort potentiel – création de valeur immédiate").
+2. Ouverture signature : "Immeubles et Patrimoine vous présente cet actif..." + surface + composition + potentiel en une phrase dense.
+3. L'environnement / le cadre : copropriété, cour, porche, calme, ambiance.
+4. Le quartier : esprit du secteur, commerces, transports → argument de demande locative.
+5. Le projet / potentiel : ce qu'on peut créer (chambres, exploitation, optimisation).
+6. Données chiffrées factuelles : répartition lots/surfaces, CA brut projeté (avec source si connue, ex "Données Checkmyguest"), autorisations (DP, changement de destination), surface actuelle vs potentielle.
+7. Prix : montant + mention honoraires ("honoraires inclus" ou "à la charge de l'acquéreur").
+8. Closing : "Opération idéale pour investisseur ou marchand recherchant..." + "Dossier complet sur demande."
+Ton : orienté investisseur et création de valeur, factuel, chiffres concrets.
+
+═══ DÉCLINAISON B2C / HABITATION (appartements, maisons, hôtels particuliers) ═══
+1. TITRE en MAJUSCULES, télégraphique : VILLE/ARRDT – RUE – SURFACE – ARGUMENT PHARE (ex : "PARIS 16ᵉ – RUE MICHEL-ANGE – 42 M² AU CALME ABSOLU SUR GRANDE COUR INTÉRIEURE").
+2. Ouverture : situe le quartier, puis "Immeubles et Patrimoine vous présente ce..." + caractéristiques clés.
+3. Composition PIÈCE PAR PIÈCE : entrée, cuisine, séjour, chambre(s), salle d'eau/bains, etc.
+4. État & confort : rénové ou non, travaux éventuels, exposition, luminosité, calme, vue.
+5. Annexes & immeuble : cave, gardien, digicode, fibre, chauffage, ascenseur, travaux votés.
+6. Profil acquéreur ciblé : "idéale pour un jeune couple en première acquisition, un pied-à-terre parisien, ou pour loger un enfant étudiant..." (adapter au bien).
+7. Liste à puces "Les atouts du bien :" reprenant tous les points forts, AVEC les données chiffrées en fin de liste (charges annuelles, taxe foncière).
+8. Phrase de clôture valorisante sur l'art de vivre / la qualité de l'adresse.
+Ton : chaleureux et concret, art de vivre, sans survente.
+
+RÈGLE ABSOLUE (les deux déclinaisons) : ne JAMAIS inventer de chiffre. N'utilise que les données réelles du mandat ci-dessus ; si une donnée manque, n'écris pas la ligne correspondante.`;
+
+// ═══════════════════════════════════════════════════════════════════
+// CONTEXTE MANDAT
+// ═══════════════════════════════════════════════════════════════════
+function buildMandatContext(mandat) {
+  const lines = [];
+  lines.push(`# Contexte du bien (mandat)`);
+  lines.push(`- ID : ${mandat.id}`);
+  lines.push(`- Nom : ${mandat.nom || '(non renseigné)'}`);
+  lines.push(`- Type : ${mandat.type || '(non renseigné)'}${mandat.sous_type ? ' / ' + mandat.sous_type : ''}`);
+  if (mandat.adresse) lines.push(`- Adresse : ${mandat.adresse}`);
+  if (mandat.ville) lines.push(`- Ville : ${mandat.ville}`);
+  if (mandat.code_postal) lines.push(`- Code postal : ${mandat.code_postal}`);
+  if (mandat.surface) lines.push(`- Surface : ${mandat.surface} m²`);
+  if (mandat.nb_pieces) lines.push(`- Pièces : ${mandat.nb_pieces}`);
+  if (mandat.nb_chambres) lines.push(`- Chambres : ${mandat.nb_chambres}`);
+  if (mandat.etage !== null && mandat.etage !== undefined) lines.push(`- Étage : ${mandat.etage}`);
+  if (mandat.prix) lines.push(`- Prix affiché : ${mandat.prix} €`);
+  if (mandat.loyers_annuels) lines.push(`- Loyers annuels : ${mandat.loyers_annuels} €`);
+  if (mandat.charges_annuelles) lines.push(`- Charges courantes annuelles : ${mandat.charges_annuelles} €`);
+  if (mandat.rendement) lines.push(`- Rendement : ${mandat.rendement} %`);
+  if (mandat.dpe_consommation) lines.push(`- DPE consommation : ${mandat.dpe_consommation} kWh/m²/an`);
+  if (mandat.dpe_emissions) lines.push(`- DPE émissions : ${mandat.dpe_emissions} kg CO2/m²/an`);
+  if (mandat.annee_construction) lines.push(`- Année de construction : ${mandat.annee_construction}`);
+  if (mandat.nb_lots) lines.push(`- Nombre de lots copropriété : ${mandat.nb_lots}`);
+  if (mandat.statut) lines.push(`- Statut : ${mandat.statut}`);
+  if (mandat.commercialisation) lines.push(`- Commercialisation : ${mandat.commercialisation}`);
+  if (mandat.marche) lines.push(`- Marché : ${mandat.marche}`);
+  if (Array.isArray(mandat.highlights) && mandat.highlights.length > 0) {
+    lines.push(`- Points forts : ${mandat.highlights.join(', ')}`);
+  }
+  if (mandat.etat_locatif) {
+    try {
+      const el = typeof mandat.etat_locatif === 'string' ? JSON.parse(mandat.etat_locatif) : mandat.etat_locatif;
+      if (Array.isArray(el) && el.length) lines.push(`- État locatif : ${el.length} lot(s) renseigné(s)`);
+    } catch (e) { /* ignore */ }
+  }
+  if (mandat.description) {
+    lines.push(``);
+    lines.push(`# Description actuelle`);
+    lines.push(mandat.description);
+  }
+  return lines.join('\n');
+}
+
+// Clients compatibles pour ce mandat (réutilise lib/matching)
+async function buildMandatMatching(mandat) {
+  const { data: clients } = await supabaseAdmin
+    .from('clients')
+    .select('id, prenom, nom, societe, typologie, marche, maturite, statut, budget_min, budget_max, rendement_min, zones, typologies_recherchees, owner')
+    .limit(500);
+  if (!Array.isArray(clients) || !clients.length) return '';
+  const matches = matchClientsForMandat(mandat, clients).slice(0, 8);
+  if (!matches.length) return '\n\n# Clients compatibles\n(aucun client compatible trouvé pour le moment)';
+  const lines = matches.map(({ client, score, raisons }) => {
+    const nom = [client.prenom, client.nom].filter(Boolean).join(' ') || client.societe || '(anonyme)';
+    return `- [${score}%] ${nom} (id ${client.id}) — ${(raisons || []).slice(0, 2).join(' ; ')}`;
   });
+  return `\n\n# Clients compatibles (matching automatique, du meilleur au moins bon)\n${lines.join('\n')}`;
+}
 
-  let contextBlock = '';
-  if (context?.type === 'mandat' && context.data) {
-    const m = context.data;
-    contextBlock = `
+// ═══════════════════════════════════════════════════════════════════
+// CONTEXTE CLIENT
+// ═══════════════════════════════════════════════════════════════════
+async function buildClientContext(client) {
+  const lines = [];
+  const nom = [client.prenom, client.nom].filter(Boolean).join(' ') || client.societe || '(anonyme)';
+  lines.push(`# Contexte du client (acquéreur)`);
+  lines.push(`- ID : ${client.id}`);
+  lines.push(`- Nom : ${nom}`);
+  if (client.societe) lines.push(`- Société : ${client.societe}`);
+  if (client.email) lines.push(`- Email : ${client.email}`);
+  if (client.tel) lines.push(`- Téléphone : ${client.tel}`);
+  if (client.typologie) lines.push(`- Typologie : ${client.typologie}${client.sous_typologie ? ' / ' + client.sous_typologie : ''}`);
+  if (client.marche) lines.push(`- Marché : ${client.marche}`);
+  if (client.maturite) lines.push(`- Maturité : ${client.maturite}`);
+  if (client.statut) lines.push(`- Statut : ${client.statut}`);
+  if (client.budget_min || client.budget_max) lines.push(`- Budget : ${client.budget_min || 0} → ${client.budget_max || 0} €`);
+  if (client.rendement_min) lines.push(`- Rendement min recherché : ${client.rendement_min} %`);
+  if (Array.isArray(client.zones) && client.zones.length) lines.push(`- Zones recherchées : ${client.zones.join(', ')}`);
+  if (Array.isArray(client.typologies_recherchees) && client.typologies_recherchees.length) lines.push(`- Typologies recherchées : ${client.typologies_recherchees.join(', ')}`);
+  if (client.details_recherche) lines.push(`- Détails recherche : ${client.details_recherche}`);
 
-CONTEXTE COURANT
-L'utilisateur est sur la fiche du mandat suivant :
-- ID : ${m.id}
-- Nom : ${m.nom || '(sans nom)'}
-- Adresse : ${m.adresse || '(non renseignée)'}
-- Ville : ${m.ville || '(non renseignée)'}
-- Type : ${m.type || '(non renseigné)'}${m.sous_type ? ' / ' + m.sous_type : ''}
-- Statut : ${m.statut || '(non renseigné)'}
-- Prix : ${m.prix ? m.prix + ' €' : '(non renseigné)'}
-- Surface : ${m.surface ? m.surface + ' m²' : '(non renseignée)'}
-- Owner : ${m.owner || '(non renseigné)'}
-
-Si l'utilisateur pose une question vague ou demande de modifier/envoyer, il parle de CE mandat sauf indication contraire. Utilise son ID pour propose_update_mandat ou propose_send_plaquette.`;
-  } else if (context?.type === 'client' && context.data) {
-    const c = context.data;
-    const nom = [c.prenom, c.nom].filter(Boolean).join(' ') || c.societe || '(anonyme)';
-    contextBlock = `
-
-CONTEXTE COURANT
-L'utilisateur est sur la fiche du client suivant :
-- ID : ${c.id}
-- Nom : ${nom}
-- Société : ${c.societe || '(aucune)'}
-- Email : ${c.email || '(non renseigné)'}
-- Typologie : ${c.typologie || '(non renseignée)'}
-- Marché : ${c.marche || '(non renseigné)'}
-- Maturité : ${c.maturite || '(non renseignée)'}
-- Statut : ${c.statut || '(non renseigné)'}
-- Budget : ${c.budget_min || 0} - ${c.budget_max || 0} €
-- Owner : ${c.owner || '(non renseigné)'}
-
-Si l'utilisateur pose une question vague ou demande de modifier, il parle de CE client sauf indication contraire. Utilise son ID pour propose_update_client.`;
-  }
-
-  // Bloc interactions récentes
-  let interactionsBlock = '';
-  if (recentInteractions && recentInteractions.length > 0) {
-    interactionsBlock = `
-
-10 DERNIÈRES INTERACTIONS (du plus récent au plus ancien)
-${recentInteractions.map((i, idx) => {
-  const date = i.date ? new Date(i.date).toLocaleDateString('fr-FR') : '—';
-  const from = i.metadata?.from_name ? ` (de ${i.metadata.from_name})` : '';
-  return `${idx + 1}. [${date}] ${i.type}${from} : ${(i.resume || '').slice(0, 200)}`;
-}).join('\n')}`;
-  }
-
-  let pdfBlock = '';
-  if (pdfTexts && pdfTexts.length > 0) {
-    pdfBlock = '\n\nPIÈCES JOINTES PDF\n';
-    pdfTexts.forEach((p, i) => {
-      pdfBlock += `\n=== PDF ${i + 1} : ${p.name} ===\n${p.text}\n=== FIN PDF ${i + 1} ===\n`;
+  // Interactions récentes
+  const { data: interactions } = await supabaseAdmin
+    .from('interactions')
+    .select('type, resume, next_step, date_next_step, date, created_at')
+    .eq('client_id', client.id)
+    .order('created_at', { ascending: false })
+    .limit(15);
+  if (Array.isArray(interactions) && interactions.length) {
+    lines.push(``);
+    lines.push(`# 15 dernières interactions`);
+    interactions.forEach(i => {
+      const d = (i.date || i.created_at || '').slice(0, 10);
+      const next = i.next_step ? ` | Next: ${i.next_step}${i.date_next_step ? ' (' + i.date_next_step + ')' : ''}` : '';
+      lines.push(`- [${d}] ${i.type || 'note'}: ${(i.resume || '').slice(0, 200)}${next}`);
     });
   }
 
-  return `Tu es l'Assistant Patrimonia, l'IA intégrée au CRM d'Immeubles & Patrimoine (off-market patrimonial Paris).
-
-Date du jour : ${today}.
-
-RÔLE
-Tu aides Thomas (le fondateur) à naviguer dans son CRM, créer/modifier des données, envoyer des emails et plaquettes, et analyser des documents.
-
-CAPACITÉS ACTUELLES
-LECTURE
-- search_mandats : chercher dans les mandats
-- search_clients : chercher dans les clients
-- search_interactions : chercher dans l'historique des échanges (emails reçus/envoyés, appels, RDV, notes). À UTILISER dès que Thomas demande "les emails", "qui m'a écrit", "les derniers échanges", "que s'est-il passé sur X"
-CRÉATION (avec confirmation utilisateur obligatoire)
-- propose_create_mandat : créer un mandat
-- propose_create_client : créer un client (acquéreur)
-- propose_create_task : créer une tâche (todo)
-- propose_create_event : créer un RDV Outlook
-- propose_create_interaction : créer une note (interaction) sur un client ou mandat
-MODIFICATION (avec confirmation utilisateur obligatoire)
-- propose_update_mandat : modifier un mandat existant (besoin de l'id)
-- propose_update_client : modifier un client existant (besoin de l'id)
-ENVOI (avec confirmation utilisateur obligatoire)
-- propose_send_email : envoyer un email simple
-- propose_send_plaquette : envoyer la plaquette PDF d'un mandat à un client
-PJ
-- Analyse de PDF et d'images joints
-
-⚠️ Pour toute action de création/modification/envoi, tu PROPOSES via propose_* — Thomas confirme ensuite. Tu ne fais JAMAIS d'action directe.
-
-STYLE
-- Tutoie Thomas.
-- Court et direct, jamais bavard.
-- En français.
-- Mets en gras les noms importants (**double étoiles**).
-- Si tu trouves plusieurs résultats, liste-les de façon concise (1 ligne par item).
-
-⚠️ RÈGLES STRICTES — NE JAMAIS DÉROGER :
-- NE DEMANDE JAMAIS "Veux-tu confirmer ?" ou "Veux-tu que je procède ?" ou équivalent. La card de proposition que tu génères EST déjà le mécanisme de confirmation (Thomas clique sur "Créer" ou "Annuler" dessus).
-- Quand Thomas demande de créer quelque chose, tu PROPOSES DIRECTEMENT via propose_create_* SANS demander confirmation préalable. Pas de récapitulatif texte avant. Juste un court "Voici la proposition." (ou rien) + appel du tool.
-- Si des champs manquent (email, téléphone, budget), NE BLOQUE PAS la proposition. Mentionne juste après le tool que ces champs seraient utiles à ajouter.
-- Sois proactif : déduis tout ce que tu peux du contexte (marché B2B/B2C depuis la typologie, owner depuis profile, etc.) sans demander.
-
-CONTEXTE MÉTIER
-- "Mandat" = un bien immobilier en vente.
-- "Client" = un acquéreur potentiel.
-- Statut mandat : "Sourcing", "Analyse", "Mandat signé", "Commercialisation", "Offre", "Promesse", "Acte", "Vendu par autres", "Perdu".
-- Type mandat : "Immeubles", "Appartements", "Locaux commerciaux", "Maisons", etc.
-- Commercialisation : "Off-market" (défaut) ou "Public".
-- Marché : "B2B" ou "B2C".
-- Typologie client (CASCADE STRICTE — choisir dans cette liste UNIQUEMENT) :
-  * "Foncières" → sous_typologie : "Privées" ou "Publiques" (sociétés d'investissement immobilier)
-  * "Marchands de biens" → pas de sous-typologie (achat-revente)
-  * "Particuliers" → pas de sous-typologie (clients B2C)
-  * "Fonds" → pas de sous-typologie (fonds d'investissement)
-  * "Promoteurs" → pas de sous-typologie
-  * "Family Office" → pas de sous-typologie (gestion patrimoine familial)
-  N'INVENTE PAS de typologie hors de cette liste. Si tu n'es pas sûr, choisis "Particuliers" pour personne physique, "Family Office" pour gestion patrimoine, "Foncières" pour société d'investissement.
-- Marché client : déduit automatiquement de la typologie. "Particuliers" = b2c, tous les autres = b2b.
-- Maturité client : "Faible", "Moyen", "Élevé".
-- Statut client : "Actif", "Inactif".
-- Origine client : "Apporteur", "Site", "Recommandation", etc.
-- Owner : initiales du commercial.
-- Type interaction : "Appel", "Email", "RDV", "Note", "WhatsApp", "SMS".
-- Statut tâche : "À faire", "En cours", "Terminé".
-- Priorité tâche : "Faible", "Normale", "Haute", "Urgente".
-- Les prix sont en euros. Convertis "2,5 M€" en 2500000.
-
-UTILISATION DES OUTILS
-- Pour rechercher : PRIVILÉGIE query_text (recherche large sur nom + adresse + ville) plutôt que des filtres précis comme ville='Paris 17e'. Les villes peuvent être stockées de plusieurs façons ("PARIS", "Paris", "Paris 17e", etc.).
-- Si une recherche ne donne rien, RETENTE avec une requête PLUS LARGE (juste un mot-clé important comme "Acacias" au lieu de "rue des Acacias Paris 17"), PUIS sans filtre du tout pour voir tous les mandats avant d'abandonner.
-- Si Thomas demande de "créer un X" : utilise propose_create_*. Mets des défauts sensés si manque d'info.
-- Si Thomas demande de "modifier" et qu'on est dans un contexte : utilise propose_update_* avec l'id du contexte.
-- Pour modifier sans contexte : d'abord search pour trouver l'id, puis propose_update_*.
-- Pour envoyer plaquette : d'abord search_mandats pour trouver le mandat, et search_clients pour trouver le destinataire, puis propose_send_plaquette avec les ids.
-- N'hésite pas à appeler plusieurs outils en cascade.
-- Si l'utilisateur demande de faire 2-3 choses en cascade (créer un client PUIS envoyer plaquette), enchaîne les outils. Si une étape nécessite confirmation, propose-la ; Thomas la validera, et au tour suivant tu pourras enchaîner le reste.${contextBlock}${interactionsBlock}${pdfBlock}`;
+  return lines.join('\n');
 }
 
-// ==========================================================================
-// OUTILS — Définitions (format ANTHROPIC : name / description / input_schema)
-// ==========================================================================
+// Mandats compatibles pour ce client (réutilise lib/matching)
+async function buildClientMatching(client) {
+  const { data: mandats } = await supabaseAdmin
+    .from('mandats')
+    .select('*')
+    .in('statut', ACTIVE_MANDAT_STATUTS)
+    .limit(200);
+  if (!Array.isArray(mandats) || !mandats.length) return '';
+  const matches = matchMandatsForClient(client, mandats).slice(0, 8);
+  if (!matches.length) return '\n\n# Mandats compatibles\n(aucun mandat actif compatible pour le moment)';
+  const lines = matches.map(({ mandat, score, raisons }) => {
+    return `- [${score}%] ${mandat.nom || mandat.adresse || '(sans nom)'} (id ${mandat.id}) — ${(raisons || []).slice(0, 2).join(' ; ')}`;
+  });
+  return `\n\n# Mandats compatibles (matching automatique, du meilleur au moins bon)\n${lines.join('\n')}`;
+}
 
+// ═══════════════════════════════════════════════════════════════════
+// QUICK ACTIONS
+// ═══════════════════════════════════════════════════════════════════
+const QUICK_ACTIONS = {
+  descriptif: {
+    label: 'Descriptif',
+    scopes: ['mandat'],
+    user: `Rédige un descriptif commercial pour ce bien en respectant SCRUPULEUSEMENT le style maison Immeubles & Patrimoine (titre entre guillemets, ouverture signature, environnement, quartier, projet/potentiel, données chiffrées factuelles, prix + honoraires, closing). N'invente aucun chiffre : utilise uniquement les données réelles du mandat ci-dessus. Réponds directement avec le descriptif, sans phrase d'introduction.`,
+  },
+  email_mandant: {
+    label: 'Email mandant',
+    scopes: ['mandat'],
+    user: `Rédige un email professionnel et chaleureux au mandant (le vendeur) pour faire un point d'étape sur la commercialisation. Commence par "Chère Madame, Cher Monsieur,". Sois rassurant, fais le point sans inventer de chiffres, propose un échange téléphonique, termine par une formule soignée et la signature Immeubles & Patrimoine. 150-200 mots. Réponds directement par l'email.`,
+  },
+  argumentaire: {
+    label: 'Argumentaire',
+    scopes: ['mandat'],
+    user: `Génère un argumentaire de vente percutant pour ce bien face à un acquéreur. Deux sections : "Arguments clés" (5-7 puces, du plus fort au plus secondaire) et "Réponses aux objections probables" (2-3 objections + réponses). Appuie-toi sur les données réelles du mandat. Réponds directement avec l'argumentaire.`,
+  },
+  aide_vente: {
+    label: 'Aide à la vente',
+    scopes: ['mandat'],
+    user: `Génère une fiche d'aide à la vente pour ce bien, en deux parties, en t'appuyant uniquement sur les données réelles du mandat :
+
+PARTIE 1 — "Profils acquéreurs idéaux" : liste 3 à 5 profils types d'acquéreurs pertinents pour ce bien, classés du plus pertinent au moins pertinent. Pour chaque profil :
+- un titre de profil (ex : "Jeune couple primo-accédant", "Pied-à-terre parisien", "Parents d'étudiant", "Investisseur patrimonial")
+- une note en étoiles de ⭐ à ⭐⭐⭐⭐⭐ selon la pertinence
+- 4 à 5 puces de raisons concrètes pourquoi ce bien leur convient
+
+PARTIE 2 — "Arguments de visite" : 5 à 7 phrases courtes et percutantes (entre guillemets) que le commercial doit répéter sur place pendant la visite, formulées de façon orale et convaincante.
+
+Adapte le ton au marché du bien (habitation B2C = art de vivre ; investissement B2B = rendement/création de valeur). Réponds directement avec la fiche.`,
+  },
+  email_relance: {
+    label: 'Email de relance',
+    scopes: ['client'],
+    user: `Rédige un email de relance professionnel et chaleureux pour ce client, en t'appuyant sur son profil et les mandats compatibles ci-dessus. Mets en avant 1 ou 2 biens pertinents sans tout détailler. Termine par une proposition d'échange et la signature Immeubles & Patrimoine. Réponds directement par l'email.`,
+  },
+  synthese_client: {
+    label: 'Synthèse client',
+    scopes: ['client'],
+    user: `Fais une synthèse opérationnelle de ce client : son profil, sa maturité, ce qu'il recherche, les mandats compatibles les plus pertinents, et les prochaines actions recommandées. Sois concis et actionnable.`,
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════
+// OUTILS (format Anthropic) — repris de assistant/chat, philosophie propose→valide
+// ═══════════════════════════════════════════════════════════════════
 const tools = [
-  // LECTURE
-  {
-    name: 'search_mandats',
-    description: 'Cherche dans la table des mandats. Sans filtre, retourne les plus récents.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        query_text: { type: 'string' },
-        ville: { type: 'string' },
-        statut: { type: 'string' },
-        type: { type: 'string' },
-        prix_min: { type: 'number' },
-        prix_max: { type: 'number' },
-        owner: { type: 'string' },
-        limit: { type: 'integer' }
-      },
-      required: []
-    }
-  },
-  {
-    name: 'search_clients',
-    description: 'Cherche dans la table des clients. Sans filtre, retourne les plus récents.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        query_text: { type: 'string' },
-        typologie: { type: 'string' },
-        marche: { type: 'string' },
-        maturite: { type: 'string' },
-        statut: { type: 'string' },
-        owner: { type: 'string' },
-        budget_min: { type: 'number' },
-        budget_max: { type: 'number' },
-        limit: { type: 'integer' }
-      },
-      required: []
-    }
-  },
-  {
-    name: 'search_interactions',
-    description: 'Cherche dans l\'historique COMPLET des échanges du CRM : emails reçus (type=email_entrant), emails envoyés (type=email_sortant), appels (type=Appel), RDV (type=RDV), notes (type=Note). UTILISER SYSTÉMATIQUEMENT cette fonction dès que Thomas demande "les emails reçus", "les emails envoyés", "les derniers échanges", "qui m\'a contacté", "qu\'est-ce qui s\'est passé avec X", etc. Filtrable par client, mandat, type, ou date.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        client_id: { type: 'string', description: 'UUID du client pour filtrer ses interactions.' },
-        mandat_id: { type: 'string', description: 'UUID du mandat pour filtrer ses interactions.' },
-        type: { type: 'string', description: 'Type : "Appel", "Email", "RDV", "Note", "email_entrant", "email_sortant"...' },
-        since_days: { type: 'integer', description: 'Limiter aux X derniers jours (ex: 14 pour 2 semaines).' },
-        limit: { type: 'integer', description: 'Nombre max de résultats. Défaut 20.' }
-      },
-      required: []
-    }
-  },
-  // CRÉATION
-  {
-    name: 'propose_create_mandat',
-    description: 'PROPOSE la création d\'un mandat. Ne crée RIEN, Thomas valide avant exécution.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        nom: { type: 'string', description: 'Titre du mandat. OBLIGATOIRE.' },
-        adresse: { type: 'string' },
-        ville: { type: 'string' },
-        type: { type: 'string', description: 'Défaut "Immeubles".' },
-        sous_type: { type: 'string' },
-        prix: { type: 'number' },
-        surface: { type: 'number' },
-        nb_lots: { type: 'integer' },
-        nb_pieces: { type: 'integer' },
-        nb_chambres: { type: 'integer' },
-        etage: { type: 'integer' },
-        loyers_annuels: { type: 'number' },
-        statut: { type: 'string', description: 'Défaut "Sourcing".' },
-        commercialisation: { type: 'string', description: 'Défaut "Off-market".' },
-        marche: { type: 'string' },
-        description: { type: 'string' },
-        contact: { type: 'string' },
-        tel: { type: 'string' }
-      },
-      required: ['nom']
-    }
-  },
-  {
-    name: 'propose_create_client',
-    description: 'PROPOSE la création d\'un client (acquéreur). Ne crée RIEN, Thomas valide. Utilise OBLIGATOIREMENT la cascade typologie/sous_typologie ci-dessous. TYPOLOGIES VALIDES : "Foncières" (sous_typologies : "Privées" ou "Publiques") - "Marchands de biens" - "Particuliers" - "Fonds" - "Promoteurs" - "Family Office". MARCHE déduit auto : "Particuliers" = B2C, tous les autres = B2B. N\'INVENTE PAS de typologies, choisis dans cette liste.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        prenom: { type: 'string' },
-        nom: { type: 'string', description: 'OBLIGATOIRE.' },
-        societe: { type: 'string' },
-        email: { type: 'string' },
-        tel: { type: 'string' },
-        typologie: {
-          type: 'string',
-          enum: ['Foncières', 'Marchands de biens', 'Particuliers', 'Fonds', 'Promoteurs', 'Family Office'],
-          description: 'Typologie OBLIGATOIRE parmi la liste. Si pas certain, demande à Thomas plutôt que d\'inventer.'
-        },
-        sous_typologie: {
-          type: 'string',
-          enum: ['Privées', 'Publiques'],
-          description: 'UNIQUEMENT pour typologie="Foncières" : "Privées" ou "Publiques". Vide pour les autres typologies.'
-        },
-        marche: { type: 'string', enum: ['b2b', 'b2c'], description: 'Déduit auto : "Particuliers"=b2c, tous les autres=b2b. Mets la valeur cohérente.' },
-        maturite: { type: 'string', description: 'Défaut "Moyen".' },
-        statut: { type: 'string', description: 'Défaut "Actif".' },
-        origine: { type: 'string', description: 'Défaut "Apporteur".' },
-        budget_min: { type: 'number' },
-        budget_max: { type: 'number' },
-        rendement_min: { type: 'number' },
-        details_recherche: { type: 'string', description: 'Texte libre décrivant ce que le client cherche.' }
-      },
-      required: ['nom']
-    }
-  },
-  {
-    name: 'propose_create_task',
-    description: 'PROPOSE la création d\'une tâche todo. Ne crée RIEN, Thomas valide avant exécution.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        titre: { type: 'string', description: 'OBLIGATOIRE.' },
-        echeance: { type: 'string', description: 'Date au format YYYY-MM-DD. Optionnel.' },
-        priorite: { type: 'string', description: 'Défaut "Normale".' },
-        statut: { type: 'string', description: 'Défaut "À faire".' },
-        lien_type: { type: 'string', description: '"mandat" ou "client" si la tâche est liée à un mandat ou client.' },
-        lien_id: { type: 'string', description: 'UUID du mandat ou client lié.' }
-      },
-      required: ['titre']
-    }
-  },
-  {
-    name: 'propose_create_event',
-    description: 'PROPOSE la création d\'un RDV dans Outlook. Ne crée RIEN, Thomas valide avant exécution.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        titre: { type: 'string', description: 'Sujet du RDV. OBLIGATOIRE.' },
-        date_debut: { type: 'string', description: 'Date+heure ISO format (ex: 2026-05-23T14:00:00). OBLIGATOIRE.' },
-        duree_minutes: { type: 'integer', description: 'Durée en minutes. Défaut 60.' },
-        lieu: { type: 'string' },
-        description: { type: 'string' },
-        participants: { type: 'array', items: { type: 'string' }, description: 'Liste d\'emails des participants.' }
-      },
-      required: ['titre', 'date_debut']
-    }
-  },
-  {
-    name: 'propose_create_interaction',
-    description: 'PROPOSE la création d\'une note/interaction dans l\'historique d\'un client ou mandat. Ne crée RIEN, Thomas valide.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        type: { type: 'string', description: 'Type : "Appel", "Email", "RDV", "Note", "WhatsApp", "SMS". OBLIGATOIRE.' },
-        resume: { type: 'string', description: 'Résumé de l\'interaction. OBLIGATOIRE.' },
-        client_id: { type: 'string', description: 'UUID du client concerné (au moins client_id OU mandat_id).' },
-        mandat_id: { type: 'string', description: 'UUID du mandat concerné (au moins client_id OU mandat_id).' },
-        next_step: { type: 'string', description: 'Prochaine action si applicable.' },
-        date_next_step: { type: 'string', description: 'Date prochaine action YYYY-MM-DD.' }
-      },
-      required: ['type', 'resume']
-    }
-  },
-  // MODIFICATION
-  {
-    name: 'propose_update_mandat',
-    description: 'PROPOSE la modification d\'un mandat existant. Ne modifie RIEN, Thomas valide.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'UUID du mandat à modifier. OBLIGATOIRE.' },
-        nom: { type: 'string' },
-        adresse: { type: 'string' },
-        ville: { type: 'string' },
-        type: { type: 'string' },
-        sous_type: { type: 'string' },
-        prix: { type: 'number' },
-        surface: { type: 'number' },
-        statut: { type: 'string' },
-        commercialisation: { type: 'string' },
-        marche: { type: 'string' },
-        description: { type: 'string' }
-      },
-      required: ['id']
-    }
-  },
-  {
-    name: 'propose_update_client',
-    description: 'PROPOSE la modification d\'un client existant. Ne modifie RIEN, Thomas valide.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'UUID du client à modifier. OBLIGATOIRE.' },
-        prenom: { type: 'string' },
-        nom: { type: 'string' },
-        societe: { type: 'string' },
-        email: { type: 'string' },
-        tel: { type: 'string' },
-        typologie: { type: 'string' },
-        marche: { type: 'string' },
-        maturite: { type: 'string' },
-        statut: { type: 'string' },
-        budget_min: { type: 'number' },
-        budget_max: { type: 'number' }
-      },
-      required: ['id']
-    }
-  },
-  // ENVOI
-  {
-    name: 'propose_send_email',
-    description: 'PROPOSE l\'envoi d\'un email simple. Ne fait RIEN, Thomas valide avant envoi.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        to: { type: 'string', description: 'Email du destinataire. OBLIGATOIRE.' },
-        subject: { type: 'string', description: 'Objet. OBLIGATOIRE.' },
-        body: { type: 'string', description: 'Corps de l\'email. OBLIGATOIRE.' },
-        client_id: { type: 'string', description: 'UUID du client destinataire (optionnel mais recommandé pour traçabilité).' }
-      },
-      required: ['to', 'subject', 'body']
-    }
-  },
-  {
-    name: 'propose_send_plaquette',
-    description: 'PROPOSE l\'envoi d\'une plaquette PDF d\'un mandat à un client. Ne fait RIEN, Thomas valide.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        mandat_id: { type: 'string', description: 'UUID du mandat dont envoyer la plaquette. OBLIGATOIRE.' },
-        client_id: { type: 'string', description: 'UUID du client destinataire. OBLIGATOIRE.' },
-        custom_message: { type: 'string', description: 'Message personnalisé optionnel à ajouter au mail.' }
-      },
-      required: ['mandat_id', 'client_id']
-    }
-  }
+  { name: 'search_mandats', description: 'Cherche dans la table des mandats. Sans filtre, retourne les plus récents.',
+    input_schema: { type: 'object', properties: {
+      query_text: { type: 'string' }, ville: { type: 'string' }, statut: { type: 'string' },
+      type: { type: 'string' }, prix_min: { type: 'number' }, prix_max: { type: 'number' },
+      owner: { type: 'string' }, limit: { type: 'integer' } }, required: [] } },
+  { name: 'search_clients', description: 'Cherche dans la table des clients. Sans filtre, retourne les plus récents.',
+    input_schema: { type: 'object', properties: {
+      query_text: { type: 'string' }, typologie: { type: 'string' }, marche: { type: 'string' },
+      maturite: { type: 'string' }, statut: { type: 'string' }, owner: { type: 'string' },
+      budget_min: { type: 'number' }, budget_max: { type: 'number' }, limit: { type: 'integer' } }, required: [] } },
+  { name: 'search_interactions', description: 'Cherche dans l\'historique des échanges (emails, appels, RDV, notes). À utiliser dès qu\'on demande "les emails", "les derniers échanges", "qui m\'a contacté", etc.',
+    input_schema: { type: 'object', properties: {
+      client_id: { type: 'string' }, mandat_id: { type: 'string' }, type: { type: 'string' },
+      since_days: { type: 'integer' }, limit: { type: 'integer' } }, required: [] } },
+  { name: 'propose_create_mandat', description: 'PROPOSE la création d\'un mandat. Ne crée RIEN, l\'utilisateur valide.',
+    input_schema: { type: 'object', properties: {
+      nom: { type: 'string' }, adresse: { type: 'string' }, ville: { type: 'string' },
+      type: { type: 'string' }, sous_type: { type: 'string' }, prix: { type: 'number' },
+      surface: { type: 'number' }, nb_lots: { type: 'integer' }, nb_pieces: { type: 'integer' },
+      nb_chambres: { type: 'integer' }, etage: { type: 'integer' }, loyers_annuels: { type: 'number' },
+      statut: { type: 'string' }, commercialisation: { type: 'string' }, marche: { type: 'string' },
+      description: { type: 'string' }, contact: { type: 'string' }, tel: { type: 'string' } }, required: ['nom'] } },
+  { name: 'propose_create_client', description: 'PROPOSE la création d\'un client. Typologies VALIDES : "Foncières" (sous_typologies "Privées"/"Publiques"), "Marchands de biens", "Particuliers", "Fonds", "Promoteurs", "Family Office". Marché déduit : "Particuliers"=b2c, autres=b2b.',
+    input_schema: { type: 'object', properties: {
+      prenom: { type: 'string' }, nom: { type: 'string' }, societe: { type: 'string' },
+      email: { type: 'string' }, tel: { type: 'string' },
+      typologie: { type: 'string', enum: ['Foncières', 'Marchands de biens', 'Particuliers', 'Fonds', 'Promoteurs', 'Family Office'] },
+      sous_typologie: { type: 'string', enum: ['Privées', 'Publiques'] },
+      marche: { type: 'string', enum: ['b2b', 'b2c'] }, maturite: { type: 'string' },
+      statut: { type: 'string' }, origine: { type: 'string' }, budget_min: { type: 'number' },
+      budget_max: { type: 'number' }, rendement_min: { type: 'number' }, details_recherche: { type: 'string' } }, required: ['nom'] } },
+  { name: 'propose_create_task', description: 'PROPOSE la création d\'une tâche todo. Ne crée RIEN, l\'utilisateur valide.',
+    input_schema: { type: 'object', properties: {
+      titre: { type: 'string' }, echeance: { type: 'string' }, priorite: { type: 'string' },
+      statut: { type: 'string' }, lien_type: { type: 'string' }, lien_id: { type: 'string' } }, required: ['titre'] } },
+  { name: 'propose_create_event', description: 'PROPOSE la création d\'un RDV Outlook. Ne crée RIEN, l\'utilisateur valide.',
+    input_schema: { type: 'object', properties: {
+      titre: { type: 'string' }, date_debut: { type: 'string' }, duree_minutes: { type: 'integer' },
+      lieu: { type: 'string' }, description: { type: 'string' }, participants: { type: 'array', items: { type: 'string' } } }, required: ['titre', 'date_debut'] } },
+  { name: 'propose_create_interaction', description: 'PROPOSE la création d\'une note/interaction sur un client ou mandat. Ne crée RIEN, l\'utilisateur valide.',
+    input_schema: { type: 'object', properties: {
+      type: { type: 'string' }, resume: { type: 'string' }, client_id: { type: 'string' },
+      mandat_id: { type: 'string' }, next_step: { type: 'string' }, date_next_step: { type: 'string' } }, required: ['type', 'resume'] } },
+  { name: 'propose_update_mandat', description: 'PROPOSE la modification d\'un mandat existant. Ne modifie RIEN, l\'utilisateur valide. Pour modifier la description/le type/le prix du mandat courant, utilise son ID.',
+    input_schema: { type: 'object', properties: {
+      id: { type: 'string' }, nom: { type: 'string' }, adresse: { type: 'string' }, ville: { type: 'string' },
+      type: { type: 'string' }, sous_type: { type: 'string' }, prix: { type: 'number' }, surface: { type: 'number' },
+      statut: { type: 'string' }, commercialisation: { type: 'string' }, marche: { type: 'string' }, description: { type: 'string' } }, required: ['id'] } },
+  { name: 'propose_update_client', description: 'PROPOSE la modification d\'un client existant. Ne modifie RIEN, l\'utilisateur valide.',
+    input_schema: { type: 'object', properties: {
+      id: { type: 'string' }, prenom: { type: 'string' }, nom: { type: 'string' }, societe: { type: 'string' },
+      email: { type: 'string' }, tel: { type: 'string' }, typologie: { type: 'string' }, marche: { type: 'string' },
+      maturite: { type: 'string' }, statut: { type: 'string' }, budget_min: { type: 'number' }, budget_max: { type: 'number' } }, required: ['id'] } },
+  { name: 'propose_send_email', description: 'PROPOSE l\'envoi d\'un email simple. Ne fait RIEN, l\'utilisateur valide.',
+    input_schema: { type: 'object', properties: {
+      to: { type: 'string' }, subject: { type: 'string' }, body: { type: 'string' }, client_id: { type: 'string' } }, required: ['to', 'subject', 'body'] } },
+  { name: 'propose_send_plaquette', description: 'PROPOSE l\'envoi d\'une plaquette PDF d\'un mandat à un client. Ne fait RIEN, l\'utilisateur valide.',
+    input_schema: { type: 'object', properties: {
+      mandat_id: { type: 'string' }, client_id: { type: 'string' }, custom_message: { type: 'string' } }, required: ['mandat_id', 'client_id'] } },
 ];
 
-// ==========================================================================
-// EXÉCUTION OUTILS LECTURE
-// ==========================================================================
-
-async function loadRecentInteractions(context) {
-  if (!context || !context.data?.id) return [];
-  const filterCol = context.type === 'mandat' ? 'mandat_id' : context.type === 'client' ? 'client_id' : null;
-  if (!filterCol) return [];
-  const { data } = await supabaseAdmin
-    .from('interactions')
-    .select('type, resume, date, metadata')
-    .eq(filterCol, context.data.id)
-    .order('date', { ascending: false })
-    .limit(10);
-  return data || [];
-}
-
+// ═══════════════════════════════════════════════════════════════════
+// SEARCHES (lecture) — repris de assistant/chat
+// ═══════════════════════════════════════════════════════════════════
 async function executeSearchMandats(args) {
   const { query_text, ville, statut, type, prix_min, prix_max, owner, limit = 10 } = args;
-  let query = supabaseAdmin
-    .from('mandats')
+  let query = supabaseAdmin.from('mandats')
     .select('id, nom, adresse, ville, statut, prix, surface, type, sous_type, owner, marche, commercialisation, created_at')
     .limit(Math.min(limit, 20));
   if (query_text && query_text.trim()) {
-    const q = `%${query_text.trim()}%`;
-    const safe = q.replace(/[,()]/g, '');
+    const safe = `%${query_text.trim()}%`.replace(/[,()]/g, '');
     query = query.or(`nom.ilike.${safe},adresse.ilike.${safe},ville.ilike.${safe}`);
   }
   if (ville) query = query.ilike('ville', `%${ville}%`);
@@ -458,44 +321,13 @@ async function executeSearchMandats(args) {
   return { count: data?.length || 0, results: data || [] };
 }
 
-async function executeSearchInteractions(args) {
-  const { client_id, mandat_id, type, since_days, limit = 20 } = args;
-  let query = supabaseAdmin
-    .from('interactions')
-    .select('id, type, resume, date, client_id, mandat_id, next_step, date_next_step, metadata, created_at')
-    .limit(Math.min(limit, 50));
-  if (client_id) query = query.eq('client_id', client_id);
-  if (mandat_id) query = query.eq('mandat_id', mandat_id);
-  if (type) query = query.eq('type', type);
-  if (typeof since_days === 'number' && since_days > 0) {
-    const date = new Date();
-    date.setDate(date.getDate() - since_days);
-    query = query.gte('date', date.toISOString().split('T')[0]);
-  }
-  query = query.order('date', { ascending: false });
-  const { data, error } = await query;
-  if (error) return { error: error.message, results: [] };
-  const enriched = (data || []).map(i => {
-    const out = { ...i };
-    if (i.metadata && (i.type === 'email_entrant' || i.type === 'email_sortant')) {
-      out.from_name = i.metadata.from_name || null;
-      out.from_address = i.metadata.from_address || null;
-      out.web_link = i.metadata.web_link || null;
-    }
-    return out;
-  });
-  return { count: enriched.length, results: enriched };
-}
-
 async function executeSearchClients(args) {
   const { query_text, typologie, marche, maturite, statut, owner, budget_min, budget_max, limit = 10 } = args;
-  let query = supabaseAdmin
-    .from('clients')
+  let query = supabaseAdmin.from('clients')
     .select('id, prenom, nom, societe, email, tel, typologie, sous_typologie, marche, maturite, statut, budget_min, budget_max, rendement_min, zones, typologies_recherchees, owner, created_at')
     .limit(Math.min(limit, 20));
   if (query_text && query_text.trim()) {
-    const q = `%${query_text.trim()}%`;
-    const safe = q.replace(/[,()]/g, '');
+    const safe = `%${query_text.trim()}%`.replace(/[,()]/g, '');
     query = query.or(`prenom.ilike.${safe},nom.ilike.${safe},societe.ilike.${safe},email.ilike.${safe}`);
   }
   if (typologie) query = query.eq('typologie', typologie);
@@ -508,175 +340,91 @@ async function executeSearchClients(args) {
   query = query.order('created_at', { ascending: false });
   const { data, error } = await query;
   if (error) return { error: error.message, results: [] };
-  return {
-    count: data?.length || 0,
-    results: (data || []).map(c => ({
-      ...c,
-      nom_complet: [c.prenom, c.nom].filter(Boolean).join(' ') || c.societe || '(anonyme)'
-    }))
-  };
+  return { count: data?.length || 0, results: (data || []).map(c => ({ ...c, nom_complet: [c.prenom, c.nom].filter(Boolean).join(' ') || c.societe || '(anonyme)' })) };
 }
 
-// ==========================================================================
-// BUILDERS DE PROPOSITION (ne créent RIEN, retournent juste la structure)
-// ==========================================================================
+async function executeSearchInteractions(args) {
+  const { client_id, mandat_id, type, since_days, limit = 20 } = args;
+  let query = supabaseAdmin.from('interactions')
+    .select('id, type, resume, date, client_id, mandat_id, next_step, date_next_step, metadata, created_at')
+    .limit(Math.min(limit, 50));
+  if (client_id) query = query.eq('client_id', client_id);
+  if (mandat_id) query = query.eq('mandat_id', mandat_id);
+  if (type) query = query.eq('type', type);
+  if (typeof since_days === 'number' && since_days > 0) {
+    const date = new Date(); date.setDate(date.getDate() - since_days);
+    query = query.gte('date', date.toISOString().split('T')[0]);
+  }
+  query = query.order('date', { ascending: false });
+  const { data, error } = await query;
+  if (error) return { error: error.message, results: [] };
+  return { count: data?.length || 0, results: data || [] };
+}
 
+// ═══════════════════════════════════════════════════════════════════
+// BUILDERS DE PROPOSITION — repris de assistant/chat
+// ═══════════════════════════════════════════════════════════════════
 const formatPrix = (p) => typeof p === 'number' && p > 0 ? new Intl.NumberFormat('fr-FR').format(p) + ' €' : null;
-const formatDate = (d) => {
-  if (!d) return null;
-  try {
-    const date = new Date(d);
-    if (isNaN(date.getTime())) return d;
-    return date.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
-  } catch (e) { return d; }
-};
+const formatDate = (d) => { if (!d) return null; try { const x = new Date(d); return isNaN(x.getTime()) ? d : x.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }); } catch { return d; } };
 
 function buildProposeCreateMandat(args) {
-  const data = {
-    nom: args.nom || 'Sans nom',
-    adresse: args.adresse || null,
-    ville: args.ville || null,
-    type: args.type || 'Immeubles',
-    sous_type: args.sous_type || null,
-    prix: args.prix || 0,
-    surface: args.surface || 0,
-    nb_lots: args.nb_lots || 1,
-    nb_pieces: args.nb_pieces || null,
-    nb_chambres: args.nb_chambres || null,
-    etage: args.etage || null,
-    loyers_annuels: args.loyers_annuels || 0,
-    statut: args.statut || 'Sourcing',
-    commercialisation: args.commercialisation || 'Off-market',
-    marche: args.marche || null,
-    description: args.description || null,
-    contact: args.contact || null,
-    tel: args.tel || null
-  };
+  const data = { nom: args.nom || 'Sans nom', adresse: args.adresse || null, ville: args.ville || null,
+    type: args.type || 'Immeubles', sous_type: args.sous_type || null, prix: args.prix || 0, surface: args.surface || 0,
+    nb_lots: args.nb_lots || 1, nb_pieces: args.nb_pieces || null, nb_chambres: args.nb_chambres || null, etage: args.etage || null,
+    loyers_annuels: args.loyers_annuels || 0, statut: args.statut || 'Sourcing', commercialisation: args.commercialisation || 'Off-market',
+    marche: args.marche || null, description: args.description || null, contact: args.contact || null, tel: args.tel || null };
   const fields = [
-    { label: 'Nom', value: data.nom },
-    { label: 'Adresse', value: data.adresse || '—' },
-    { label: 'Ville', value: data.ville || '—' },
-    { label: 'Type', value: data.type + (data.sous_type ? ' / ' + data.sous_type : '') },
-    { label: 'Prix', value: formatPrix(data.prix) || '—' },
-    { label: 'Surface', value: data.surface ? data.surface + ' m²' : '—' },
-    { label: 'Statut', value: data.statut },
-    { label: 'Commercialisation', value: data.commercialisation }
-  ];
+    { label: 'Nom', value: data.nom }, { label: 'Adresse', value: data.adresse || '—' }, { label: 'Ville', value: data.ville || '—' },
+    { label: 'Type', value: data.type + (data.sous_type ? ' / ' + data.sous_type : '') }, { label: 'Prix', value: formatPrix(data.prix) || '—' },
+    { label: 'Surface', value: data.surface ? data.surface + ' m²' : '—' }, { label: 'Statut', value: data.statut }, { label: 'Commercialisation', value: data.commercialisation } ];
   if (data.contact) fields.push({ label: 'Contact', value: data.contact });
   if (data.tel) fields.push({ label: 'Téléphone', value: data.tel });
   return { proposed: true, type: 'create_mandat', summary: 'Mandat à créer', fields, data };
 }
 
 function buildProposeCreateClient(args) {
-  const data = {
-    prenom: args.prenom || null,
-    nom: args.nom || null,
-    societe: args.societe || null,
-    email: args.email || null,
-    tel: args.tel || null,
-    typologie: args.typologie || 'Particuliers',
-    sous_typologie: args.sous_typologie || null,
-    marche: args.marche || null,
-    maturite: args.maturite || 'Moyen',
-    statut: args.statut || 'Actif',
-    origine: args.origine || 'Apporteur',
-    budget_min: args.budget_min || 0,
-    budget_max: args.budget_max || 0,
-    rendement_min: args.rendement_min || 0,
-    details_recherche: args.details_recherche || null
-  };
-
-  const missing = [];
-  if (!data.nom && !data.societe) missing.push('nom ou société');
-
+  const data = { prenom: args.prenom || null, nom: args.nom || null, societe: args.societe || null, email: args.email || null, tel: args.tel || null,
+    typologie: args.typologie || 'Particuliers', sous_typologie: args.sous_typologie || null, marche: args.marche || null,
+    maturite: args.maturite || 'Moyen', statut: args.statut || 'Actif', origine: args.origine || 'Apporteur',
+    budget_min: args.budget_min || 0, budget_max: args.budget_max || 0, rendement_min: args.rendement_min || 0, details_recherche: args.details_recherche || null };
   const warnings = [];
   if (!data.email) warnings.push('email');
   if (!data.tel) warnings.push('téléphone');
   if (!data.budget_min && !data.budget_max) warnings.push('budget');
-
   const nomComplet = [data.prenom, data.nom].filter(Boolean).join(' ') || data.societe || '—';
-
   const fields = [
-    { label: 'Prénom', value: data.prenom || '—' },
-    { label: 'Nom', value: data.nom || '—' },
-    { label: 'Société', value: data.societe || '—' },
-    { label: 'Email', value: data.email || '—' },
-    { label: 'Téléphone', value: data.tel || '—' },
+    { label: 'Prénom', value: data.prenom || '—' }, { label: 'Nom', value: data.nom || '—' }, { label: 'Société', value: data.societe || '—' },
+    { label: 'Email', value: data.email || '—' }, { label: 'Téléphone', value: data.tel || '—' },
     { label: 'Typologie', value: data.typologie + (data.sous_typologie ? ' / ' + data.sous_typologie : '') },
     { label: 'Marché', value: data.marche ? data.marche.toUpperCase() : '—' },
-    { label: 'Budget', value: (data.budget_min || data.budget_max)
-      ? `${formatPrix(data.budget_min) || '0 €'} → ${formatPrix(data.budget_max) || '0 €'}`
-      : '—' },
-    { label: 'Maturité', value: data.maturite },
-    { label: 'Statut', value: data.statut }
-  ];
-
-  if (data.details_recherche) {
-    fields.push({ label: 'Recherche', value: data.details_recherche });
-  }
-
-  return {
-    proposed: true,
-    type: 'create_client',
-    summary: `Client à créer : ${nomComplet}`,
-    fields,
-    data,
-    warnings: warnings.length > 0 ? `Champs recommandés manquants : ${warnings.join(', ')}` : null,
-    missing: missing.length > 0 ? `Champs obligatoires manquants : ${missing.join(', ')}` : null
-  };
+    { label: 'Budget', value: (data.budget_min || data.budget_max) ? `${formatPrix(data.budget_min) || '0 €'} → ${formatPrix(data.budget_max) || '0 €'}` : '—' },
+    { label: 'Maturité', value: data.maturite }, { label: 'Statut', value: data.statut } ];
+  if (data.details_recherche) fields.push({ label: 'Recherche', value: data.details_recherche });
+  return { proposed: true, type: 'create_client', summary: `Client à créer : ${nomComplet}`, fields, data,
+    warnings: warnings.length ? `Champs recommandés manquants : ${warnings.join(', ')}` : null };
 }
 
 function buildProposeCreateTask(args) {
-  const data = {
-    titre: args.titre || 'Nouvelle tâche',
-    echeance: args.echeance || null,
-    priorite: args.priorite || 'Normale',
-    statut: args.statut || 'À faire',
-    lien_type: args.lien_type || null,
-    lien_id: args.lien_id || null
-  };
-  const fields = [
-    { label: 'Titre', value: data.titre },
-    { label: 'Échéance', value: data.echeance || '—' },
-    { label: 'Priorité', value: data.priorite },
-    { label: 'Statut', value: data.statut }
-  ];
+  const data = { titre: args.titre || 'Nouvelle tâche', echeance: args.echeance || null, priorite: args.priorite || 'Normale',
+    statut: args.statut || 'À faire', lien_type: args.lien_type || null, lien_id: args.lien_id || null };
+  const fields = [{ label: 'Titre', value: data.titre }, { label: 'Échéance', value: data.echeance || '—' }, { label: 'Priorité', value: data.priorite }, { label: 'Statut', value: data.statut }];
   if (data.lien_type) fields.push({ label: 'Lié à', value: `${data.lien_type} ${data.lien_id || ''}` });
   return { proposed: true, type: 'create_task', summary: 'Tâche à créer', fields, data };
 }
 
 function buildProposeCreateEvent(args) {
-  const data = {
-    titre: args.titre || 'Nouveau RDV',
-    date_debut: args.date_debut,
-    duree_minutes: args.duree_minutes || 60,
-    lieu: args.lieu || null,
-    description: args.description || null,
-    participants: args.participants || []
-  };
-  const fields = [
-    { label: 'Titre', value: data.titre },
-    { label: 'Date début', value: formatDate(data.date_debut) || '—' },
-    { label: 'Durée', value: data.duree_minutes + ' min' },
-    { label: 'Lieu', value: data.lieu || '—' },
-    { label: 'Participants', value: data.participants.length ? data.participants.join(', ') : '—' }
-  ];
+  const data = { titre: args.titre || 'Nouveau RDV', date_debut: args.date_debut, duree_minutes: args.duree_minutes || 60,
+    lieu: args.lieu || null, description: args.description || null, participants: args.participants || [] };
+  const fields = [{ label: 'Titre', value: data.titre }, { label: 'Date début', value: formatDate(data.date_debut) || '—' },
+    { label: 'Durée', value: data.duree_minutes + ' min' }, { label: 'Lieu', value: data.lieu || '—' },
+    { label: 'Participants', value: data.participants.length ? data.participants.join(', ') : '—' }];
   return { proposed: true, type: 'create_event', summary: 'RDV Outlook à créer', fields, data };
 }
 
 function buildProposeCreateInteraction(args) {
-  const data = {
-    type: args.type || 'Note',
-    resume: args.resume || '',
-    client_id: args.client_id || null,
-    mandat_id: args.mandat_id || null,
-    next_step: args.next_step || null,
-    date_next_step: args.date_next_step || null
-  };
-  const fields = [
-    { label: 'Type', value: data.type },
-    { label: 'Résumé', value: data.resume }
-  ];
+  const data = { type: args.type || 'Note', resume: args.resume || '', client_id: args.client_id || null,
+    mandat_id: args.mandat_id || null, next_step: args.next_step || null, date_next_step: args.date_next_step || null };
+  const fields = [{ label: 'Type', value: data.type }, { label: 'Résumé', value: data.resume }];
   if (data.next_step) fields.push({ label: 'Prochaine action', value: data.next_step });
   if (data.date_next_step) fields.push({ label: 'Date prochaine action', value: data.date_next_step });
   return { proposed: true, type: 'create_interaction', summary: 'Interaction à créer', fields, data };
@@ -688,10 +436,12 @@ function buildProposeUpdateMandat(args) {
   if (data.nom !== undefined) fields.push({ label: 'Nom', value: data.nom });
   if (data.adresse !== undefined) fields.push({ label: 'Adresse', value: data.adresse });
   if (data.ville !== undefined) fields.push({ label: 'Ville', value: data.ville });
+  if (data.type !== undefined) fields.push({ label: 'Type', value: data.type });
+  if (data.sous_type !== undefined) fields.push({ label: 'Sous-type', value: data.sous_type });
   if (data.prix !== undefined) fields.push({ label: 'Prix', value: formatPrix(data.prix) });
   if (data.surface !== undefined) fields.push({ label: 'Surface', value: data.surface + ' m²' });
   if (data.statut !== undefined) fields.push({ label: 'Statut', value: data.statut });
-  if (data.description !== undefined) fields.push({ label: 'Description', value: data.description });
+  if (data.description !== undefined) fields.push({ label: 'Description', value: data.description.length > 200 ? data.description.slice(0, 200) + '…' : data.description });
   return { proposed: true, type: 'update_mandat', summary: 'Mandat à modifier', fields, data };
 }
 
@@ -704,37 +454,21 @@ function buildProposeUpdateClient(args) {
   if (data.tel !== undefined) fields.push({ label: 'Téléphone', value: data.tel });
   if (data.typologie !== undefined) fields.push({ label: 'Typologie', value: data.typologie });
   if (data.maturite !== undefined) fields.push({ label: 'Maturité', value: data.maturite });
-  if (data.budget_min !== undefined || data.budget_max !== undefined) {
-    fields.push({ label: 'Budget', value: `${formatPrix(data.budget_min || 0) || '0 €'} → ${formatPrix(data.budget_max || 0) || '0 €'}` });
-  }
+  if (data.statut !== undefined) fields.push({ label: 'Statut', value: data.statut });
+  if (data.budget_min !== undefined || data.budget_max !== undefined) fields.push({ label: 'Budget', value: `${formatPrix(data.budget_min || 0) || '0 €'} → ${formatPrix(data.budget_max || 0) || '0 €'}` });
   return { proposed: true, type: 'update_client', summary: 'Client à modifier', fields, data };
 }
 
 function buildProposeSendEmail(args) {
-  const data = {
-    to: args.to,
-    subject: args.subject,
-    body: args.body,
-    client_id: args.client_id || null
-  };
-  const fields = [
-    { label: 'À', value: data.to },
-    { label: 'Objet', value: data.subject },
-    { label: 'Message', value: data.body.length > 200 ? data.body.slice(0, 200) + '…' : data.body }
-  ];
+  const data = { to: args.to, subject: args.subject, body: args.body, client_id: args.client_id || null };
+  const fields = [{ label: 'À', value: data.to }, { label: 'Objet', value: data.subject },
+    { label: 'Message', value: data.body.length > 200 ? data.body.slice(0, 200) + '…' : data.body }];
   return { proposed: true, type: 'send_email', summary: 'Email à envoyer', fields, data };
 }
 
 function buildProposeSendPlaquette(args) {
-  const data = {
-    mandat_id: args.mandat_id,
-    client_id: args.client_id,
-    custom_message: args.custom_message || null
-  };
-  const fields = [
-    { label: 'Mandat ID', value: data.mandat_id },
-    { label: 'Client ID', value: data.client_id }
-  ];
+  const data = { mandat_id: args.mandat_id, client_id: args.client_id, custom_message: args.custom_message || null };
+  const fields = [{ label: 'Mandat ID', value: data.mandat_id }, { label: 'Client ID', value: data.client_id }];
   if (data.custom_message) fields.push({ label: 'Message', value: data.custom_message });
   return { proposed: true, type: 'send_plaquette', summary: 'Plaquette à envoyer', fields, data };
 }
@@ -757,169 +491,238 @@ async function executeTool(name, args) {
   }
 }
 
-// ==========================================================================
-// PJ
-// ==========================================================================
-
-async function downloadFromSignedUrl(signedUrl) {
-  const res = await fetch(signedUrl);
-  if (!res.ok) throw new Error(`Téléchargement échoué : ${res.status}`);
-  return Buffer.from(await res.arrayBuffer());
+// ═══════════════════════════════════════════════════════════════════
+// PERSISTANCE UNIFIÉE — ai_conversations (scope, entity_id, user_id)
+// ═══════════════════════════════════════════════════════════════════
+async function loadConversation(scope, entityId, userId) {
+  let q = supabaseAdmin.from('ai_conversations').select('messages').eq('scope', scope).eq('user_id', userId);
+  q = scope === 'global' ? q.is('entity_id', null) : q.eq('entity_id', entityId);
+  const { data } = await q.maybeSingle();
+  return Array.isArray(data?.messages) ? data.messages : [];
 }
 
-async function extractPdfTextFromBuffer(buffer) {
-  try {
-    const pdfParse = (await import('pdf-parse/lib/pdf-parse.js')).default;
-    const data = await pdfParse(buffer);
-    return data.text || '';
-  } catch (e) {
-    console.error('[assistant/chat] PDF extract error:', e);
-    return '';
+async function saveConversation(scope, entityId, userId, messages) {
+  let q = supabaseAdmin.from('ai_conversations').select('id').eq('scope', scope).eq('user_id', userId);
+  q = scope === 'global' ? q.is('entity_id', null) : q.eq('entity_id', entityId);
+  const { data: existing } = await q.maybeSingle();
+  const now = new Date().toISOString();
+  if (existing) {
+    await supabaseAdmin.from('ai_conversations').update({ messages, updated_at: now }).eq('id', existing.id);
+  } else {
+    await supabaseAdmin.from('ai_conversations').insert({
+      scope, entity_id: entityId, user_id: userId, messages,
+      mandat_id: scope === 'mandat' ? entityId : null, created_at: now, updated_at: now });
   }
 }
 
-// ==========================================================================
-// BOUCLE PRINCIPALE (format Anthropic)
-// ==========================================================================
+async function clearConversation(scope, entityId, userId) {
+  let q = supabaseAdmin.from('ai_conversations').delete().eq('scope', scope).eq('user_id', userId);
+  q = scope === 'global' ? q.is('entity_id', null) : q.eq('entity_id', entityId);
+  await q;
+}
 
-export async function POST(req) {
+// ═══════════════════════════════════════════════════════════════════
+// SYSTEM PROMPT par scope
+// ═══════════════════════════════════════════════════════════════════
+async function buildSystemPrompt(scope, entity) {
+  const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+  let contextBlock = '';
+  let roleLine = '';
+  if (scope === 'mandat' && entity) {
+    roleLine = `Tu es l'assistant du MANDAT ci-dessous : un copilote de vente qui aide à valoriser ce bien, le décrire, trouver les bons acquéreurs et faire avancer la transaction.`;
+    contextBlock = '\n\n' + buildMandatContext(entity) + (await buildMandatMatching(entity));
+  } else if (scope === 'client' && entity) {
+    roleLine = `Tu es l'assistant du CLIENT ci-dessous : un copilote qui aide à mieux servir cet acquéreur, lui recommander les bons mandats, rédiger ses emails et faire avancer la relation.`;
+    contextBlock = '\n\n' + (await buildClientContext(entity)) + (await buildClientMatching(entity));
+  } else {
+    roleLine = `Tu es l'assistant global du CRM d'Immeubles & Patrimoine. Tu aides à naviguer, chercher, créer et modifier des données dans tout le CRM.`;
+  }
+
+  return `Tu es l'Assistant IA d'Immeubles & Patrimoine, agence patrimoniale spécialisée dans l'off-market à Paris.
+
+Date du jour : ${today}.
+
+${roleLine}
+
+STYLE
+- Tutoie l'utilisateur, ton professionnel et direct, en français. Pas de blabla.
+- Mets en gras les noms importants (**double étoiles**).
+- Ne mentionne jamais "Claude" ni "Anthropic".
+
+ACTIONS (création / modification / envoi)
+- Tu disposes d'outils propose_* pour créer/modifier/envoyer. Tu PROPOSES via ces outils : une carte de validation s'affiche, l'utilisateur clique "Valider" ou "Annuler". Tu n'exécutes JAMAIS directement.
+- NE DEMANDE JAMAIS "veux-tu confirmer ?" : la carte EST la confirmation. Propose directement via l'outil.
+- Si des champs manquent, ne bloque pas : propose quand même et signale après ce qui serait utile à compléter.
+- Pour modifier le mandat ou le client COURANT, utilise son ID (présent dans le contexte ci-dessus) avec propose_update_mandat / propose_update_client.
+
+RÉFÉRENTIELS MÉTIER
+- Statut mandat : Sourcing, Analyse, Mandat signé, Commercialisation, Offre, Promesse, Acte, Vendu par autres, Perdu.
+- Marché : b2b ou b2c.
+- Typologie client (liste STRICTE) : Foncières (sous-type Privées/Publiques), Marchands de biens, Particuliers, Fonds, Promoteurs, Family Office.
+- Marché client déduit : Particuliers = b2c, tous les autres = b2b.
+- Prix en euros : convertis "2,5 M€" en 2500000.
+
+${STYLE_MAISON}
+${contextBlock}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CHARGEMENT DE L'ENTITÉ (mandat ou client)
+// ═══════════════════════════════════════════════════════════════════
+async function loadEntity(scope, entityId) {
+  if (scope === 'mandat') {
+    const { data } = await supabaseAdmin.from('mandats').select('*').eq('id', entityId).maybeSingle();
+    return data;
+  }
+  if (scope === 'client') {
+    const { data } = await supabaseAdmin.from('clients').select('*').eq('id', entityId).maybeSingle();
+    return data;
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// BOUCLE PRINCIPALE : streaming SSE + tool_use
+// ═══════════════════════════════════════════════════════════════════
+export async function POST(request) {
   try {
-    const body = await req.json();
-    const userMessages = Array.isArray(body?.messages) ? body.messages : [];
-    const context = body?.context || null;
-    const attachments = Array.isArray(body?.attachments) ? body.attachments : [];
+    const body = await request.json();
+    const { token, scope = 'global', entity_id = null, message, action, mode } = body;
 
-    if (!userMessages.length) {
-      return NextResponse.json({ error: 'messages requis' }, { status: 400 });
+    if (!VALID_SCOPES.includes(scope)) {
+      return jsonResponse({ ok: false, error: 'scope invalide' }, 400);
     }
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return NextResponse.json({ error: 'ANTHROPIC_API_KEY manquante' }, { status: 500 });
+    const user = await verifyToken(token);
+    if (!user) return jsonResponse({ ok: false, error: 'Authentification requise' }, 401);
+    if (scope !== 'global' && !entity_id) {
+      return jsonResponse({ ok: false, error: 'entity_id requis pour ce scope' }, 400);
     }
 
-    // Traitement des pièces jointes
-    const pdfTexts = [];
-    const imageBlocks = [];
-    for (const att of attachments) {
-      if (!att?.type || !att?.signedUrl) continue;
-      try {
-        const buffer = await downloadFromSignedUrl(att.signedUrl);
-        if (att.type === 'application/pdf') {
-          const text = await extractPdfTextFromBuffer(buffer);
-          if (text) pdfTexts.push({ name: att.name || 'document.pdf', text: text.slice(0, 50000) });
-        } else if (att.type.startsWith('image/')) {
-          imageBlocks.push({
-            type: 'image',
-            source: { type: 'base64', media_type: att.type, data: buffer.toString('base64') }
-          });
-        }
-      } catch (e) {
-        console.error('[assistant/chat] Download attachment error:', att.name, e);
+    // Modes spéciaux (non-stream)
+    if (mode === 'load') {
+      const messages = await loadConversation(scope, entity_id, user.id);
+      return jsonResponse({ ok: true, messages }, 200);
+    }
+    if (mode === 'clear') {
+      await clearConversation(scope, entity_id, user.id);
+      return jsonResponse({ ok: true }, 200);
+    }
+
+    // Charge l'entité (mandat/client) pour le contexte
+    let entity = null;
+    if (scope !== 'global') {
+      entity = await loadEntity(scope, entity_id);
+      if (!entity) return jsonResponse({ ok: false, error: `${scope} introuvable` }, 404);
+    }
+
+    // Détermine le message utilisateur (quick action ou texte libre)
+    let userMessage, userVisibleLabel, actionKey = null;
+    if (action && QUICK_ACTIONS[action]) {
+      if (!QUICK_ACTIONS[action].scopes.includes(scope)) {
+        return jsonResponse({ ok: false, error: `Action "${action}" indisponible pour ce scope` }, 400);
       }
+      userMessage = QUICK_ACTIONS[action].user;
+      userVisibleLabel = `[Action] ${QUICK_ACTIONS[action].label}`;
+      actionKey = action;
+    } else if (message && message.trim()) {
+      userMessage = message.trim();
+      userVisibleLabel = message.trim();
+    } else {
+      return jsonResponse({ ok: false, error: 'message ou action requis' }, 400);
     }
 
-    const systemPromptText = await buildSystemPrompt(context, pdfTexts);
+    // Charge l'historique et construit les messages API
+    const history = await loadConversation(scope, entity_id, user.id);
+    const apiMessages = [
+      ...history.map(m => ({
+        role: m.role === 'assistant' ? 'assistant' : 'user',
+        content: m.role === 'user' && m.action && QUICK_ACTIONS[m.action]
+          ? QUICK_ACTIONS[m.action].user
+          : m.content,
+      })),
+      { role: 'user', content: userMessage },
+    ];
 
-    // Construit l'historique au format Anthropic (content peut être string ou array de blocks)
-    const messages = userMessages.map(m => ({
-      role: m.role === 'assistant' ? 'assistant' : 'user',
-      content: m.content
-    }));
+    const systemPrompt = await buildSystemPrompt(scope, entity);
 
-    // Ajoute les images au dernier message user
-    if (imageBlocks.length > 0) {
-      const lastIdx = messages.length - 1;
-      const last = messages[lastIdx];
-      if (last && last.role === 'user') {
-        const textContent = typeof last.content === 'string' ? last.content : '';
-        messages[lastIdx] = {
-          role: 'user',
-          content: [
-            { type: 'text', text: textContent || 'Analyse cette/ces image(s).' },
-            ...imageBlocks
-          ]
-        };
-      }
-    }
+    // Stream SSE
+    const encoder = new TextEncoder();
+    const readable = new ReadableStream({
+      async start(controller) {
+        const send = (obj) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+        let fullText = '';
+        let proposedAction = null;
 
-    const MAX_ITERATIONS = 4;
-    let finalMessage = null;
-    let proposedAction = null;
+        try {
+          const MAX_ITER = 4;
+          for (let iter = 0; iter < MAX_ITER; iter++) {
+            const stream = anthropic.messages.stream({
+              model: MODEL, max_tokens: 2000, system: systemPrompt, tools, messages: apiMessages,
+            });
 
-    for (let i = 0; i < MAX_ITERATIONS; i++) {
-      const response = await anthropic.messages.create({
-        model: MODEL,
-        max_tokens: 1500,
-        system: systemPromptText,
-        tools,
-        messages
-      });
+            // Streame le texte au fil de l'eau
+            stream.on('text', (delta) => {
+              fullText += delta;
+              send({ type: 'delta', text: delta });
+            });
 
-      // Cherche les blocs tool_use dans la réponse
-      const toolUseBlocks = (response.content || []).filter(b => b.type === 'tool_use');
+            const finalMsg = await stream.finalMessage();
+            const toolUseBlocks = (finalMsg.content || []).filter(b => b.type === 'tool_use');
 
-      if (toolUseBlocks.length > 0) {
-        // On rejoue le message assistant (avec ses tool_use) dans l'historique
-        messages.push({ role: 'assistant', content: response.content });
-
-        // Puis on construit un message user contenant les tool_result
-        const toolResults = [];
-        for (const block of toolUseBlocks) {
-          const toolName = block.name;
-          const toolArgs = block.input || {};
-          console.log(`[assistant/chat] Tool call: ${toolName}`, toolArgs);
-          const toolResult = await executeTool(toolName, toolArgs);
-
-          if (toolResult?.proposed) {
-            proposedAction = {
-              type: toolResult.type,
-              summary: toolResult.summary,
-              fields: toolResult.fields,
-              data: toolResult.data,
-              warnings: toolResult.warnings || null,
-              missing: toolResult.missing || null
-            };
+            if (toolUseBlocks.length > 0) {
+              apiMessages.push({ role: 'assistant', content: finalMsg.content });
+              const toolResults = [];
+              for (const block of toolUseBlocks) {
+                const result = await executeTool(block.name, block.input || {});
+                if (result?.proposed) {
+                  proposedAction = {
+                    type: result.type, summary: result.summary, fields: result.fields,
+                    data: result.data, warnings: result.warnings || null, missing: result.missing || null,
+                  };
+                }
+                toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) });
+              }
+              // Une proposition suffit : on l'envoie et on sort (évite le double appel)
+              if (proposedAction) {
+                send({ type: 'proposed_action', action: proposedAction });
+                break;
+              }
+              apiMessages.push({ role: 'user', content: toolResults });
+              continue;
+            }
+            // Pas d'outil → fin
+            break;
           }
 
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: block.id,
-            content: JSON.stringify(toolResult)
-          });
+          // Sauvegarde l'historique
+          const newHistory = [
+            ...history,
+            { role: 'user', content: userVisibleLabel, action: actionKey, ts: new Date().toISOString() },
+            { role: 'assistant', content: fullText, proposed_action: proposedAction, ts: new Date().toISOString() },
+          ];
+          await saveConversation(scope, entity_id, user.id, newHistory);
+
+          send({ type: 'done' });
+          controller.close();
+        } catch (err) {
+          console.error('[ai/chat stream]', err);
+          send({ type: 'error', error: err.message });
+          controller.close();
         }
+      },
+    });
 
-        // Si une proposition a été générée, on sort immédiatement :
-        // la carte de proposition se suffit à elle-même, pas besoin d'un 2e appel
-        // Sonnet pour "reformuler" (c'est ce 2e appel qui faisait timeout).
-        if (proposedAction) {
-          finalMessage = '';
-          break;
-        }
-
-        messages.push({ role: 'user', content: toolResults });
-        continue;
-      }
-
-      // Pas de tool_use → réponse textuelle finale
-      finalMessage = (response.content || [])
-        .filter(b => b.type === 'text')
-        .map(b => b.text)
-        .join('\n')
-        .trim();
-      break;
-    }
-
-    if (finalMessage === null) {
-      // Limite d'itérations atteinte mais on a peut-être une proposition à renvoyer
-      finalMessage = proposedAction ? '' : 'Limite d\'itérations atteinte';
-    }
-
-    const result = { message: finalMessage, role: 'assistant' };
-    if (proposedAction) result.proposed_action = proposedAction;
-
-    return NextResponse.json(result);
-
+    return new Response(readable, {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', 'Connection': 'keep-alive' },
+    });
   } catch (e) {
-    console.error('[assistant/chat] Erreur:', e);
-    return NextResponse.json({ error: 'Erreur serveur', detail: e.message }, { status: 500 });
+    console.error('[ai/chat] crash', e);
+    return jsonResponse({ ok: false, error: 'Erreur serveur', details: e.message }, 500);
   }
+}
+
+function jsonResponse(obj, status) {
+  return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json' } });
 }
