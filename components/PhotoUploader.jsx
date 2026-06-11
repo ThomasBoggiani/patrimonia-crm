@@ -6,7 +6,6 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { compressImage } from '@/lib/photo-utils';
-import { compressImage } from '@/lib/image-compress';
 
 // ─────────────────────────────────────────────────────────────────
 // @dnd-kit imports
@@ -74,8 +73,7 @@ export default function PhotoUploader({ mandatId, photos = [], onChange, storage
   // ─────────────────────────────────────────────────────────────
   // Upload sur Supabase Storage
   // ─────────────────────────────────────────────────────────────
-  async function uploadToSupabase(rawFile) {
-    const file = await compressImage(rawFile);
+  async function uploadToSupabase(file) {
     const fileName = `${mandatId}/${Date.now()}-${file.name || 'photo.jpg'}`.replace(/[^a-zA-Z0-9._/-]/g, '-');
     const { data, error } = await supabase.storage
       .from('mandat-photos')
