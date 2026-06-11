@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { Plus, Trash2, ExternalLink, Video, Globe, AlertCircle, Loader2, Image as ImageIcon, FileText, Star, GripVertical, Upload } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { compressImage } from '@/lib/image-compress';
 
 // ─────────────────────────────────────────────────────────
 // Détection plateforme + URL d'embed
@@ -175,10 +176,11 @@ function PhotosTab({ mandat, photos, onChange, saving }) {
       const newPhotos = [];
       for (const file of files) {
         if (!file.type.startsWith('image/')) continue;
-        const cleanName = (file.name || 'photo').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const compressed = await compressImage(file);
+        const cleanName = (compressed.name || 'photo').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
         const path = `${mandat.id}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${cleanName}`;
-        const { error: upErr } = await supabase.storage.from('mandat-photos').upload(path, file, {
-          contentType: file.type || 'image/jpeg',
+        const { error: upErr } = await supabase.storage.from('mandat-photos').upload(path, compressed, {
+          contentType: compressed.type || 'image/jpeg',
           upsert: false,
         });
         if (upErr) { console.error('Upload échoué:', upErr); continue; }
@@ -321,10 +323,11 @@ function PlansTab({ mandat, plans, onChange, onPreview, saving }) {
     try {
       const newPlans = [];
       for (const file of files) {
-        const cleanName = (file.name || 'plan').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const compressed = await compressImage(file);
+        const cleanName = (compressed.name || 'plan').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
         const path = `${mandat.id}/plans/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${cleanName}`;
-        const { error: upErr } = await supabase.storage.from('mandat-photos').upload(path, file, {
-          contentType: file.type || 'application/octet-stream',
+        const { error: upErr } = await supabase.storage.from('mandat-photos').upload(path, compressed, {
+          contentType: compressed.type || 'application/octet-stream',
           upsert: false,
         });
         if (upErr) { console.error('Upload échoué:', upErr); continue; }
