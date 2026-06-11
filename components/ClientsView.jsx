@@ -1022,10 +1022,8 @@ export function ClientForm({ client, onSave, onClose }) {
 // ClientsTab — onglet principal "Contacts"
 // ─────────────────────────────────────────────────────────────────
 
-export default function ClientsTab({ clients, reload, updateClientLocal, mandats, deals, interactions, pendingClientId, onPendingClientConsumed, onOpenMandat }) {
+export default function ClientsTab({ clients, contacts, loadingContacts, loadContacts, reload, updateClientLocal, mandats, deals, interactions, pendingClientId, onPendingClientConsumed, onOpenMandat }) {
   const { user, profile } = useAuth();
-  const [contacts, setContacts] = useState([]);
-  const [loadingContacts, setLoadingContacts] = useState(true);
   const [search, setSearch] = useState('');
   const [filterNature, setFilterNature] = useState('');
   const [filterPosture, setFilterPosture] = useState('');
@@ -1038,25 +1036,8 @@ export default function ClientsTab({ clients, reload, updateClientLocal, mandats
   const [showImport, setShowImport] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
 
-  async function loadContacts() {
-    // Ne montrer le spinner QUE si on n'a pas encore de contacts (1er chargement)
-    setContacts(prev => { if (prev.length === 0) setLoadingContacts(true); return prev; });
-    try {
-      const params = new URLSearchParams();
-      if (search.trim()) params.set('q', search.trim());
-      params.set('limit', '500');
-      const res = await fetch(`/api/contacts?${params.toString()}`);
-      const data = await res.json();
-      setContacts(data?.contacts || []);
-    } catch (e) {
-      console.error('[ContactsTab] load error:', e);
-    } finally {
-      setLoadingContacts(false);
-    }
-  }
-
   useEffect(() => {
-    const h = setTimeout(loadContacts, 250);
+    const h = setTimeout(() => loadContacts(search), 250);
     return () => clearTimeout(h);
   }, [search]);
 
