@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react';
 import { Plus, Trash2, ExternalLink, Video, Globe, AlertCircle, Loader2, Image as ImageIcon, FileText, Star, GripVertical, Upload } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { compressImage } from '@/lib/image-compress';
+import { compressImage } from '@/lib/photo-utils';
 
 // ─────────────────────────────────────────────────────────
 // Détection plateforme + URL d'embed
