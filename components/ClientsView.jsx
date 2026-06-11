@@ -1101,7 +1101,16 @@ export default function ClientsTab({ clients, reload, mandats, deals, interactio
 
   const handleSave = async (clientData) => {
     const snakeData = toSnake(clientData);
-    console.log('[SAVE] zones=', snakeData.zones, ' typologies=', snakeData.typologies_recherchees, ' FULL=', snakeData);
+    // Ne garder que les vraies colonnes de la table clients (évite erreur 400 sur champs parasites comme 'adresse', 'ville')
+    const COLONNES_CLIENTS = [
+      'id', 'nom', 'prenom', 'societe', 'email', 'tel', 'typologie', 'sous_typologie',
+      'nature', 'marche', 'budget_min', 'budget_max', 'surface_min', 'surface_max',
+      'rendement_min', 'zones', 'typologies_recherchees', 'statut', 'maturite',
+      'origine', 'owner', 'notes', 'details_recherche', 'created_by', 'updated_by', 'contact_id'
+    ];
+    Object.keys(snakeData).forEach(k => {
+      if (!COLONNES_CLIENTS.includes(k)) delete snakeData[k];
+    });
     delete snakeData.created_at;
     delete snakeData.updated_at;
 
