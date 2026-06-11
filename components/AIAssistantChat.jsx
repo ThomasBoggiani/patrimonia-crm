@@ -1,14 +1,13 @@
 // components/AIAssistantChat.jsx
 //
-// Assistant Patrimonia - Phase 4.1 UI Chat (v12)
-// + Cartes de proposition d'actions (création de mandat) avec confirmation utilisateur
-// v11 : tous les champs visibles dans la card, warnings affichés, Budget min/max séparés, Recherche éditable
-// v12 : FieldEditor intelligent — selects, boutons, date pickers, cascade typologie/sous-typologie
+// Assistant Patrimonia — v13 : route unifiée /api/ai/chat (streaming SSE + scope mandat/client/global)
+// + persistance serveur (ai_conversations) : l'historique est rechargé à l'ouverture et ne se perd plus.
+// Conserve : cartes de proposition + FieldEditor, exécution via /api/assistant/execute, vocal, PJ.
 
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Sparkles, X, Send, Mic, Loader2, Square, Paperclip, FileText, Image as ImageIcon, Check, ExternalLink, AlertTriangle, Calendar } from 'lucide-react';
+import { Sparkles, X, Send, Mic, Loader2, Square, Paperclip, FileText, Image as ImageIcon, Check, ExternalLink, AlertTriangle, Calendar, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import {
   TYPOLOGIES_CLIENT_TREE,
@@ -22,6 +21,21 @@ const SAGE_DARKER = '#3d4d3d';
 
 const BUCKET = 'assistant-attachments';
 const SIGNED_URL_TTL = 3600;
+
+// ─── Quick actions par scope (libellés des boutons) ───────────────────
+const QUICK_ACTIONS_BY_SCOPE = {
+  mandat: [
+    { key: 'descriptif', label: 'Descriptif' },
+    { key: 'aide_vente', label: 'Aide à la vente' },
+    { key: 'argumentaire', label: 'Argumentaire' },
+    { key: 'email_mandant', label: 'Email mandant' },
+  ],
+  client: [
+    { key: 'synthese_client', label: 'Synthèse' },
+    { key: 'email_relance', label: 'Email de relance' },
+  ],
+  global: [],
+};
 
 // ─── Listes hardcodées (synchro avec les forms du CRM) ─────────────────
 
@@ -60,11 +74,6 @@ function randomKey() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-// =========================================================================
-// Mapping label → clé data pour les champs éditables (couvre tous les types d'action)
-// Si key est un array, c'est un champ composé (ex: Budget → min + max)
-// =========================================================================
-
 const FIELD_KEYS = {
   'Nom': 'nom',
   'Prénom': 'prenom',
@@ -101,21 +110,17 @@ const FIELD_KEYS = {
   'Recherche': 'details_recherche',
   'Owner': 'owner',
   'Responsable': 'owner',
-  'Mandat ID': null, // non éditable
-  'Client ID': null, // non éditable
+  'Mandat ID': null,
+  'Client ID': null,
   'ID mandat': null,
   'ID client': null,
-  'Participants': null, // tableau, non géré simplement
+  'Participants': null,
   'Lié à': null,
-  'Budget': ['budget_min', 'budget_max'] // composé : 2 inputs côte à côte
+  'Budget': ['budget_min', 'budget_max']
 };
 
 const NUMERIC_KEYS = new Set(['prix', 'surface', 'loyers_annuels', 'nb_lots', 'nb_pieces', 'nb_chambres', 'etage', 'budget_min', 'budget_max', 'rendement_min', 'duree_minutes']);
-
-// Clés qui sont des dates (input type="date")
 const DATE_KEYS = new Set(['echeance', 'date_debut', 'date_next_step', 'date_fin']);
-
-// Clés qui doivent être affichées en textarea (long texte)
 const TEXTAREA_KEYS = new Set(['description', 'resume', 'body', 'details_recherche', 'notes']);
 
 function parseNumeric(value) {
@@ -134,7 +139,6 @@ function formatFieldValue(key, value) {
     return '';
   }
   if (DATE_KEYS.has(key) && value) {
-    // Convertit en format YYYY-MM-DD (requis par input type="date")
     if (typeof value === 'string' && value.length >= 10) {
       return value.slice(0, 10);
     }
@@ -147,12 +151,7 @@ function formatFieldValue(key, value) {
   return value || '';
 }
 
-// =========================================================================
-// FieldEditor — composant qui choisit le bon UI selon la clé
-// =========================================================================
-
 function FieldEditor({ fieldKey, value, onChange, disabled, actionType, allData, profiles }) {
-  // ─── Marché : boutons B2B/B2C ────────────────────────────────────────
   if (fieldKey === 'marche') {
     return (
       <div className="flex-1 inline-flex rounded border border-stone-200 overflow-hidden">
@@ -175,7 +174,6 @@ function FieldEditor({ fieldKey, value, onChange, disabled, actionType, allData,
     );
   }
 
-  // ─── Maturité : boutons Chaud/Tiède/Froid ────────────────────────────
   if (fieldKey === 'maturite') {
     return (
       <div className="flex-1 inline-flex rounded border border-stone-200 overflow-hidden">
@@ -199,7 +197,6 @@ function FieldEditor({ fieldKey, value, onChange, disabled, actionType, allData,
     );
   }
 
-  // ─── Priorité : boutons Haute/Moyenne/Basse ──────────────────────────
   if (fieldKey === 'priorite') {
     return (
       <div className="flex-1 inline-flex rounded border border-stone-200 overflow-hidden">
@@ -223,7 +220,6 @@ function FieldEditor({ fieldKey, value, onChange, disabled, actionType, allData,
     );
   }
 
-  // ─── Statut : select (dépend du type d'action client/mandat) ─────────
   if (fieldKey === 'statut') {
     const isMandat = (actionType || '').includes('mandat');
     const options = isMandat ? STATUTS_MANDAT : STATUTS_CLIENT;
@@ -240,7 +236,6 @@ function FieldEditor({ fieldKey, value, onChange, disabled, actionType, allData,
     );
   }
 
-  // ─── Commercialisation : select ──────────────────────────────────────
   if (fieldKey === 'commercialisation') {
     return (
       <select
@@ -255,7 +250,6 @@ function FieldEditor({ fieldKey, value, onChange, disabled, actionType, allData,
     );
   }
 
-  // ─── Typologie client : select TYPOLOGIES_CLIENT_TREE ────────────────
   if (fieldKey === 'typologie') {
     const isClient = (actionType || '').includes('client');
     if (isClient) {
@@ -271,10 +265,8 @@ function FieldEditor({ fieldKey, value, onChange, disabled, actionType, allData,
         </select>
       );
     }
-    // Sinon (mandats), c'est juste un texte libre (rare)
   }
 
-  // ─── Sous-typologie : cascadé sur typologie ──────────────────────────
   if (fieldKey === 'sous_typologie') {
     const parentTypologie = allData?.typologie;
     const subOptions = parentTypologie ? (TYPOLOGIES_CLIENT_TREE[parentTypologie] || []) : [];
@@ -302,7 +294,6 @@ function FieldEditor({ fieldKey, value, onChange, disabled, actionType, allData,
     );
   }
 
-  // ─── Type d'actif (mandat) : select avec optgroups ───────────────────
   if (fieldKey === 'type') {
     const isMandat = (actionType || '').includes('mandat');
     if (isMandat) {
@@ -329,7 +320,6 @@ function FieldEditor({ fieldKey, value, onChange, disabled, actionType, allData,
     }
   }
 
-  // ─── Catégorie contact : select CATEGORIES_CONTACT ───────────────────
   if (fieldKey === 'categorie') {
     return (
       <select
@@ -344,7 +334,6 @@ function FieldEditor({ fieldKey, value, onChange, disabled, actionType, allData,
     );
   }
 
-  // ─── Owner : select des profils ──────────────────────────────────────
   if (fieldKey === 'owner') {
     return (
       <select
@@ -366,7 +355,6 @@ function FieldEditor({ fieldKey, value, onChange, disabled, actionType, allData,
     );
   }
 
-  // ─── Date : input type="date" ────────────────────────────────────────
   if (DATE_KEYS.has(fieldKey)) {
     return (
       <input
@@ -379,7 +367,6 @@ function FieldEditor({ fieldKey, value, onChange, disabled, actionType, allData,
     );
   }
 
-  // ─── Textarea (description, body, notes...) ──────────────────────────
   if (TEXTAREA_KEYS.has(fieldKey)) {
     return (
       <textarea
@@ -392,7 +379,6 @@ function FieldEditor({ fieldKey, value, onChange, disabled, actionType, allData,
     );
   }
 
-  // ─── Email : input type="email" ──────────────────────────────────────
   if (fieldKey === 'email') {
     return (
       <input
@@ -406,7 +392,6 @@ function FieldEditor({ fieldKey, value, onChange, disabled, actionType, allData,
     );
   }
 
-  // ─── Tel : input type="tel" ──────────────────────────────────────────
   if (fieldKey === 'tel') {
     return (
       <input
@@ -420,7 +405,6 @@ function FieldEditor({ fieldKey, value, onChange, disabled, actionType, allData,
     );
   }
 
-  // ─── Default : input text ────────────────────────────────────────────
   return (
     <input
       type="text"
@@ -437,7 +421,6 @@ function FieldEditor({ fieldKey, value, onChange, disabled, actionType, allData,
 // =========================================================================
 
 function ProposalCard({ action, onConfirm, onCancel, executing, executed, executedResult, executedError, profiles }) {
-  // État local des données éditables (initialisé depuis action.data)
   const [editData, setEditData] = useState(() => ({ ...action.data }));
 
   const updateField = (key, value) => {
@@ -451,8 +434,6 @@ function ProposalCard({ action, onConfirm, onCancel, executing, executed, execut
     onConfirm(editData);
   };
 
-  // Champs à afficher (utilise action.fields pour l'ordre)
-  // Chaque champ peut avoir une `key` string OU un array (pour champ composé Budget)
   const editableFields = action.fields
     .map(f => ({ label: f.label, key: FIELD_KEYS[f.label] }))
     .filter(f => f.key !== null && f.key !== undefined);
@@ -464,7 +445,6 @@ function ProposalCard({ action, onConfirm, onCancel, executing, executed, execut
         {action.summary || 'Action proposée'}
       </div>
 
-      {/* Warnings (champs recommandés manquants) */}
       {!executed && action.warnings && (
         <div className="flex items-start gap-1.5 px-2 py-1.5 mb-2 rounded-lg bg-amber-50 text-amber-800 text-xs">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
@@ -472,7 +452,6 @@ function ProposalCard({ action, onConfirm, onCancel, executing, executed, execut
         </div>
       )}
 
-      {/* Missing (champs obligatoires manquants - bloque la création) */}
       {!executed && action.missing && (
         <div className="flex items-start gap-1.5 px-2 py-1.5 mb-2 rounded-lg bg-red-50 text-red-800 text-xs">
           <X className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
@@ -483,7 +462,6 @@ function ProposalCard({ action, onConfirm, onCancel, executing, executed, execut
       {!executed ? (
         <div className="space-y-1.5 mb-3">
           {editableFields.map((f) => {
-            // Champ composé (ex: Budget = budget_min + budget_max)
             if (Array.isArray(f.key)) {
               return (
                 <div key={f.label} className="flex items-center gap-2 text-xs">
@@ -510,7 +488,6 @@ function ProposalCard({ action, onConfirm, onCancel, executing, executed, execut
                 </div>
               );
             }
-            // Champ simple : utilise FieldEditor
             return (
               <div key={f.key} className="flex items-center gap-2 text-xs">
                 <label className="text-stone-500 w-24 flex-shrink-0">{f.label}</label>
@@ -596,10 +573,10 @@ export default function AIAssistantChat({
   };
 
   // Messages = { role, content?, proposed_action?, action_state? }
-  // action_state : { executing, executed, result, error }
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState('');
@@ -608,10 +585,9 @@ export default function AIAssistantChat({
   const [attachments, setAttachments] = useState([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
 
-  // Profils (commerciaux actifs) — chargés au mount pour le select Owner
   const [profiles, setProfiles] = useState([]);
 
-  // P1d : contexte déduit de l'URL (?tab=mandats&open=<id>)
+  // Contexte déduit de l'URL (?tab=mandats&open=<id>)
   const [liveContext, setLiveContext] = useState(null);
   useEffect(() => {
     if (!open || typeof window === 'undefined') return;
@@ -627,7 +603,6 @@ export default function AIAssistantChat({
           if (!cancelled && data) setLiveContext({ type: 'mandat', data });
         }
         if (tab === 'clients' || tab === 'contacts') {
-          // Pas d'id dans l'URL pour les clients : on lit le nom affiché en titre
           const h1 = document.querySelector('h1');
           const titre = h1 ? h1.textContent.split('·')[0].trim() : '';
           if (titre) {
@@ -649,6 +624,14 @@ export default function AIAssistantChat({
   }, [open]);
   const activeContext = liveContext || context;
 
+  // ─── Scope + entity_id déduits du contexte actif ────────────────────
+  const scope = activeContext?.type === 'mandat' ? 'mandat'
+    : activeContext?.type === 'client' ? 'client'
+    : 'global';
+  const entityId = (scope === 'global') ? null : (activeContext?.data?.id || null);
+
+  const quickActions = QUICK_ACTIONS_BY_SCOPE[scope] || [];
+
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -656,7 +639,7 @@ export default function AIAssistantChat({
   const audioChunksRef = useRef([]);
   const speechRecognitionRef = useRef(null);
 
-  // ─── Chargement profils au premier ouverture ────────────────────────
+  // ─── Chargement profils à la première ouverture ─────────────────────
   useEffect(() => {
     if (!open || profiles.length > 0) return;
     supabase.from('profiles').select('id, prenom, nom').eq('actif', true).order('prenom')
@@ -664,15 +647,62 @@ export default function AIAssistantChat({
       .catch(e => console.warn('[AIAssistantChat] profiles load failed:', e));
   }, [open]);
 
+  // ─── Token helper ────────────────────────────────────────────────────
+  async function getToken() {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token || '';
+  }
+
+  // ─── Chargement de l'historique persistant (mode:'load') ─────────────
+  // Se déclenche à l'ouverture ET à chaque changement de scope/entité.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      setLoadingHistory(true);
+      try {
+        const token = await getToken();
+        const res = await fetch('/api/ai/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, scope, entity_id: entityId, mode: 'load' })
+        });
+        const data = await res.json();
+        if (!cancelled && data.ok && Array.isArray(data.messages)) {
+          // On reconstruit les messages d'affichage depuis l'historique persistant
+          const restored = data.messages.map(m => {
+            const msg = { role: m.role, content: m.content || '' };
+            if (m.proposed_action) {
+              msg.proposed_action = m.proposed_action;
+              // Une action rechargée depuis l'historique est considérée comme déjà traitée
+              msg.action_state = { executing: false, executed: true, result: { label: '' } };
+            }
+            return msg;
+          });
+          setMessages(restored);
+        } else if (!cancelled) {
+          setMessages([]);
+        }
+      } catch (e) {
+        console.warn('[AIAssistantChat] load history failed:', e);
+        if (!cancelled) setMessages([]);
+      } finally {
+        if (!cancelled) setLoadingHistory(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, scope, entityId]);
+
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, loading]);
 
+  // NOTE : on ne vide PLUS les messages à la fermeture (l'historique est persistant
+  // et rechargé via mode:'load' à la réouverture). On nettoie juste l'input/PJ.
   useEffect(() => {
     if (!open) {
-      setMessages([]);
       setInput('');
       setLiveTranscript('');
       setInputBeforeRecord('');
@@ -743,60 +773,128 @@ export default function AIAssistantChat({
   const removeAttachment = (idx) => setAttachments(prev => prev.filter((_, i) => i !== idx));
 
   // ========================================================================
-  // ENVOI MESSAGE
+  // ENVOI MESSAGE — route unifiée /api/ai/chat en STREAMING
   // ========================================================================
 
-  const sendMessage = async () => {
-    const text = input.trim();
-    if ((!text && attachments.length === 0) || loading) return;
+  // Lit un flux SSE et appelle onEvent pour chaque {type, ...}
+  async function readStream(res, onEvent) {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+      for (const part of parts) {
+        const line = part.trim();
+        if (!line.startsWith('data:')) continue;
+        const json = line.slice(5).trim();
+        if (!json) continue;
+        try { onEvent(JSON.parse(json)); } catch (e) { /* ignore parse partiel */ }
+      }
+    }
+  }
 
-    const userMsg = {
-      role: 'user',
-      content: text || (attachments.length > 0 ? '(pièces jointes uniquement)' : '')
-    };
-    const newMessages = [...messages, userMsg];
-    setMessages(newMessages);
+  // Envoie soit un message texte, soit une quick action
+  const sendToAssistant = async ({ text, action }) => {
+    if (loading) return;
+
+    // Message user affiché
+    const userLabel = action
+      ? `[Action] ${(quickActions.find(a => a.key === action)?.label) || action}`
+      : (text || (attachments.length > 0 ? '(pièces jointes uniquement)' : ''));
+
+    const userMsg = { role: 'user', content: userLabel };
+    setMessages(prev => [...prev, userMsg]);
+
     const currentAttachments = attachments;
     setInput('');
     setAttachments([]);
     if (inputRef.current) inputRef.current.style.height = 'auto';
     setLoading(true);
 
+    // Bulle assistant qui se remplit au fil du stream
+    let assistantIdx = -1;
+    setMessages(prev => {
+      assistantIdx = prev.length;
+      return [...prev, { role: 'assistant', content: '' }];
+    });
+
     try {
-      const payload = { messages: newMessages.map(m => ({ role: m.role, content: m.content })) };
-      if (activeContext) payload.context = activeContext;
+      const token = await getToken();
+      const payload = { token, scope, entity_id: entityId };
+      if (action) payload.action = action;
+      else payload.message = text;
       if (currentAttachments.length > 0) {
-        payload.attachments = currentAttachments.map(a => ({
-          name: a.name, type: a.type, signedUrl: a.signedUrl
-        }));
+        payload.attachments = currentAttachments.map(a => ({ name: a.name, type: a.type, signedUrl: a.signedUrl }));
       }
 
-      const res = await fetch('/api/assistant/chat', {
+      const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      if (!res.ok) throw new Error(await res.text() || 'Erreur serveur');
+      if (!res.ok || !res.body) throw new Error((await res.text().catch(() => '')) || 'Erreur serveur');
 
-      const data = await res.json();
-      const assistantMsg = {
-        role: 'assistant',
-        content: data.message || '(réponse vide)'
-      };
-      if (data.proposed_action) {
-        assistantMsg.proposed_action = data.proposed_action;
-        assistantMsg.action_state = { executing: false, executed: false };
-      }
-      setMessages(prev => [...prev, assistantMsg]);
+      let acc = '';
+      let proposal = null;
+      await readStream(res, (evt) => {
+        if (evt.type === 'delta') {
+          acc += evt.text || '';
+          setMessages(prev => {
+            const copy = [...prev];
+            if (copy[assistantIdx]) copy[assistantIdx] = { ...copy[assistantIdx], content: acc };
+            return copy;
+          });
+        } else if (evt.type === 'proposed_action') {
+          proposal = evt.action;
+          setMessages(prev => {
+            const copy = [...prev];
+            if (copy[assistantIdx]) copy[assistantIdx] = {
+              ...copy[assistantIdx],
+              proposed_action: proposal,
+              action_state: { executing: false, executed: false }
+            };
+            return copy;
+          });
+        } else if (evt.type === 'error') {
+          throw new Error(evt.error || 'Erreur du flux');
+        }
+      });
+
+      // Si rien n'a été streamé ni proposé
+      setMessages(prev => {
+        const copy = [...prev];
+        if (copy[assistantIdx] && !copy[assistantIdx].content && !copy[assistantIdx].proposed_action) {
+          copy[assistantIdx] = { ...copy[assistantIdx], content: '(réponse vide)' };
+        }
+        return copy;
+      });
     } catch (err) {
       console.error('[AIAssistantChat] Erreur:', err);
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: '⚠️ Erreur : ' + (err.message || 'impossible de joindre l\'assistant')
-      }]);
+      setMessages(prev => {
+        const copy = [...prev];
+        if (copy[assistantIdx]) {
+          copy[assistantIdx] = { role: 'assistant', content: '⚠️ Erreur : ' + (err.message || 'impossible de joindre l\'assistant') };
+        }
+        return copy;
+      });
     } finally {
       setLoading(false);
     }
+  };
+
+  const sendMessage = () => {
+    const text = input.trim();
+    if ((!text && attachments.length === 0) || loading) return;
+    sendToAssistant({ text });
+  };
+
+  const runQuickAction = (actionKey) => {
+    if (loading) return;
+    sendToAssistant({ action: actionKey });
   };
 
   const handleKeyDown = (e) => {
@@ -807,7 +905,27 @@ export default function AIAssistantChat({
   };
 
   // ========================================================================
-  // CONFIRMATION D'UNE ACTION
+  // EFFACER LA CONVERSATION (mode:'clear')
+  // ========================================================================
+  const clearConversation = async () => {
+    if (loading) return;
+    if (!confirm('Effacer tout l\'historique de cette conversation ?')) return;
+    try {
+      const token = await getToken();
+      await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, scope, entity_id: entityId, mode: 'clear' })
+      });
+      setMessages([]);
+    } catch (e) {
+      console.warn('[AIAssistantChat] clear failed:', e);
+      alert('Impossible d\'effacer la conversation : ' + e.message);
+    }
+  };
+
+  // ========================================================================
+  // CONFIRMATION D'UNE ACTION (exécution réelle via /api/assistant/execute)
   // ========================================================================
 
   const confirmAction = async (msgIdx, editData) => {
@@ -821,9 +939,7 @@ export default function AIAssistantChat({
     });
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token || '';
-
+      const token = await getToken();
       const finalData = { ...msg.proposed_action.data, ...editData };
 
       const res = await fetch('/api/assistant/execute', {
@@ -900,8 +1016,7 @@ export default function AIAssistantChat({
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         setTranscribing(true);
         try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const token = session?.access_token || '';
+          const token = await getToken();
           const formData = new FormData();
           formData.append('audio', blob, 'voice.webm');
           formData.append('token', token);
@@ -992,6 +1107,10 @@ export default function AIAssistantChat({
   };
   const contextLabel = getContextLabel();
 
+  const assistantTitle = scope === 'mandat' ? 'Assistant du mandat'
+    : scope === 'client' ? 'Assistant du client'
+    : 'Assistant Patrimonia';
+
   const gradientStyle = {
     background: `linear-gradient(to bottom right, ${SAGE_DARK}, ${SAGE_DARKER})`
   };
@@ -1001,7 +1120,7 @@ export default function AIAssistantChat({
       {floating && !open && (
         <button
           onClick={() => setOpen(true)}
-          aria-label="Ouvrir l'Assistant Patrimonia"
+          aria-label="Ouvrir l'assistant"
           style={gradientStyle}
           className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full text-white shadow-xl hover:scale-105 active:scale-95 transition-transform flex items-center justify-center"
         >
@@ -1025,7 +1144,7 @@ export default function AIAssistantChat({
                 <Sparkles className="w-4 h-4 text-white" />
               </div>
               <div className="min-w-0">
-                <div className="text-sm font-semibold text-stone-900">Assistant Patrimonia</div>
+                <div className="text-sm font-semibold text-stone-900">{assistantTitle}</div>
                 {contextLabel ? (
                   <div className="text-xs text-stone-500 truncate" title={contextLabel}>{contextLabel}</div>
                 ) : (
@@ -1033,25 +1152,60 @@ export default function AIAssistantChat({
                 )}
               </div>
             </div>
-            <button
-              onClick={() => setOpen(false)}
-              aria-label="Fermer"
-              className="p-1.5 hover:bg-stone-200 rounded-lg transition-colors flex-shrink-0"
-            >
-              <X className="w-4 h-4 text-stone-600" />
-            </button>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {messages.length > 0 && (
+                <button
+                  onClick={clearConversation}
+                  aria-label="Effacer la conversation"
+                  title="Effacer la conversation"
+                  className="p-1.5 hover:bg-stone-200 rounded-lg transition-colors"
+                >
+                  <Trash2 className="w-4 h-4 text-stone-500" />
+                </button>
+              )}
+              <button
+                onClick={() => setOpen(false)}
+                aria-label="Fermer"
+                className="p-1.5 hover:bg-stone-200 rounded-lg transition-colors"
+              >
+                <X className="w-4 h-4 text-stone-600" />
+              </button>
+            </div>
           </div>
+
+          {/* Quick actions (selon le scope) */}
+          {quickActions.length > 0 && (
+            <div className="px-3 py-2 border-b border-stone-100 bg-white flex-shrink-0 flex gap-1.5 flex-wrap">
+              {quickActions.map(qa => (
+                <button
+                  key={qa.key}
+                  onClick={() => runQuickAction(qa.key)}
+                  disabled={loading || recording || transcribing}
+                  className="px-2.5 py-1 rounded-full text-xs font-medium border border-stone-200 text-stone-700 hover:bg-stone-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {qa.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-stone-50">
-            {messages.length === 0 && (
+            {loadingHistory && (
+              <div className="flex justify-center py-4">
+                <Loader2 className="w-4 h-4 animate-spin text-stone-400" />
+              </div>
+            )}
+
+            {!loadingHistory && messages.length === 0 && (
               <div className="text-center text-stone-400 text-sm mt-12">
                 <Sparkles className="w-6 h-6 mx-auto mb-2 text-stone-300" />
-                <p>Pose-moi une question ou demande-moi de créer un mandat</p>
-                {contextLabel ? (
-                  <p className="text-xs mt-1">Ex : "Donne-moi un résumé"</p>
+                {scope === 'mandat' ? (
+                  <p>Assistant de ce mandat. Demande un descriptif, une aide à la vente, ou pose une question.</p>
+                ) : scope === 'client' ? (
+                  <p>Assistant de ce client. Demande une synthèse, un email de relance, ou les mandats compatibles.</p>
                 ) : (
-                  <p className="text-xs mt-1">Ex : "Crée un mandat 9 rue Hoche à Versailles"</p>
+                  <p>Pose-moi une question ou demande-moi de créer un mandat</p>
                 )}
                 <p className="text-xs mt-3 text-stone-400">Tu peux joindre PDF ou photos.</p>
               </div>
