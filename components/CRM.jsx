@@ -299,6 +299,23 @@ export default function CRM() {
     }
   }
 
+  // Recharge UN SEUL client depuis Supabase et met à jour le state local
+  // (évite loadAll qui recharge tout et casse la navigation / ralentit)
+  async function updateClientLocal(clientId) {
+    if (!clientId) return;
+    try {
+      const { data, error } = await supabase.from('clients').select('*').eq('id', clientId).maybeSingle();
+      if (error || !data) return;
+      const updated = toCamel(data);
+      setClients(prev => {
+        const exists = prev.some(c => c.id === clientId);
+        return exists ? prev.map(c => c.id === clientId ? updated : c) : [updated, ...prev];
+      });
+    } catch (e) {
+      console.warn('[updateClientLocal] error:', e.message);
+    }
+  }
+
   // (QW1) Listener 'patrimonia:action-executed' redondant supprimé :
   // le premier useEffect (onActionExecuted) recharge déjà via loadAll() puis redirige.
   
