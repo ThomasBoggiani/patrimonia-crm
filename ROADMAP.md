@@ -176,3 +176,6 @@ assistant-attachments, avatars, mandat-assets, mandat-docs, mandat-photos, manda
 ---
 
 **Dernière mise à jour** : 24/05/2026 (fin Sprint 1)
+
+
+<!-- test deploy 15 juin -->
