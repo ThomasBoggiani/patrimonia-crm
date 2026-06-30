@@ -73,7 +73,7 @@ export async function POST(request, { params }) {
     if (expired && integ.refresh_token) {
       try {
         const refreshed = await refreshAccessToken({
-          clientId: process.env.DROPBOX_APP_KEY,
+          clientId: process.env.DROPBOX_APP_KEY || process.env.NEXT_PUBLIC_DROPBOX_APP_KEY,
           clientSecret: process.env.DROPBOX_APP_SECRET,
           refreshToken: integ.refresh_token,
         });

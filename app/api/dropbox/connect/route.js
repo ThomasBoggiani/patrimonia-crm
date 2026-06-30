@@ -24,7 +24,7 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
     }
 
-    const clientId = process.env.DROPBOX_APP_KEY;
+    const clientId = process.env.DROPBOX_APP_KEY || process.env.NEXT_PUBLIC_DROPBOX_APP_KEY;
     if (!clientId) {
       return NextResponse.json({ error: 'Configuration Dropbox manquante (DROPBOX_APP_KEY)' }, { status: 500 });
     }
