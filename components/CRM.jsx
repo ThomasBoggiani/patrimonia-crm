@@ -523,7 +523,7 @@ export default function CRM() {
             {activeTab === 'matching' && <MatchingTab mandats={mandats} clients={clients} deals={deals} reload={loadAll} initialMandatId={pendingMatchingMandatId} onInitialMandatConsumed={() => setPendingMatchingMandatId(null)} />}
             {activeTab === 'todos' && <TodosTab todos={todos} reload={loadAll} mandats={mandats} clients={clients} deals={deals} allProfiles={allProfiles} />}
             {activeTab === 'direction' && <DashboardDirection mandats={mandats} deals={deals} clients={clients} todos={todos} allProfiles={allProfiles} />}
-            {activeTab === 'myprofile' && <MyProfile mandats={mandats} todos={todos} clients={clients} allProfiles={allProfiles} RemunerationComponent={RemunerationTab} onNavigate={(t) => { setActiveTabWithHistory(t); setTabKey(k => k + 1); }} />}
+            {activeTab === 'myprofile' && <MyProfile mandats={mandats} todos={todos} clients={clients} deals={deals} allProfiles={allProfiles} RemunerationComponent={RemunerationTab} DirectionComponent={DashboardDirection} onNavigate={(t) => { setActiveTabWithHistory(t); setTabKey(k => k + 1); }} />}
             {activeTab === 'integrations' && <IntegrationsTab />}
             {activeTab === 'agenda' && <AgendaTab />}
             {activeTab === 'team' && <TeamTab />}
