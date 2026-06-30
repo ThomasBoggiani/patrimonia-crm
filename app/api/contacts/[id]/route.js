@@ -12,13 +12,27 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
+async function verifyToken(token) {
+  if (!token) return null;
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !user) return null;
+  return user;
+}
+
+function getToken(request) {
+  return (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
+}
+
 // ─────────────────────────────────────────────────────────────────
 // GET /api/contacts/[id]
 // Retourne le contact + tous ses liens (mandats + clients)
 // ─────────────────────────────────────────────────────────────────
 
-export async function GET(_request, { params }) {
+export async function GET(request, { params }) {
   try {
+    const user = await verifyToken(getToken(request));
+    if (!user) return NextResponse.json({ error: 'Authentification requise' }, { status: 401 });
+
     const { id } = params;
 
     const [{ data: contact, error: e1 }, { data: mandatLinks, error: e2 }, { data: clientLinks, error: e3 }] =
@@ -59,6 +73,9 @@ export async function GET(_request, { params }) {
 
 export async function PATCH(request, { params }) {
   try {
+    const user = await verifyToken(getToken(request));
+    if (!user) return NextResponse.json({ error: 'Authentification requise' }, { status: 401 });
+
     const { id } = params;
     const body = await request.json();
 
@@ -97,8 +114,11 @@ export async function PATCH(request, { params }) {
 // DELETE /api/contacts/[id]
 // ─────────────────────────────────────────────────────────────────
 
-export async function DELETE(_request, { params }) {
+export async function DELETE(request, { params }) {
   try {
+    const user = await verifyToken(getToken(request));
+    if (!user) return NextResponse.json({ error: 'Authentification requise' }, { status: 401 });
+
     const { id } = params;
 
     const { data: clientLinks } = await supabaseAdmin

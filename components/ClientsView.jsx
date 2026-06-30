@@ -10,6 +10,7 @@ import {
   Search, Plus, Upload, ExternalLink, Paperclip, ChevronRight, User as UserIcon, ArrowLeft,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { apiFetch } from '@/lib/api';
 import { useAuth, getCurrentUserInitials } from '@/lib/auth';
 import { matchMandatsForClient } from '@/lib/matching';
 import {
@@ -591,7 +592,7 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
     const contactId = client.contactId || client.contact_id;
     setLoadingContact(true);
     try {
-      const res = await fetch(`/api/contacts/${contactId}`);
+      const res = await apiFetch(`/api/contacts/${contactId}`);
       const data = await res.json();
       setContactData(data);
       setQualite(data?.contact?.qualite || 'neutre');
@@ -609,7 +610,7 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
     setQualite(newQualite);
     setMotifInactif(newMotif || '');
     try {
-      const res = await fetch(`/api/contacts/${contactId}`, {
+      const res = await apiFetch(`/api/contacts/${contactId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ qualite: newQualite, motif_inactif: newMotif || null }),
@@ -904,7 +905,7 @@ export function ClientForm({ client, onSave, onClose, allProfiles = [] }) {
       const contactId = client?.contactId || client?.contact_id;
       if (!contactId) return;
       try {
-        const res = await fetch(`/api/contacts/${contactId}`);
+        const res = await apiFetch(`/api/contacts/${contactId}`);
         const json = await res.json();
         if (json?.contact?.categorie) {
           setData(d => ({ ...d, categorie: json.contact.categorie }));
@@ -1114,7 +1115,7 @@ export default function ClientsTab({ clients, contacts, loadingContacts, loadCon
 
     if (contactId && categorie !== undefined) {
       try {
-        await fetch(`/api/contacts/${contactId}`, {
+        await apiFetch(`/api/contacts/${contactId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ categorie: categorie || null }),

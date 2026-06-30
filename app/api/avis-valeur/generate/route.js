@@ -16,6 +16,13 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
+async function verifyToken(token) {
+  if (!token) return null;
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !user) return null;
+  return user;
+}
+
 // ─── Helpers de formatage ─────────────────────────────────────────────
 const fmtPrix = (n) => {
   const num = parseFloat(n);
@@ -172,6 +179,10 @@ function buildContext(mandat, avis) {
 
 export async function POST(req) {
   try {
+    const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
+    const user = await verifyToken(token);
+    if (!user) return NextResponse.json({ error: 'Authentification requise' }, { status: 401 });
+
     const { mandatId } = await req.json();
     if (!mandatId) {
       return NextResponse.json({ error: 'mandatId requis' }, { status: 400 });

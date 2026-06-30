@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Search, X, Plus, User, Building2 } from 'lucide-react';
+import { apiFetch } from '@/lib/api';
 
 export default function ContactSelector({ value, onChange, categorie = null, placeholder = 'Rechercher un contact…' }) {
   const [open, setOpen] = useState(false);
@@ -24,7 +25,7 @@ export default function ContactSelector({ value, onChange, categorie = null, pla
       return;
     }
     if (selectedContact && selectedContact.id === value) return;
-    fetch(`/api/contacts/${value}`)
+    apiFetch(`/api/contacts/${value}`)
       .then(r => r.json())
       .then(d => {
         if (d?.contact) setSelectedContact(d.contact);
@@ -53,7 +54,7 @@ export default function ContactSelector({ value, onChange, categorie = null, pla
       if (query.trim()) params.set('q', query.trim());
       if (categorie) params.set('categorie', categorie);
       params.set('limit', '20');
-      fetch(`/api/contacts?${params.toString()}`)
+      apiFetch(`/api/contacts?${params.toString()}`)
         .then(r => r.json())
         .then(d => setResults(d?.contacts || []))
         .catch(() => setResults([]))
@@ -82,7 +83,7 @@ export default function ContactSelector({ value, onChange, categorie = null, pla
     }
     setLoading(true);
     try {
-      const res = await fetch('/api/contacts', {
+      const res = await apiFetch('/api/contacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...draft, categorie }),

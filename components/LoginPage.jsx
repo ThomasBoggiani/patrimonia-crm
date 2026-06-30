@@ -118,7 +118,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-xs text-cream-400 mt-6">
-          Problème de connexion ? Contactez Thomas Boggiani
+          Problème de connexion ? Contactez votre administrateur
         </p>
       </div>
     </div>

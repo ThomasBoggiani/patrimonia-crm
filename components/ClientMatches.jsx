@@ -5,7 +5,7 @@ import { Sparkles, ExternalLink, Send, Building2, MapPin, Check, Circle } from '
 import { matchMandatsForClient } from '@/lib/matching';
 import EmailPreviewModal from './EmailPreviewModal';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/lib/auth';
+import { useAuth, getCurrentUserName } from '@/lib/auth';
 
 export default function ClientMatches({ client, mandats, interactions, onOpenMandat, reload }) {
   const { user, profile } = useAuth();
@@ -106,7 +106,7 @@ export default function ClientMatches({ client, mandats, interactions, onOpenMan
         setEmailDraft({
           to: client.email,
           subject: `Nouveau bien : ${mandat.nom}`,
-          body_html: `<p>Bonjour ${client.prenom},</p><p>${data.reply || 'Je souhaiterais vous présenter ce bien.'}</p><p>Cordialement,<br>Thomas Boggiani</p>`,
+          body_html: `<p>Bonjour ${client.prenom},</p><p>${data.reply || 'Je souhaiterais vous présenter ce bien.'}</p><p>Cordialement,<br>${getCurrentUserName(profile)}</p>`,
           intent: 'presentation_bien'
         });
       }

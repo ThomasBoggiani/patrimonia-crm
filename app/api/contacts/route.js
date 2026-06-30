@@ -13,6 +13,17 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
+async function verifyToken(token) {
+  if (!token) return null;
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !user) return null;
+  return user;
+}
+
+function getToken(request) {
+  return (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
+}
+
 // ─────────────────────────────────────────────────────────────────
 // GET /api/contacts?q=...&categorie=...&role=...
 // Retourne les contacts avec leurs rôles agrégés
@@ -20,6 +31,9 @@ const supabaseAdmin = createClient(
 
 export async function GET(request) {
   try {
+    const user = await verifyToken(getToken(request));
+    if (!user) return NextResponse.json({ error: 'Authentification requise' }, { status: 401 });
+
     const { searchParams } = new URL(request.url);
     const q = searchParams.get('q')?.trim() || '';
     const categorie = searchParams.get('categorie') || null;
@@ -124,6 +138,9 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
+    const user = await verifyToken(getToken(request));
+    if (!user) return NextResponse.json({ error: 'Authentification requise' }, { status: 401 });
+
     const body = await request.json();
     const {
       prenom = null,

@@ -57,15 +57,17 @@ export async function POST(request) {
       });
     }
 
-    // 3. Récupérer le user TB (Thomas Boggiani) comme owner par défaut
-    const { data: tbProfile } = await supabaseAdmin
+    // 3. Responsable par défaut des leads WordPress : Thomas Ezquerra (direction).
+    //    (à transformer en réglage configurable si l'attribution doit évoluer)
+    const { data: ownerProfile } = await supabaseAdmin
       .from('profiles')
-      .select('id')
+      .select('id, prenom, nom')
       .eq('prenom', 'Thomas')
-      .eq('nom', 'Boggiani')
-      .single();
+      .eq('nom', 'Ezquerra')
+      .maybeSingle();
 
-    const tbUserId = tbProfile?.id || null;
+    const ownerUserId = ownerProfile?.id || null;
+    const ownerName = ownerProfile ? `${ownerProfile.prenom} ${ownerProfile.nom}`.trim() : null;
 
     // 4. Création selon le type
     if (type === 'vendeur') {
@@ -112,11 +114,11 @@ export async function POST(request) {
         statut: 'Sourcing',
         commercialisation: 'Off-market',
         
-        pourvoyeur_id: tbUserId,
+        pourvoyeur_id: ownerUserId,
         contact: nom_complet,
         tel: telephone,
         description: message ? `[Lead WordPress] ${message}` : '[Lead WordPress] Demande d\'estimation',
-        created_by: tbUserId,
+        created_by: ownerUserId,
       }).select().single();
 
       if (mErr) {
@@ -133,9 +135,9 @@ export async function POST(request) {
         priorite: 'Haute',
         statut: 'À faire',
         echeance: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10), // demain
-        assignee: 'Thomas Boggiani',
-        assigned_to_user_id: tbUserId,
-        created_by: tbUserId,
+        assignee: ownerName,
+        assigned_to_user_id: ownerUserId,
+        created_by: ownerUserId,
         lien_type: 'mandat',
         lien_id: mandat.id,
       });
@@ -144,7 +146,7 @@ export async function POST(request) {
         ok: true,
         type: 'vendeur',
         mandatId: mandat.id,
-        message: 'Mandat créé + tâche assignée à TB',
+        message: 'Mandat créé + tâche assignée à la direction',
       }), { status: 200, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } });
     }
 
@@ -198,7 +200,7 @@ export async function POST(request) {
         typologies_recherchees: typologies ? typologies.split(',').map(t => t.trim()) : [],
         notes: message ? `[Lead WordPress] ${message}` : '[Lead WordPress]',
         
-        created_by: tbUserId,
+        created_by: ownerUserId,
       }).select().single();
 
       if (cErr) {
@@ -215,9 +217,9 @@ export async function POST(request) {
         priorite: 'Haute',
         statut: 'À faire',
         echeance: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-        assignee: 'Thomas Boggiani',
-        assigned_to_user_id: tbUserId,
-        created_by: tbUserId,
+        assignee: ownerName,
+        assigned_to_user_id: ownerUserId,
+        created_by: ownerUserId,
         lien_type: 'client',
         lien_id: client.id,
       });
@@ -226,7 +228,7 @@ export async function POST(request) {
         ok: true,
         type: 'acheteur',
         clientId: client.id,
-        message: 'Client créé + tâche assignée à TB',
+        message: 'Client créé + tâche assignée à la direction',
       }), { status: 200, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } });
     }
   } catch (err) {

@@ -5,6 +5,7 @@ import {
   List, LayoutGrid, Search, Trash2, Sparkles, CheckCircle2, Plus, AlertTriangle, Loader2
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { apiFetch } from '@/lib/api';
 import { formatPrix, formatPrixCompact, STATUTS_DEAL } from '@/lib/crm-constants';
 import { MaturiteBadge } from '@/components/crm/SharedComponents';
 import { matchClientsForMandat, filterAcheteurs } from '@/lib/matching';
@@ -178,7 +179,7 @@ export function MatchingTab({ mandats, clients, deals, reload, initialMandatId, 
     async function loadContacts() {
       setLoadingContacts(true);
       try {
-        const res = await fetch('/api/contacts?limit=500');
+        const res = await apiFetch('/api/contacts?limit=500');
         const data = await res.json();
         const map = {};
         (data?.contacts || []).forEach(c => { map[c.id] = c; });

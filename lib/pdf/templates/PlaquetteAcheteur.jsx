@@ -40,33 +40,7 @@ import {
   ensureAbsoluteUrl,
 } from '../helpers';
 import { LOGO_IP_BASE64 } from '../logo-base64';
-
-// ─── Couleurs lignes RATP/IDFM ─────────────────────────────────────
-const LINE_COLORS = {
-  '1': '#FFCE00', '2': '#0064B0', '3': '#9F9825', '3bis': '#98D4E2',
-  '4': '#C04191', '5': '#F28E42', '6': '#83C491', '7': '#F3A4BA',
-  '7bis': '#83C491', '8': '#CEADD2', '9': '#D5C900', '10': '#E3B32A',
-  '11': '#8D5E2A', '12': '#00814F', '13': '#98D4E2', '14': '#662483',
-  '15': '#B90845', '16': '#F3A4BA', '17': '#D5C900', '18': '#00A88F',
-  'A': '#E2231A', 'B': '#7BA3DC', 'C': '#FFCE00', 'D': '#00A88F', 'E': '#BE418D',
-  'RER A': '#E2231A', 'RER B': '#7BA3DC', 'RER C': '#FFCE00', 'RER D': '#00A88F', 'RER E': '#BE418D',
-  'T1': '#0055B7', 'T2': '#B7DA4D', 'T3a': '#FF5A00', 'T3b': '#7B388C',
-  'T4': '#E5004C', 'T5': '#662F8F', 'T6': '#E5004B', 'T7': '#FBA60D',
-  'T8': '#5A0F47', 'T9': '#BB1D58', 'T10': '#6BCBA0', 'T11': '#FFCD00',
-  'T12': '#185CAB', 'T13': '#FF5A00',
-};
-
-const LINE_TEXT_COLORS = { '1': '#000', '8': '#000', '9': '#000', '6': '#000' };
-
-function getLineColor(line, mode) {
-  if (!line) return null;
-  const clean = String(line).trim().toUpperCase();
-  if (LINE_COLORS[clean]) return LINE_COLORS[clean];
-  const lower = String(line).trim();
-  if (LINE_COLORS[lower]) return LINE_COLORS[lower];
-  if (mode === 'bus') return '#5A4A8A';
-  return null;
-}
+import { getLineColor, LINE_TEXT_COLORS } from '../../transit-colors';
 
 function LineBadge({ line, mode }) {
   const bgColor = getLineColor(line, mode) || '#888';
