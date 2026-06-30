@@ -186,12 +186,40 @@ export async function POST(request) {
       const prenom = parts[0] || 'Lead';
       const nom = parts.slice(1).join(' ') || 'WordPress';
 
+      // Source unique = contacts : trouver/créer le contact avant le client
+      const emailNormalized = (email || '').toLowerCase().trim() || null;
+      let contactId = null;
+      if (emailNormalized) {
+        const { data: existingContact } = await supabaseAdmin
+          .from('contacts').select('id').eq('email', emailNormalized).maybeSingle();
+        if (existingContact?.id) contactId = existingContact.id;
+      }
+      if (!contactId) {
+        const { data: newContact, error: ctErr } = await supabaseAdmin
+          .from('contacts')
+          .insert({
+            prenom,
+            nom,
+            societe: societe || null,
+            email: emailNormalized,
+            tel: telephone || null,
+            postures: ['acheteur'],
+            categorie: 'autre',
+            qualite: 'neutre',
+            created_by: ownerUserId,
+          })
+          .select('id').single();
+        if (ctErr) console.error('[wordpress-leads] Erreur création contact:', ctErr);
+        else contactId = newContact.id;
+      }
+
       const { data: client, error: cErr } = await supabaseAdmin.from('clients').insert({
         prenom,
         nom,
         societe: societe || null,
-        email: email || null,
+        email: emailNormalized,
         tel: telephone || null,
+        contact_id: contactId,
         typologie: 'Investisseur',
         statut: 'Actif',
         budget_min: parseFloat(budget_min) || null,
@@ -199,7 +227,7 @@ export async function POST(request) {
         zones: zones ? zones.split(',').map(z => z.trim()) : [],
         typologies_recherchees: typologies ? typologies.split(',').map(t => t.trim()) : [],
         notes: message ? `[Lead WordPress] ${message}` : '[Lead WordPress]',
-        
+
         created_by: ownerUserId,
       }).select().single();
 

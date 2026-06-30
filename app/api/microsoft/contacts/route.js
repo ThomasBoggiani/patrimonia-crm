@@ -109,29 +109,56 @@ export async function POST(request) {
           continue;
         }
 
+        const emailNormalized = (email || '').toLowerCase().trim();
+        const tel = contact.mobilePhone || contact.businessPhones?.[0] || null;
+
         // Vérifier si déjà dans le CRM
         const { data: existing } = await adminSupabase
           .from('clients')
           .select('id')
-          .eq('email', email)
+          .eq('email', emailNormalized)
           .maybeSingle();
-        
+
         if (existing) {
           skipped++;
           continue;
         }
 
+        // Source unique = contacts : trouver/créer le contact avant le client
+        let linkedContactId = null;
+        const { data: existingContact } = await adminSupabase
+          .from('contacts').select('id').eq('email', emailNormalized).maybeSingle();
+        if (existingContact?.id) {
+          linkedContactId = existingContact.id;
+        } else {
+          const { data: newContact, error: ctErr } = await adminSupabase
+            .from('contacts')
+            .insert({
+              prenom: contact.givenName || null,
+              nom: contact.surname || contact.displayName || 'Sans nom',
+              societe: contact.companyName || null,
+              email: emailNormalized,
+              tel,
+              postures: ['acheteur'],
+              categorie: 'autre',
+              qualite: 'neutre',
+              created_by: user.id,
+            })
+            .select('id').single();
+          if (ctErr) console.error('[microsoft-contacts] Erreur création contact:', ctErr);
+          else linkedContactId = newContact.id;
+        }
+
         // Créer le client
         const { error } = await adminSupabase.from('clients').insert({
-          prenom: contact.givenName || '',
-          nom: contact.surname || contact.displayName || '',
-          email: email,
-          telephone: contact.mobilePhone || contact.businessPhones?.[0] || null,
+          prenom: contact.givenName || null,
+          nom: contact.surname || contact.displayName || 'Sans nom',
+          email: emailNormalized,
+          tel,
           societe: contact.companyName || null,
-          fonction: contact.jobTitle || null,
+          contact_id: linkedContactId,
           source: 'Outlook',
           outlook_contact_id: contact.id,
-          actif: true,
           created_by: user.id
         });
         
