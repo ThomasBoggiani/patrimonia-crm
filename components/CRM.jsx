@@ -1226,7 +1226,7 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
               return (
                 <tr key={m.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer group" onClick={() => { setSelectedMandat(m); const url = new URL(window.location.href); url.searchParams.set('tab', 'mandats'); url.searchParams.set('open', m.id); window.history.pushState({ tab: 'mandats', open: m.id }, '', url.toString()); }}>
                   <td className="px-3 py-2">
-                    <div className="w-32 h-20 rounded-lg overflow-hidden bg-cream-100 flex-shrink-0">
+                    <div className="w-44 h-28 rounded-lg overflow-hidden bg-cream-100 flex-shrink-0">
                       {photoUrl ? (
                         <img src={photoUrl} alt={m.nom} className="w-full h-full object-cover" />
                       ) : (
