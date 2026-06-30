@@ -2360,8 +2360,8 @@ async function handleFolderImport(event) {
 // ═══════════════════════════════════════════════════════════════════
 // EtatLocatifEditor — Tableau de saisie des lots (version enrichie)
 // Tableau large avec scroll horizontal
-// Champs : Lot, Type, Surface, Locataire, Loyer mois/an, Charges récup mois, Charges non récup an,
-//          Début bail, Durée, Échéance (auto), Loyer potentiel mois, Statut
+// Champs : Lot, Type, Surface, Locataire, Loyer mois/an, Loyer optimisé mois (= potentiel),
+//          Charges récup mois, Charges non récup an, Début bail, Durée, Échéance (auto), Statut
 // ═══════════════════════════════════════════════════════════════════
 function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
   const safeLots = Array.isArray(lots) ? lots : [];
@@ -2434,12 +2434,12 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
                   <th className="px-2 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Locataire</th>
                   <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Loyer €/mois</th>
                   <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Loyer €/an</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-amber-700 uppercase whitespace-nowrap bg-amber-50/50" title="Loyer optimisé : potentiel après revalorisation ou relocation. Sert au calcul du rendement optimisé.">Loyer optimisé €/mois</th>
                   <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap" title="Charges récupérables (refacturées au locataire)">Ch. récup. €/mois</th>
                   <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap" title="Charges non récupérables (à la charge du propriétaire)">Ch. non récup. €/an</th>
                   <th className="px-2 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Début bail</th>
                   <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Durée (ans)</th>
                   <th className="px-2 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap" title="Calculée automatiquement depuis début + durée. Modifiable.">Échéance</th>
-                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap" title="Loyer potentiel après revalorisation ou relocation">Loyer potentiel €/mois</th>
                   <th className="px-2 py-2 text-center text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Statut</th>
                   <th className="w-8"></th>
                 </tr>
@@ -2460,10 +2460,10 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
                   <td></td>
                   <td className="px-2 py-2 text-xs font-semibold text-right whitespace-nowrap">{sumLoyer > 0 ? `${sumLoyer.toLocaleString('fr-FR')} €` : '—'}</td>
                   <td className="px-2 py-2 text-xs font-semibold text-right whitespace-nowrap">{sumLoyer > 0 ? `${(sumLoyer * 12).toLocaleString('fr-FR')} €` : '—'}</td>
+                  <td className="px-2 py-2 text-xs font-semibold text-right text-amber-700 whitespace-nowrap bg-amber-50/50">{sumLoyerPotentiel > 0 ? `${sumLoyerPotentiel.toLocaleString('fr-FR')} €` : '—'}</td>
                   <td className="px-2 py-2 text-xs font-semibold text-right whitespace-nowrap">{sumChargesRecup > 0 ? `${sumChargesRecup.toLocaleString('fr-FR')} €` : '—'}</td>
                   <td className="px-2 py-2 text-xs font-semibold text-right whitespace-nowrap">{sumChargesNonRecup > 0 ? `${sumChargesNonRecup.toLocaleString('fr-FR')} €` : '—'}</td>
                   <td colSpan={3}></td>
-                  <td className="px-2 py-2 text-xs font-semibold text-right text-amber-700 whitespace-nowrap">{sumLoyerPotentiel > 0 ? `${sumLoyerPotentiel.toLocaleString('fr-FR')} €` : '—'}</td>
                   <td colSpan={2}></td>
                 </tr>
               </tfoot>
@@ -2589,6 +2589,18 @@ function LotRow({ lot, index, onUpdate, onRemove }) {
           className="w-28 px-1.5 py-1 border border-stone-200 rounded text-xs text-right bg-stone-50"
         />
       </td>
+      <td className="px-2 py-1.5 bg-amber-50/40">
+        <input
+          type="number"
+          step="any"
+          value={potMois}
+          onChange={e => setPotMois(e.target.value)}
+          onBlur={commitPotMois}
+          placeholder={loyerMois || '0'}
+          className="w-24 px-1.5 py-1 border border-amber-200 rounded text-xs text-right bg-white"
+          title="Loyer optimisé visé (après travaux ou relocation). Laisser vide = on reprend le loyer actuel."
+        />
+      </td>
       <td className="px-2 py-1.5">
         <input type="number" step="any" value={lot.charges_recup || ''} onChange={e => onUpdate(index, 'charges_recup', parseFloat(e.target.value) || 0)} className="w-24 px-1.5 py-1 border border-stone-200 rounded text-xs text-right" />
       </td>
@@ -2603,17 +2615,6 @@ function LotRow({ lot, index, onUpdate, onRemove }) {
       </td>
       <td className="px-2 py-1.5">
         <input type="date" value={lot.bail_echeance || ''} onChange={e => onUpdate(index, 'bail_echeance', e.target.value)} className="px-1.5 py-1 border border-stone-200 rounded text-xs bg-stone-50" title="Calculée automatiquement, modifiable" />
-      </td>
-      <td className="px-2 py-1.5">
-        <input
-          type="number"
-          step="any"
-          value={potMois}
-          onChange={e => setPotMois(e.target.value)}
-          onBlur={commitPotMois}
-          placeholder={loyerMois || '0'}
-          className="w-24 px-1.5 py-1 border border-stone-200 rounded text-xs text-right"
-        />
       </td>
       <td className="px-2 py-1.5 text-center">
         <select value={lot.statut || 'loué'} onChange={e => onUpdate(index, 'statut', e.target.value)} className="px-1.5 py-1 border border-stone-200 rounded text-xs">
