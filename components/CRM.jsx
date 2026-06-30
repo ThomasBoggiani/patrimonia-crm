@@ -2045,7 +2045,26 @@ async function handleFolderImport(event) {
           {data.id ? (
             <DocumentsInline mandat={data} onUpdate={() => {}} />
           ) : (
-            <p className="text-xs text-stone-500 text-center">Enregistrez le mandat pour pouvoir importer des documents.</p>
+            <div className="text-center py-1">
+              {/* Sprint 4 — création d'un mandat À PARTIR de documents importés (rebranche handleFolderImport) */}
+              <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderImport} />
+              <p className="text-sm font-medium text-stone-800 mb-1">Créez le mandat à partir de vos documents</p>
+              <p className="text-xs text-stone-500 mb-3">Sélectionnez vos fichiers (mandat, DPE, photos, état locatif…). L'IA crée le mandat et pré-remplit les champs automatiquement.</p>
+              <button
+                type="button"
+                onClick={() => folderInputRef.current?.click()}
+                disabled={!!importProgress}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-sage-dark text-white rounded-lg text-sm hover:bg-sage-darker disabled:opacity-50 font-medium"
+              >
+                {importProgress ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileUp className="w-4 h-4" />}
+                {importProgress ? 'Import en cours…' : '📄 Importer des documents'}
+              </button>
+              {importProgress && (
+                <div className="mt-3 text-xs text-stone-600">
+                  {importProgress.current}/{importProgress.total} — {importProgress.fileName}
+                </div>
+              )}
+            </div>
           )}
 
           {importResult && (
