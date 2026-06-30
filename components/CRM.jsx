@@ -1680,6 +1680,18 @@ function MandatsKanban({ mandats, onSelectMandat, reload, secondaryDisplay = 'm2
     </div>
   );
 }
+// Sprint 4 — C1 : pièces du dossier nécessaires à la constitution d'un mandat.
+// category = catégorie de doc utilisée pour ranger la pièce (cf. import-folder).
+const PIECES_DOSSIER = [
+  { key: 'fiche',        label: 'Fiche / mandat',            obligatoire: true,  category: 'mandat',       emoji: '📄' },
+  { key: 'etat_locatif', label: 'État locatif + descriptif', obligatoire: true,  category: 'notes',        emoji: '🏢' },
+  { key: 'dpe',          label: 'DPE',                       obligatoire: true,  category: 'diagnostics',  emoji: '⚡' },
+  { key: 'taxe',         label: 'Taxe foncière',             obligatoire: true,  category: 'autre',        emoji: '🧾' },
+  { key: 'diagnostics',  label: 'Diagnostics (amiante, plomb…)', obligatoire: true, category: 'diagnostics', emoji: '🔬' },
+  { key: 'photos',       label: 'Photos',                    obligatoire: false, category: 'plans_photos', emoji: '🖼️' },
+  { key: 'plans',        label: 'Plans',                     obligatoire: false, category: 'plans_photos', emoji: '📐' },
+];
+
 function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   const { profile } = useAuth();
   const userInitials = (profile?.prenom && profile?.nom) ? getCurrentUserInitials(profile) : 'TB';
@@ -1726,6 +1738,10 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   const [deleting, setDeleting] = useState(false);
   const [merging, setMerging] = useState(false);
   const folderInputRef = React.useRef(null);
+  // Sprint 4 — C1 : check-list des pièces du dossier
+  const [piecesPresent, setPiecesPresent] = useState(new Set());
+  const pieceInputRef = React.useRef(null);
+  const pendingPieceRef = React.useRef(null);
 
   const update = (k, v) => setData({ ...data, [k]: v });
 
@@ -1847,7 +1863,8 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
 // À COPIER ENTIÈREMENT dans MandatForm pour remplacer la version cassée
 // ═══════════════════════════════════════════════════════════════════
 
-async function handleFolderImport(event) {
+async function handleFolderImport(event, opts = {}) {
+  const { pieceKey = null, forcedCategory = null } = opts;
   const files = Array.from(event.target.files || []);
   if (files.length === 0) return;
   setImportResult(null);
@@ -1925,7 +1942,7 @@ async function handleFolderImport(event) {
           body: JSON.stringify({
             token,
             type: 'file_meta',
-            category,
+            category: forcedCategory || category,
             nom: file.name,
             storage_path: storagePath,
             taille_bytes: compressed.size,
@@ -1985,12 +2002,49 @@ async function handleFolderImport(event) {
       categoriesByLabel,
     });
     if (folderInputRef.current) folderInputRef.current.value = '';
+    if (pieceInputRef.current) pieceInputRef.current.value = '';
+    if (pieceKey) {
+      setPiecesPresent(prev => { const s = new Set(prev); s.add(pieceKey); return s; });
+    } else {
+      // Import en vrac : on coche au mieux la check-list selon les catégories détectées
+      const labelToPieces = { 'Mandat': ['fiche'], 'Diagnostics': ['dpe', 'diagnostics'], 'Plans & photos': ['photos', 'plans'], 'Notes': ['etat_locatif'], 'Autre': ['taxe'] };
+      const found = Object.keys(categoriesByLabel).flatMap(l => labelToPieces[l] || []);
+      if (found.length) setPiecesPresent(prev => { const s = new Set(prev); found.forEach(k => s.add(k)); return s; });
+    }
   } catch (e) {
     console.error('[FolderImport] Erreur:', e);
     alert('Erreur : ' + e.message);
     setImportProgress(null);
   }
 }
+
+  // Sprint 4 — C1 : crée une tâche pour chaque pièce OBLIGATOIRE manquante (ne bloque pas).
+  async function createMissingPieceTasks(mandatId) {
+    if (!mandatId) return 0;
+    const manquantes = PIECES_DOSSIER.filter(p => p.obligatoire && !piecesPresent.has(p.key));
+    if (manquantes.length === 0) return 0;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const echeance = new Date();
+      echeance.setDate(echeance.getDate() + 7);
+      const rows = manquantes.map(p => ({
+        titre: `Pièce manquante au dossier : ${p.label}`,
+        priorite: 'Haute',
+        statut: 'À faire',
+        echeance: echeance.toISOString().split('T')[0],
+        assignee: getCurrentUserName(profile),
+        assigned_to_user_id: user?.id || null,
+        created_by: user?.id || null,
+        lien_type: 'mandat',
+        lien_id: mandatId,
+      }));
+      await supabase.from('todos').insert(rows);
+      return manquantes.length;
+    } catch (e) {
+      console.warn('[pieces] création tâches manquantes:', e.message);
+      return 0;
+    }
+  }
 
   async function handleCreateClient(prefillName) {
     setNewClientPrefill(prefillName);
@@ -2042,28 +2096,74 @@ async function handleFolderImport(event) {
 
        {/* Documents : import + lien + Dropbox (composant unifié avec validation IA) */}
         <div className="p-6 border-b border-stone-200 bg-gradient-to-br from-sage-50/70 to-cream-50">
-          {data.id ? (
+          {mandat ? (
             <DocumentsInline mandat={data} onUpdate={() => {}} />
           ) : (
-            <div className="text-center py-1">
-              {/* Sprint 4 — création d'un mandat À PARTIR de documents importés (rebranche handleFolderImport) */}
+            <div>
+              {/* Sprint 4 — C1 : check-list des pièces du dossier (création du mandat) */}
+              <input ref={pieceInputRef} type="file" multiple className="hidden" onChange={e => handleFolderImport(e, { pieceKey: pendingPieceRef.current?.key, forcedCategory: pendingPieceRef.current?.category })} />
               <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderImport} />
-              <p className="text-sm font-medium text-stone-800 mb-1">Créez le mandat à partir de vos documents</p>
-              <p className="text-xs text-stone-500 mb-3">Sélectionnez vos fichiers (mandat, DPE, photos, état locatif…). L'IA crée le mandat et pré-remplit les champs automatiquement.</p>
-              <button
-                type="button"
-                onClick={() => folderInputRef.current?.click()}
-                disabled={!!importProgress}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-sage-dark text-white rounded-lg text-sm hover:bg-sage-darker disabled:opacity-50 font-medium"
-              >
-                {importProgress ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileUp className="w-4 h-4" />}
-                {importProgress ? 'Import en cours…' : '📄 Importer des documents'}
-              </button>
+
+              <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-stone-800">Constituez le dossier — l'IA crée le mandat</p>
+                  <p className="text-xs text-stone-500">Déposez chaque pièce (ou tout en vrac, l'IA range). Une pièce obligatoire manquante deviendra une tâche.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => folderInputRef.current?.click()}
+                  disabled={!!importProgress}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-sage-light text-sage-darker rounded-lg text-xs hover:bg-sage-50 disabled:opacity-50 font-medium flex-shrink-0"
+                >
+                  {importProgress ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileUp className="w-3.5 h-3.5" />}
+                  Tout déposer en vrac
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {PIECES_DOSSIER.map(p => {
+                  const present = piecesPresent.has(p.key);
+                  return (
+                    <div key={p.key} className={`flex items-center gap-3 px-3 py-2 rounded-lg border ${present ? 'border-emerald-200 bg-emerald-50/50' : (p.obligatoire ? 'border-stone-200 bg-white' : 'border-dashed border-stone-300 bg-white')}`}>
+                      <span className="text-lg flex-shrink-0">{p.emoji}</span>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium text-stone-800">{p.label}</span>
+                        {p.obligatoire
+                          ? <span className="text-[10px] text-red-500 ml-1">· obligatoire</span>
+                          : <span className="text-[10px] text-stone-400 ml-1">· recommandé</span>}
+                      </div>
+                      {present ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-emerald-700 flex-shrink-0"><Check className="w-3.5 h-3.5" /> déposé</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => { pendingPieceRef.current = p; pieceInputRef.current?.click(); }}
+                          disabled={!!importProgress}
+                          className="px-3 py-1 text-xs text-sage-darker border border-sage-light rounded-lg hover:bg-sage-50 disabled:opacity-50 flex-shrink-0"
+                        >
+                          Déposer
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
               {importProgress && (
                 <div className="mt-3 text-xs text-stone-600">
                   {importProgress.current}/{importProgress.total} — {importProgress.fileName}
                 </div>
               )}
+
+              {(() => {
+                const oblig = PIECES_DOSSIER.filter(p => p.obligatoire);
+                const okCount = oblig.filter(p => piecesPresent.has(p.key)).length;
+                return (
+                  <div className="mt-2 text-[11px] text-stone-500">
+                    {okCount}/{oblig.length} pièces obligatoires déposées · les manquantes deviendront des tâches à l'enregistrement.
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -2336,7 +2436,7 @@ async function handleFolderImport(event) {
             </div>
           )}
           <button onClick={onClose} className="px-4 py-2 text-sm text-stone-700 hover:bg-cream-200 rounded-lg">Annuler</button>
-          <button onClick={() => onSave(data, [])} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Enregistrer</button>
+          <button onClick={async () => { if (!mandat && data.id) await createMissingPieceTasks(data.id); onSave(data, []); }} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Enregistrer</button>
         </div>
 
         {/* Modale de fusion */}
