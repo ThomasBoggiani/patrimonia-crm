@@ -2831,6 +2831,15 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           <p className="text-stone-500 flex items-center gap-2 text-sm">
             <MapPin className="w-4 h-4" />{mandat.adresse}
           </p>
+          {/* Type de mandat + responsable commercial (remontés dans l'en-tête — Sprint 4 A3) */}
+          <div className="flex items-center gap-2 flex-wrap mt-2">
+            <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-xs font-medium ${commColor}`}>
+              <div className={`w-1.5 h-1.5 rounded-full ${isPublished ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400'}`} title={isPublished ? 'Publié' : 'Non publié'} />
+              <span>{mandat.commercialisation}</span>
+            </div>
+            <span className="text-[10px] uppercase tracking-wider text-stone-400 font-semibold">Resp.</span>
+            <OwnerSelector mandat={mandat} reload={reload} />
+          </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <button onClick={() => setAiAnalyzeOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-gradient-to-br from-sage-100 to-sage-200 text-sage-darker rounded-lg text-sm hover:from-sage-200 hover:to-sage-300 font-medium border border-sage-light" title="Analyser tous les documents du mandat avec l'IA">
@@ -2916,12 +2925,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           <button onClick={() => onOpenEmailDrafts?.(mandat.id)} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Préparer mails personnalisés aux acquéreurs">
             📧 Préparer mails clients
           </button>
-          <div className="flex-1" />
-          <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-xs font-medium ${commColor}`}>
-            <div className={`w-1.5 h-1.5 rounded-full ${isPublished ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400'}`} title={isPublished ? 'Publié' : 'Non publié'} />
-            <span>{mandat.commercialisation}</span>
-          </div>
-          <OwnerSelector mandat={mandat} reload={reload} />
         </div>
       </div>
 
