@@ -24,13 +24,15 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
     }
 
-    const clientId = process.env.DROPBOX_APP_KEY;
+    const clientId = process.env.DROPBOX_APP_KEY || process.env.NEXT_PUBLIC_DROPBOX_APP_KEY;
     if (!clientId) {
       return NextResponse.json({ error: 'Configuration Dropbox manquante (DROPBOX_APP_KEY)' }, { status: 500 });
     }
 
-    const origin = request.headers.get('origin') || request.nextUrl.origin || 'https://patrimonia-crm.vercel.app';
-    const redirectUri = `${origin}/api/dropbox/callback`;
+    // OAuth Dropbox ne marche que sur le domaine enregistré → on fixe la prod
+    // (évite que les previews construisent une redirect_uri non enregistrée).
+    const baseUrl = process.env.APP_BASE_URL || 'https://patrimonia-crm.vercel.app';
+    const redirectUri = `${baseUrl}/api/dropbox/callback`;
     const state = `${user.id}:${generateState()}`;
 
     return NextResponse.redirect(buildAuthorizeUrl({ clientId, redirectUri, state }));

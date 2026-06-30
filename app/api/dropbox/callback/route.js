@@ -14,8 +14,8 @@ const supabaseAdmin = createClient(
 );
 
 export async function GET(request) {
-  const origin = request.nextUrl.origin || 'https://patrimonia-crm.vercel.app';
-  const back = (status) => NextResponse.redirect(`${origin}/?tab=integrations&dropbox=${status}`);
+  const baseUrl = process.env.APP_BASE_URL || 'https://patrimonia-crm.vercel.app';
+  const back = (status) => NextResponse.redirect(`${baseUrl}/?tab=myprofile&dropbox=${status}`);
 
   try {
     const code = request.nextUrl.searchParams.get('code');
@@ -27,14 +27,14 @@ export async function GET(request) {
     const userId = state.split(':')[0];
     if (!userId) return back('error');
 
-    const clientId = process.env.DROPBOX_APP_KEY;
+    const clientId = process.env.DROPBOX_APP_KEY || process.env.NEXT_PUBLIC_DROPBOX_APP_KEY;
     const clientSecret = process.env.DROPBOX_APP_SECRET;
     if (!clientId || !clientSecret) {
       console.error('[dropbox/callback] config manquante');
       return back('config');
     }
 
-    const redirectUri = `${origin}/api/dropbox/callback`;
+    const redirectUri = `${baseUrl}/api/dropbox/callback`;
     const tokens = await exchangeCodeForTokens({ clientId, clientSecret, code, redirectUri });
 
     let accountEmail = null, accountName = null;
