@@ -83,7 +83,7 @@ export function KpiBox({ label, value, icon: Icon, sublabel }) {
 // ─────────────────────────────────────────────────────────
 // TaskRow : ligne de tâche pour Dashboard
 // ─────────────────────────────────────────────────────────
-export function TaskRow({ task, mandats = [], clients = [], variant }) {
+export function TaskRow({ task, mandats = [], clients = [], variant, reload }) {
   const variantStyles = {
     late: 'bg-red-50/50 border-red-100',
     today: 'bg-amber-50/50 border-amber-100',
@@ -96,9 +96,52 @@ export function TaskRow({ task, mandats = [], clients = [], variant }) {
   const echeanceLabel = task.echeance
     ? new Date(task.echeance).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
     : '-';
+
+  async function validateTask(e) {
+    e.stopPropagation();
+    await supabase.from('todos').update({
+      statut: 'Termine',
+      updated_at: new Date().toISOString(),
+    }).eq('id', task.id);
+    if (reload) reload();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('todos-changed'));
+    }
+  }
+
+  function openLinked() {
+    if (lienType === 'mandat' && lienId) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', 'mandats');
+      url.searchParams.set('open', lienId);
+      window.history.pushState({ tab: 'mandats', open: lienId }, '', url.toString());
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      setTimeout(() => {
+        document.getElementById('tasks')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 600);
+    } else if (lienType === 'client' && lienId) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', 'clients');
+      url.searchParams.set('open', lienId);
+      window.history.pushState({ tab: 'clients', open: lienId }, '', url.toString());
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  }
+
+  const isClickable = !!(lienType && lienId);
+
   return (
-    <div className={`flex items-center gap-3 p-2.5 rounded-lg border ${variantStyles[variant] || variantStyles.week}`}>
-      <div className="w-3 h-3 rounded border-2 border-stone-300 flex-shrink-0" />
+    <div
+      onClick={isClickable ? openLinked : undefined}
+      className={`flex items-center gap-3 p-2.5 rounded-lg border ${variantStyles[variant] || variantStyles.week} ${isClickable ? 'cursor-pointer hover:shadow-luxe' : ''}`}
+    >
+      <button
+        onClick={validateTask}
+        title="Valider la tâche"
+        className="w-4 h-4 rounded border-2 border-stone-300 hover:border-emerald-500 hover:bg-emerald-50 flex items-center justify-center flex-shrink-0 transition-colors"
+      >
+        <Check className="w-2.5 h-2.5 text-emerald-600 opacity-0 hover:opacity-100" />
+      </button>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-stone-900 truncate">{task.titre}</div>
         {linkedMandat && (
