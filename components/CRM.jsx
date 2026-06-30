@@ -24,7 +24,6 @@ import { getPriceTTC, getPriceNV, isNVEstimated, getCommission, isCommissionEsti
 import AIAssistantChat from './AIAssistantChat';
 import MarkAsSoldModal from './MarkAsSoldModal';
 import CascadeSelectMulti from './CascadeSelectMulti';
-import DocumentsModal from './DocumentsModal';
 import AgendaTab from './AgendaTab';
 import TeamTab from './TeamTab';
 import MyProfile from './MyProfile';
@@ -46,7 +45,7 @@ import DiffusionInline from './DiffusionInline';
 import MandatStatsInline from './MandatStatsInline';
 import AssetsMandatInline from './AssetsMandatInline';
 import RapportMandantModal from './RapportMandantModal';
-import { VisiteModal, MandantModal } from './MandatModals';
+import { VisiteModal } from './MandatModals';
 import CascadeSelect from './CascadeSelect';
 import MediasModal from './MediasModal'; 
 import MediasInline from './MediasInline'; 
@@ -3257,12 +3256,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
       {/* ═══ MODALS ═══ */}
       {openModal === 'visite' && (
         <VisiteModal mandat={mandat} onClose={() => setOpenModal(null)} onUpdate={reload} />
-      )}
-      {openModal === 'mandant' && (
-        <MandantModal mandat={mandat} onClose={() => { setOpenModal(null); reloadMandatContacts(); }} onUpdate={reload} />
-      )}
-      {openModal === 'documents' && (
-        <DocumentsModal mandat={mandat} onClose={() => setOpenModal(null)} />
       )}
       {openModal === 'medias' && (
         <MediasModal mandat={mandat} onClose={() => setOpenModal(null)} onUpdate={reload} />
