@@ -83,13 +83,16 @@ export function KpiBox({ label, value, icon: Icon, sublabel }) {
 // ─────────────────────────────────────────────────────────
 // TaskRow : ligne de tâche pour Dashboard
 // ─────────────────────────────────────────────────────────
-export function TaskRow({ task, mandats, variant }) {
+export function TaskRow({ task, mandats = [], clients = [], variant }) {
   const variantStyles = {
     late: 'bg-red-50/50 border-red-100',
     today: 'bg-amber-50/50 border-amber-100',
     week: 'bg-sage-50/40 border-sage-light/50',
   };
-  const linkedMandat = task.mandatId || task.mandat_id ? mandats.find(m => m.id === (task.mandatId || task.mandat_id)) : null;
+  const lienId = task.lienId || task.lien_id;
+  const lienType = task.lienType || task.lien_type;
+  const linkedMandat = lienId && lienType === 'mandat' ? mandats.find(m => m.id === lienId) : null;
+  const linkedClient = lienId && lienType === 'client' ? clients.find(c => c.id === lienId) : null;
   const echeanceLabel = task.echeance
     ? new Date(task.echeance).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
     : '-';
@@ -100,6 +103,9 @@ export function TaskRow({ task, mandats, variant }) {
         <div className="text-sm font-medium text-stone-900 truncate">{task.titre}</div>
         {linkedMandat && (
           <div className="text-xs text-stone-500 truncate">&rarr; {linkedMandat.nom}</div>
+        )}
+        {linkedClient && (
+          <div className="text-xs text-stone-500 truncate">&rarr; {linkedClient.prenom} {linkedClient.nom}</div>
         )}
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
