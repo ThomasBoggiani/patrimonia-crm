@@ -7,7 +7,7 @@ import {
   MapPin, FileText, Trash2, Edit2, X, Check, 
   LayoutGrid, List, QrCode, Clock, AlertCircle,
   ChevronRight, Home, Send, Upload, Download,
-  Circle, CheckCircle2, Eye, Copy, Sparkles,
+  Circle, CheckCircle2, Eye, EyeOff, Copy, Sparkles,
   FileUp, Loader2, AlertTriangle, Info, Wand2, Mic,
   User as UserIcon, LogOut, Shield, Menu,
   Image as ImageIcon, Camera, Plug, FolderOpen, Trophy, TrendingUp, Inbox, Video,
@@ -2737,6 +2737,8 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
   const [showAvisValeur, setShowAvisValeur] = useState(false);
   const [showRapportMandant, setShowRapportMandant] = useState(false);
   const [mandatContacts, setMandatContacts] = useState([]);
+  // Sprint 4 — bouton pour masquer/afficher les honoraires (commission + net vendeur)
+  const [showHonoraires, setShowHonoraires] = useState(true);
 
   // Charge les contacts liés au mandat (pivot mandat_contacts)
   async function reloadMandatContacts() {
@@ -2809,6 +2811,15 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
     'Mandat simple': 'bg-blue-50 text-blue-700 border-blue-200',
     'Off-market': 'bg-stone-900 text-amber-300 border-amber-500/30'
   }[mandat.commercialisation] || 'bg-stone-100 text-stone-700 border-stone-200';
+
+  // Sprint 4 — les helpers prix (lib/priceDisplay) lisent du snake_case ;
+  // le mandat est en camelCase → on normalise pour que net vendeur / commission
+  // soient corrects (sinon ils retombaient toujours sur l'estimation 5%).
+  const mandatPrix = {
+    prix: mandat.prix,
+    prix_net_vendeur: mandat.prixNetVendeur ?? mandat.prix_net_vendeur,
+    honoraires_montant: mandat.honorairesMontant ?? mandat.honoraires_montant,
+  };
 
   return (
     <div className="p-8 max-w-7xl">
@@ -2921,15 +2932,27 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Analyse financière</h2>
             <div className="grid grid-cols-4 gap-4">
               <div className="col-span-1">
-                <div className="text-xs uppercase tracking-wide text-stone-500 mb-1">Prix annoncé (TTC)</div>
-                <div className="text-2xl font-display font-semibold text-stone-900">{formatPrix(getPriceTTC(mandat))}</div>
-                <div className="text-[11px] text-stone-500 mt-1 leading-tight">
-                  Net vendeur : <span className="font-medium">{formatPrix(getPriceNV(mandat))}</span>
-                  {isNVEstimated(mandat) && <span className="text-amber-600 ml-1" title="Honoraires non renseignés, estimation à 5%">~ estimé</span>}
-                  <br />
-                  Commission : <span className="font-medium text-emerald-700">{formatPrix(getCommission(mandat))}</span>
-                  {isCommissionEstimated(mandat) && <span className="text-amber-600 ml-1" title="Commission estimée à 5% du TTC">~ estimée</span>}
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-xs uppercase tracking-wide text-stone-500">Prix frais d'agence inclus</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowHonoraires(v => !v)}
+                    className="text-stone-400 hover:text-stone-700"
+                    title={showHonoraires ? 'Masquer les honoraires' : 'Afficher les honoraires'}
+                  >
+                    {showHonoraires ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                  </button>
                 </div>
+                <div className="text-2xl font-display font-semibold text-stone-900">{formatPrix(getPriceTTC(mandatPrix))}</div>
+                {showHonoraires && (
+                  <div className="text-[11px] text-stone-500 mt-1 leading-tight">
+                    Net vendeur : <span className="font-medium">{formatPrix(getPriceNV(mandatPrix))}</span>
+                    {isNVEstimated(mandatPrix) && <span className="text-amber-600 ml-1" title="Honoraires non renseignés, estimation à 5%">~ estimé</span>}
+                    <br />
+                    Commission : <span className="font-medium text-emerald-700">{formatPrix(getCommission(mandatPrix))}</span>
+                    {isCommissionEstimated(mandatPrix) && <span className="text-amber-600 ml-1" title="Commission estimée à 5% du TTC">~ estimée</span>}
+                  </div>
+                )}
               </div>
               <DetailItem label="Prix au m²" value={mandat.prixM2 ? `${parseFloat(mandat.prixM2).toLocaleString('fr')}€` : '—'} />
               <DetailItem label="Loyers annuels" value={(() => {
