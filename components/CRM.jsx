@@ -385,10 +385,8 @@ export default function CRM() {
     { id: 'deals', label: 'Deals', icon: Handshake },
     { id: 'matching', label: 'Matching auto', icon: Sparkles },
     { id: 'todos', label: 'To-do perso', icon: CheckSquare },
-    ...(isManager(profile) ? [{ id: 'direction', label: 'Direction', icon: Building2 }] : []),
     { id: 'agenda', label: 'Agenda', icon: Calendar },
     { id: 'annonces', label: 'Annonces', icon: Megaphone },
-    { id: 'questionnaires', label: 'Questionnaires', icon: FileQuestion },
     { id: 'emailings', label: 'Emailings & Sourcing', icon: Mail },
     { id: 'integrations', label: 'Intégrations', icon: Plug },
     ...(isAdmin(profile) ? [{ id: 'team', label: 'Équipe', icon: Users, admin: true }] : [])
