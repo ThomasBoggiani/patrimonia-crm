@@ -3,13 +3,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   User, TrendingUp, Building2, CheckSquare, Users as UsersIcon,
   Save, Loader2, Phone, Mail, Briefcase, Lock,
-  Link2, Copy, ExternalLink, Eye, PenLine
+  Link2, Copy, ExternalLink, Eye, PenLine, Plug, Shield
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import AvatarUpload from './AvatarUpload';
+import IntegrationsTab from './IntegrationsTab';
 
-export default function MyProfile({ mandats = [], todos = [], clients = [], allProfiles = [], RemunerationComponent, onNavigate }) {
+export default function MyProfile({ mandats = [], todos = [], clients = [], deals = [], allProfiles = [], RemunerationComponent, DirectionComponent, onNavigate }) {
   const { user, profile, refreshProfile } = useAuth();
   const [tab, setTab] = useState('profil');
 
@@ -36,6 +37,10 @@ export default function MyProfile({ mandats = [], todos = [], clients = [], allP
         <TabButton active={tab === 'remuneration'} onClick={() => setTab('remuneration')} icon={TrendingUp} label="Ma rémunération" />
         <TabButton active={tab === 'signature'} onClick={() => setTab('signature')} icon={Mail} label="Ma signature" />
         <TabButton active={tab === 'style'} onClick={() => setTab('style')} icon={PenLine} label="Style d'écriture" />
+        <TabButton active={tab === 'integrations'} onClick={() => setTab('integrations')} icon={Plug} label="Intégrations" />
+        {isManager && (
+          <TabButton active={tab === 'direction'} onClick={() => setTab('direction')} icon={Shield} label="Direction" />
+        )}
       </div>
 
       {tab === 'profil' && (
@@ -56,6 +61,14 @@ export default function MyProfile({ mandats = [], todos = [], clients = [], allP
 
       {tab === 'style' && (
         <ToneOfVoiceEditor profile={profile} isManager={isManager} onSaved={refreshProfile} />
+      )}
+
+      {tab === 'integrations' && (
+        <IntegrationsTab />
+      )}
+
+      {tab === 'direction' && isManager && DirectionComponent && (
+        <DirectionComponent mandats={mandats} deals={deals} clients={clients} todos={todos} allProfiles={allProfiles} />
       )}
     </div>
   );
