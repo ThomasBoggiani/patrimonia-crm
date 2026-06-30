@@ -1742,6 +1742,8 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   const [piecesPresent, setPiecesPresent] = useState(new Set());
   const pieceInputRef = React.useRef(null);
   const pendingPieceRef = React.useRef(null);
+  // Sprint 4 — import Dropbox par lien
+  const [dropboxUrl, setDropboxUrl] = useState('');
 
   const update = (k, v) => setData({ ...data, [k]: v });
 
@@ -2018,6 +2020,111 @@ async function handleFolderImport(event, opts = {}) {
   }
 }
 
+  // Sprint 4 — Import d'un dossier Dropbox par lien : télécharge+dépose les fichiers
+  // (route import-dropbox) puis enchaîne l'analyse IA de chaque fichier (import-folder),
+  // comme l'import local. Crée le mandat si besoin.
+  async function handleDropboxImport() {
+    const url = (dropboxUrl || '').trim();
+    if (!url) { alert('Colle d\'abord le lien Dropbox du dossier.'); return; }
+    setImportResult(null);
+    setImportProgress({ current: 0, total: 0, fileName: 'Connexion à Dropbox…' });
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { alert('Session expirée'); setImportProgress(null); return; }
+
+      // 1) Mandat (créé si nécessaire)
+      let mandatId = mandat?.id || data.id;
+      if (!mandatId) {
+        const { data: created, error: createErr } = await supabase.from('mandats').insert({
+          nom: data.nom || 'Nouveau mandat (import Dropbox)',
+          type: data.type || "Immeuble d'habitation",
+          statut: 'Sourcing',
+          owner: data.owner || userInitials,
+          pourvoyeur_id: data.pourvoyeurId || null,
+          vendeur_id: data.vendeurId || null,
+          commercialisation: data.commercialisation || 'Off-market',
+        }).select().single();
+        if (createErr || !created) { alert('Erreur création mandat : ' + (createErr?.message || 'inconnue')); setImportProgress(null); return; }
+        mandatId = created.id;
+        setData(d => ({ ...d, id: mandatId }));
+      }
+
+      // 2) Télécharger + décompresser le dossier Dropbox (côté serveur)
+      const dbRes = await fetch('/api/mandats/' + mandatId + '/import-dropbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, dropbox_url: url }),
+      });
+      const dbData = await dbRes.json();
+      if (!dbData.ok) { alert('Dropbox : ' + (dbData.error || 'échec')); setImportProgress(null); return; }
+      const files = dbData.files || [];
+      if (files.length === 0) { alert('Aucun fichier exploitable dans ce dossier Dropbox.'); setImportProgress(null); return; }
+
+      // 3) Analyse IA fichier par fichier (même pipeline que l'import local)
+      let totalFilled = 0, errors = 0;
+      const allExtracted = {};
+      const categoriesByLabel = {};
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        setImportProgress({ current: i + 1, total: files.length, fileName: f.nom });
+        let category = 'autre', extractedData = {};
+        try {
+          const aiRes = await fetch('/api/mandats/' + mandatId + '/import-folder', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token, storage_path: f.storage_path, applyToMandat: true }),
+          });
+          const aiData = await aiRes.json();
+          if (aiData.ok) {
+            category = aiData.category || 'autre';
+            extractedData = aiData.data || {};
+            totalFilled += (aiData.filled?.length || 0);
+          } else { errors++; }
+        } catch (e) { errors++; }
+
+        await fetch('/api/mandats/' + mandatId + '/documents', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, type: 'file_meta', category, nom: f.nom, storage_path: f.storage_path, taille_bytes: f.taille, mime_type: f.mime_type }),
+        });
+
+        const label = ({ mandat: 'Mandat', diagnostics: 'Diagnostics', plans_photos: 'Plans & photos', notes: 'Notes', mandant: 'Mandant', autre: 'Autre' })[category] || 'Autre';
+        categoriesByLabel[label] = (categoriesByLabel[label] || 0) + 1;
+        for (const [k, v] of Object.entries(extractedData || {})) {
+          if (v !== null && v !== undefined && v !== '') allExtracted[k] = v;
+        }
+      }
+
+      // 4) Recharger le mandat dans le formulaire
+      const { data: refreshed } = await supabase.from('mandats').select('*').eq('id', mandatId).maybeSingle();
+      if (refreshed) {
+        const newData = { ...data, id: refreshed.id };
+        const newFilled = new Set();
+        for (const [snake, camel] of Object.entries(FIELD_MAP)) {
+          if (refreshed[snake] !== null && refreshed[snake] !== undefined && refreshed[snake] !== '') {
+            newData[camel] = refreshed[snake];
+            if (allExtracted[snake] !== undefined) newFilled.add(camel);
+          }
+        }
+        if (newData.prix && newData.surface && !newData.prixM2) { newData.prixM2 = Math.round(newData.prix / newData.surface); newFilled.add('prixM2'); }
+        setData(newData);
+        setFilledFields(newFilled);
+      }
+
+      // 5) Cocher la check-list au mieux selon les catégories détectées
+      const labelToPieces = { 'Mandat': ['fiche'], 'Diagnostics': ['dpe', 'diagnostics'], 'Plans & photos': ['photos', 'plans'], 'Notes': ['etat_locatif'], 'Autre': ['taxe'] };
+      const found = Object.keys(categoriesByLabel).flatMap(l => labelToPieces[l] || []);
+      if (found.length) setPiecesPresent(prev => { const s = new Set(prev); found.forEach(k => s.add(k)); return s; });
+
+      setImportProgress(null);
+      setImportResult({ total: files.length, success: files.length - errors, errors, totalFilled, categoriesByLabel });
+      setDropboxUrl('');
+    } catch (e) {
+      console.error('[DropboxImport] Erreur:', e);
+      alert('Erreur : ' + e.message);
+      setImportProgress(null);
+    }
+  }
+
   // Sprint 4 — C1 : crée une tâche pour chaque pièce OBLIGATOIRE manquante (ne bloque pas).
   async function createMissingPieceTasks(mandatId) {
     if (!mandatId) return 0;
@@ -2117,6 +2224,26 @@ async function handleFolderImport(event, opts = {}) {
                 >
                   {importProgress ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileUp className="w-3.5 h-3.5" />}
                   Tout déposer en vrac
+                </button>
+              </div>
+
+              {/* Sprint 4 — import par lien Dropbox public */}
+              <div className="flex items-center gap-2 mb-3 p-2 bg-amber-50/60 border border-amber-200 rounded-lg flex-wrap">
+                <span className="text-xs text-amber-800 font-medium flex items-center gap-1 flex-shrink-0">📁 Dropbox</span>
+                <input
+                  type="url"
+                  value={dropboxUrl}
+                  onChange={e => setDropboxUrl(e.target.value)}
+                  placeholder="Coller le lien public du dossier Dropbox…"
+                  className="flex-1 min-w-[160px] px-2 py-1.5 border border-amber-200 rounded text-xs focus:outline-none focus:border-amber-400"
+                />
+                <button
+                  type="button"
+                  onClick={handleDropboxImport}
+                  disabled={!!importProgress || !dropboxUrl.trim()}
+                  className="px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 flex-shrink-0"
+                >
+                  Importer
                 </button>
               </div>
 
