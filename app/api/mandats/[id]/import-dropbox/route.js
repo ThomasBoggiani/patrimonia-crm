@@ -88,7 +88,16 @@ export async function POST(request, { params }) {
     if (ct.includes('text/html')) {
       return new Response(JSON.stringify({ ok: false, error: 'Dropbox a renvoyé une page web, pas le dossier. Le lien doit être un lien de DOSSIER partagé en accès public.' }), { status: 502, headers: { 'Content-Type': 'application/json' } });
     }
+    // Garde-fou taille : un trop gros dossier ferait dépasser la limite de temps/mémoire.
+    const MAX_ZIP_BYTES = 60 * 1024 * 1024; // 60 Mo
+    const lenHeader = parseInt(res.headers.get('content-length') || '0', 10);
+    if (lenHeader && lenHeader > MAX_ZIP_BYTES) {
+      return new Response(JSON.stringify({ ok: false, error: 'Dossier Dropbox trop volumineux pour l\'import direct (> 60 Mo). Dépose les pièces clés (mandat, DPE, état locatif…) une par une, ou allège le dossier.' }), { status: 413, headers: { 'Content-Type': 'application/json' } });
+    }
     const zipBuffer = Buffer.from(await res.arrayBuffer());
+    if (zipBuffer.length > MAX_ZIP_BYTES) {
+      return new Response(JSON.stringify({ ok: false, error: 'Dossier Dropbox trop volumineux pour l\'import direct (> 60 Mo). Dépose les pièces clés une par une.' }), { status: 413, headers: { 'Content-Type': 'application/json' } });
+    }
 
     // 2) Décompresser
     let zip;
@@ -98,39 +107,45 @@ export async function POST(request, { params }) {
       return new Response(JSON.stringify({ ok: false, error: 'Impossible de décompresser le dossier Dropbox (format inattendu).' }), { status: 502, headers: { 'Content-Type': 'application/json' } });
     }
 
-    // 3) Déposer chaque fichier dans le storage
-    const uploaded = [];
-    const errors = [];
+    // 3) Lister les fichiers exploitables (plafond pour borner temps/mémoire)
+    const MAX_FILES = 40;
     const stamp = Math.random().toString(36).slice(2, 8);
-    let idx = 0;
+    const entries = [];
     for (const name in zip.files) {
       const entry = zip.files[name];
       if (entry.dir) continue;
       const base = name.split('/').pop();
       if (!base || base.startsWith('.') || name.includes('__MACOSX')) continue;
+      entries.push({ entry, base });
+    }
+    const truncated = entries.length > MAX_FILES;
+    const toProcess = entries.slice(0, MAX_FILES);
 
-      let bytes;
-      try {
-        bytes = Buffer.from(entry.asUint8Array());
-      } catch (e) {
-        errors.push({ nom: base, error: 'lecture impossible' });
-        continue;
+    // Upload en parallèle par lots (plus rapide que séquentiel → tient dans la limite)
+    const uploaded = [];
+    const errors = [];
+    const BATCH = 5;
+    for (let i = 0; i < toProcess.length; i += BATCH) {
+      const batch = toProcess.slice(i, i + BATCH);
+      const results = await Promise.all(batch.map(async ({ entry, base }, j) => {
+        let bytes;
+        try { bytes = Buffer.from(entry.asUint8Array()); }
+        catch { return { ok: false, nom: base, error: 'lecture impossible' }; }
+        if (!bytes || bytes.length === 0) return null;
+        const mime = mimeFromName(base);
+        const storagePath = `${mandatId}/dropbox/${Date.now()}_${stamp}_${i + j}_${cleanName(base)}`;
+        const { error: upErr } = await supabaseAdmin.storage.from(BUCKET).upload(storagePath, bytes, { contentType: mime, upsert: false });
+        if (upErr) return { ok: false, nom: base, error: upErr.message };
+        return { ok: true, storage_path: storagePath, nom: base, mime_type: mime, taille: bytes.length };
+      }));
+      for (const r of results) {
+        if (!r) continue;
+        if (r.ok) uploaded.push({ storage_path: r.storage_path, nom: r.nom, mime_type: r.mime_type, taille: r.taille });
+        else errors.push({ nom: r.nom, error: r.error });
       }
-      if (!bytes || bytes.length === 0) continue;
-
-      const mime = mimeFromName(base);
-      const storagePath = `${mandatId}/dropbox/${Date.now()}_${stamp}_${idx}_${cleanName(base)}`;
-      idx++;
-
-      const { error: upErr } = await supabaseAdmin.storage.from(BUCKET).upload(storagePath, bytes, { contentType: mime, upsert: false });
-      if (upErr) {
-        errors.push({ nom: base, error: upErr.message });
-        continue;
-      }
-      uploaded.push({ storage_path: storagePath, nom: base, mime_type: mime, taille: bytes.length });
     }
 
-    return new Response(JSON.stringify({ ok: true, files: uploaded, count: uploaded.length, errors }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ ok: true, files: uploaded, count: uploaded.length, errors, truncated }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (e) {
     console.error('[import-dropbox] error:', e);
     return new Response(JSON.stringify({ ok: false, error: e.message || 'Erreur serveur' }), { status: 500, headers: { 'Content-Type': 'application/json' } });

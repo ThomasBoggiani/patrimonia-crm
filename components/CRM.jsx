@@ -2056,7 +2056,12 @@ async function handleFolderImport(event, opts = {}) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, dropbox_url: url }),
       });
-      const dbData = await dbRes.json();
+      // Lecture robuste : si le serveur renvoie autre chose que du JSON (timeout/erreur
+      // plateforme), on affiche le message brut au lieu de planter sur JSON.parse.
+      const dbText = await dbRes.text();
+      let dbData;
+      try { dbData = JSON.parse(dbText); }
+      catch { dbData = { ok: false, error: (dbText || '').slice(0, 200).trim() || `Erreur serveur (HTTP ${dbRes.status})` }; }
       if (!dbData.ok) { alert('Dropbox : ' + (dbData.error || 'échec')); setImportProgress(null); return; }
       const files = dbData.files || [];
       if (files.length === 0) { alert('Aucun fichier exploitable dans ce dossier Dropbox.'); setImportProgress(null); return; }
