@@ -2835,7 +2835,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           const mandatPhotos = getPhotos(mandat);
           const cover = getCoverPhoto(mandat);
           return mandatPhotos.length > 0 ? (
-            <button onClick={() => setLightboxOpen(true)} className="flex-shrink-0 w-48 h-32 rounded-lg overflow-hidden bg-cream-100 border border-cream-dark hover:opacity-90 relative group">
+            <button onClick={() => setLightboxOpen(true)} className="flex-shrink-0 w-64 h-44 rounded-lg overflow-hidden bg-cream-100 border border-cream-dark hover:opacity-90 relative group">
               <img src={cover} alt={mandat.nom} className="w-full h-full object-cover" />
               {mandatPhotos.length > 1 && (
                 <div className="absolute bottom-1.5 right-1.5 bg-stone-900/70 text-white text-[10px] px-1.5 py-0.5 rounded-full">+{mandatPhotos.length - 1}</div>
@@ -2874,7 +2874,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] uppercase tracking-wider text-sage-dark font-semibold pr-2 border-r border-cream-dark mr-1">📌 Données</span>
           
-          <button onClick={() => document.getElementById('identite')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🏠 Identité</button>
           <button onClick={() => document.getElementById('technique')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🔧 Technique</button>
           <button onClick={() => document.getElementById('stats')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📊 Stats</button>
           <button onClick={() => document.getElementById('locatif')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🏢 Locatif</button>
