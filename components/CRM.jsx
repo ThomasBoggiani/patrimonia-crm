@@ -2739,20 +2739,21 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
   const [showRapportMandant, setShowRapportMandant] = useState(false);
   const [mandatContacts, setMandatContacts] = useState([]);
 
-  // Charge les contacts liés au mandat
-  useEffect(() => {
+  // Charge les contacts liés au mandat (pivot mandat_contacts)
+  async function reloadMandatContacts() {
     if (!mandat?.id) return;
-    (async () => {
-      const { data, error } = await supabase
-        .from('mandat_contacts')
-        .select('id, role, est_principal, notes, contact:contacts(id, prenom, nom, societe, email, tel, categorie)')
-        .eq('mandat_id', mandat.id);
-      if (error) {
-        console.error('[MandatDetail] load mandat_contacts', error);
-        return;
-      }
-      setMandatContacts(data || []);
-    })();
+    const { data, error } = await supabase
+      .from('mandat_contacts')
+      .select('id, role, est_principal, notes, contact:contacts(id, prenom, nom, societe, email, tel, categorie)')
+      .eq('mandat_id', mandat.id);
+    if (error) {
+      console.error('[MandatDetail] load mandat_contacts', error);
+      return;
+    }
+    setMandatContacts(data || []);
+  }
+  useEffect(() => {
+    reloadMandatContacts();
   }, [mandat?.id]);
 
   // Helpers pour ajouter / supprimer un contact lié
@@ -3258,7 +3259,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
         <VisiteModal mandat={mandat} onClose={() => setOpenModal(null)} onUpdate={reload} />
       )}
       {openModal === 'mandant' && (
-        <MandantModal mandat={mandat} onClose={() => setOpenModal(null)} onUpdate={reload} />
+        <MandantModal mandat={mandat} onClose={() => { setOpenModal(null); reloadMandatContacts(); }} onUpdate={reload} />
       )}
       {openModal === 'documents' && (
         <DocumentsModal mandat={mandat} onClose={() => setOpenModal(null)} />
