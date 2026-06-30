@@ -2050,18 +2050,23 @@ async function handleFolderImport(event, opts = {}) {
         setData(d => ({ ...d, id: mandatId }));
       }
 
-      // 2) Télécharger + décompresser le dossier Dropbox (côté serveur)
-      const dbRes = await fetch('/api/mandats/' + mandatId + '/import-dropbox', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, dropbox_url: url }),
-      });
-      // Lecture robuste : si le serveur renvoie autre chose que du JSON (timeout/erreur
-      // plateforme), on affiche le message brut au lieu de planter sur JSON.parse.
-      const dbText = await dbRes.text();
-      let dbData;
-      try { dbData = JSON.parse(dbText); }
-      catch { dbData = { ok: false, error: (dbText || '').slice(0, 200).trim() || `Erreur serveur (HTTP ${dbRes.status})` }; }
+      // 2) Récupérer les fichiers du dossier Dropbox.
+      // D'abord via le COMPTE connecté (sans limite de taille, fichier par fichier).
+      // Si aucun compte n'est connecté, repli sur le lien public ZIP (<= 100 Mo).
+      async function callDropbox(route) {
+        const r = await fetch('/api/mandats/' + mandatId + route, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, dropbox_url: url }),
+        });
+        const t = await r.text();
+        try { return JSON.parse(t); }
+        catch { return { ok: false, error: (t || '').slice(0, 200).trim() || `Erreur serveur (HTTP ${r.status})` }; }
+      }
+      let dbData = await callDropbox('/import-dropbox-account');
+      if (dbData.needsConnect) {
+        dbData = await callDropbox('/import-dropbox');
+      }
       if (!dbData.ok) { alert('Dropbox : ' + (dbData.error || 'échec')); setImportProgress(null); return; }
       const files = dbData.files || [];
       if (files.length === 0) { alert('Aucun fichier exploitable dans ce dossier Dropbox.'); setImportProgress(null); return; }
