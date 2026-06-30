@@ -1,6 +1,6 @@
 'use client'; import { useSearchParams } from 'next/navigation';
 // redeploy pour activer Google Maps API key
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Building2, Users, Handshake, CheckSquare, Megaphone, FileQuestion, 
   Mail, Plus, Search, Calendar, Phone, MessageSquare, 
@@ -2220,6 +2220,7 @@ async function handleFolderImport(event) {
               lots={data.etatLocatif || []}
               onChange={(newLots) => update('etatLocatif', newLots)}
               prixNet={parseFloat(data.prixNetVendeur || data.prix || 0)}
+              mandatId={data.id || null}
             />
           </div>
 
@@ -2363,8 +2364,79 @@ async function handleFolderImport(event) {
 // Champs : Lot, Type, Surface, Locataire, Loyer mois/an, Loyer optimisé mois (= potentiel),
 //          Charges récup mois, Charges non récup an, Début bail, Durée, Échéance (auto), Statut
 // ═══════════════════════════════════════════════════════════════════
-function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
+function EtatLocatifEditor({ lots = [], onChange, prixNet = 0, mandatId = null }) {
   const safeLots = Array.isArray(lots) ? lots : [];
+
+  // Sprint 4 — Étape B : importer les lots depuis un document (PDF/scan d'état locatif)
+  const fileInputRef = useRef(null);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState(null);
+
+  function mapAiLot(l, idx) {
+    const debut = l.bail_debut || '';
+    const duree = parseInt(l.bail_duree) || 0;
+    let echeance = '';
+    if (debut && duree > 0) {
+      try {
+        const d = new Date(debut);
+        d.setFullYear(d.getFullYear() + duree);
+        echeance = d.toISOString().split('T')[0];
+      } catch { echeance = ''; }
+    }
+    return {
+      numero: l.numero != null && l.numero !== '' ? String(l.numero) : String(idx + 1),
+      type: l.type || '',
+      surface: parseFloat(l.surface) || 0,
+      locataire: l.locataire || '',
+      loyer: parseFloat(l.loyer) || 0,
+      charges_recup: 0,
+      charges_non_recup: 0,
+      bail_debut: debut,
+      bail_duree: duree || 9,
+      bail_echeance: echeance,
+      loyer_potentiel: 0,
+      statut: l.statut === 'libre' ? 'libre' : (l.statut === 'vacant' ? 'vacant' : 'loué'),
+    };
+  }
+
+  async function handleImportDoc(file) {
+    if (!file || !mandatId) return;
+    setImporting(true);
+    setImportMsg(null);
+    let storagePath = null;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Session expirée — reconnecte-toi.');
+      const cleanName = (file.name || 'etat-locatif').replace(/[^a-zA-Z0-9._-]/g, '_');
+      storagePath = mandatId + '/etat-locatif-temp/' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '_' + cleanName;
+      const { error: upErr } = await supabase.storage.from('mandat-docs').upload(storagePath, file, { contentType: file.type || 'application/octet-stream', upsert: false });
+      if (upErr) throw new Error('Envoi du fichier échoué : ' + upErr.message);
+
+      const res = await fetch('/api/mandats/' + mandatId + '/extract-etat-locatif', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, storage_path: storagePath }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Lecture du document échouée');
+
+      const newLots = (data.lots || []).map(mapAiLot);
+      if (newLots.length === 0) {
+        setImportMsg({ type: 'warn', text: "Aucun lot détecté. Vérifie que c'est bien un état locatif, ou saisis les lots à la main." });
+      } else {
+        onChange([...safeLots, ...newLots]);
+        const n = newLots.length;
+        setImportMsg({ type: 'ok', text: `${n} lot${n > 1 ? 's' : ''} importé${n > 1 ? 's' : ''}. Vérifie les valeurs, puis ajoute le loyer optimisé.` });
+      }
+    } catch (e) {
+      setImportMsg({ type: 'err', text: e.message || 'Erreur' });
+    } finally {
+      if (storagePath) { try { await supabase.storage.from('mandat-docs').remove([storagePath]); } catch { /* nettoyage best-effort */ } }
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
 
   function addLot() {
     onChange([...safeLots, {
@@ -2415,6 +2487,25 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
 
   return (
     <div className="space-y-3">
+      {/* Sprint 4 — Étape B : import des lots depuis un document */}
+      {mandatId && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <input ref={fileInputRef} type="file" accept=".pdf,image/*" className="hidden" onChange={e => handleImportDoc(e.target.files?.[0])} />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-sage-50 text-sage-darker border border-sage-light rounded-lg hover:bg-sage-100 disabled:opacity-50"
+            title="L'IA lit un document d'état locatif (PDF ou scan) et pré-remplit les lots"
+          >
+            {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileUp className="w-3.5 h-3.5" />}
+            {importing ? 'Lecture du document…' : '📄 Importer depuis un document'}
+          </button>
+          {importMsg && (
+            <span className={`text-xs ${importMsg.type === 'ok' ? 'text-emerald-700' : importMsg.type === 'warn' ? 'text-amber-700' : 'text-red-600'}`}>{importMsg.text}</span>
+          )}
+        </div>
+      )}
       {safeLots.length === 0 ? (
         <div className="text-center py-6 bg-white border border-dashed border-stone-300 rounded-lg">
           <div className="text-sm text-stone-500 mb-2">Aucun lot pour ce mandat</div>
