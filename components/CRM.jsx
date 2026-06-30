@@ -16,6 +16,7 @@ import {
 import { ArrowLeft, Edit, Briefcase } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
+import { withContactIdentity } from '@/lib/client-identity';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
 import { matchMandatsForClient } from '@/lib/matching';
 import { computeRendements, computeRendementsAuto, totalLoyerMensuel, totalLoyerMensuelOptimise, totalSurface, comptageStatuts } from '@/lib/rendements';
@@ -308,9 +309,9 @@ export default function CRM() {
   async function updateClientLocal(clientId) {
     if (!clientId) return;
     try {
-      const { data, error } = await supabase.from('clients').select('*').eq('id', clientId).maybeSingle();
+      const { data, error } = await supabase.from('clients').select('*, contact:contacts(prenom, nom, societe, email, tel)').eq('id', clientId).maybeSingle();
       if (error || !data) return;
-      const updated = toCamel(data);
+      const updated = withContactIdentity(toCamel(data));
       setClients(prev => {
         const exists = prev.some(c => c.id === clientId);
         return exists ? prev.map(c => c.id === clientId ? updated : c) : [updated, ...prev];
@@ -345,7 +346,7 @@ export default function CRM() {
     try {
       const [m, c, d, t, a, cp, q, i] = await Promise.all([
         supabase.from('mandats').select('*').order('created_at', { ascending: false }),
-        supabase.from('clients').select('*').order('created_at', { ascending: false }),
+        supabase.from('clients').select('*, contact:contacts(prenom, nom, societe, email, tel)').order('created_at', { ascending: false }),
         supabase.from('deals').select('*'),
         supabase.from('todos').select('*'),
         supabase.from('annonces').select('*'),
@@ -354,7 +355,7 @@ export default function CRM() {
         supabase.from('interactions').select('*').order('date', { ascending: false }),
       ]);
       setMandats((m.data || []).map(toCamel));
-      setClients((c.data || []).map(toCamel));
+      setClients((c.data || []).map(toCamel).map(withContactIdentity));
       setDeals((d.data || []).map(toCamel));
       setTodos((t.data || []).map(toCamel));
       const profiles = await supabase.from('profiles').select('id, prenom, nom, role, actif').eq('actif', true);
