@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { ArrowLeft, Edit, Briefcase } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { apiFetch } from '@/lib/api';
 import { useAuth, isAdmin, getCurrentUserName, getCurrentUserInitials } from '@/lib/auth';
 import { matchMandatsForClient } from '@/lib/matching';
 import { computeRendements, computeRendementsAuto, totalLoyerMensuel, totalLoyerMensuelOptimise, totalSurface, comptageStatuts } from '@/lib/rendements';
@@ -326,7 +327,7 @@ export default function CRM() {
       const params = new URLSearchParams();
       if (searchTerm.trim()) params.set('q', searchTerm.trim());
       params.set('limit', '500');
-      const res = await fetch(`/api/contacts?${params.toString()}`);
+      const res = await apiFetch(`/api/contacts?${params.toString()}`);
       const data = await res.json();
       setContacts(data?.contacts || []);
     } catch (e) {

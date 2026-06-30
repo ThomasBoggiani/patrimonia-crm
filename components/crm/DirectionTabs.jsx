@@ -207,8 +207,9 @@ export function DashboardDirection({ mandats, deals, clients, todos, allProfiles
     });
   }, []);
 
+  // Personnes pouvant percevoir des commissions : commerciaux + direction (par rôle).
   const commerciaux = allProfiles.filter(p =>
-    ['Thomas', 'Lucas', 'Philippe'].includes(p.prenom)
+    ['Commercial', 'Directeur'].includes(p.role)
   );
 
   function isInPeriode(mandatDate, periode) {
@@ -562,8 +563,7 @@ export function RemunerationTab({ mandats, allProfiles = [] }) {
   const [rates, setRates] = useState({ pourvoyeur: 30, vendeur: 30, agence: 40, taux_commission: 5, tva: 20 });
   const [selectedUserId, setSelectedUserId] = useState(null);
 
-  const isManagerLocal = profile?.role === 'Admin' || profile?.role === 'directeur' ||
-    (profile?.prenom === 'Thomas' && (profile?.nom === 'Ezquerra' || profile?.nom === 'Boggiani'));
+  const isManagerLocal = profile?.role === 'Admin' || profile?.role === 'Directeur';
 
   useEffect(() => {
     supabase.from('settings').select('value').eq('key', 'commission_rates').single().then(({ data }) => {

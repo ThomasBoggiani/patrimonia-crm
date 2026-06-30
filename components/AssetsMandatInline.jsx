@@ -9,66 +9,11 @@
 'use client';
 
 import { useState } from 'react';
-
-// Couleurs officielles des lignes RATP/SNCF
-const RATP_COLORS = {
-  'M1': { bg: '#FFCD00', fg: '#000' },
-  'M2': { bg: '#0064B0', fg: '#fff' },
-  'M3': { bg: '#9F9825', fg: '#fff' },
-  'M3bis': { bg: '#98D4E2', fg: '#000' },
-  'M4': { bg: '#C04191', fg: '#fff' },
-  'M5': { bg: '#F28E42', fg: '#fff' },
-  'M6': { bg: '#83C491', fg: '#000' },
-  'M7': { bg: '#F3A4BA', fg: '#000' },
-  'M7bis': { bg: '#83C491', fg: '#000' },
-  'M8': { bg: '#CEADD2', fg: '#000' },
-  'M9': { bg: '#D5C900', fg: '#000' },
-  'M10': { bg: '#E3B32A', fg: '#000' },
-  'M11': { bg: '#8D5E2A', fg: '#fff' },
-  'M12': { bg: '#00814F', fg: '#fff' },
-  'M13': { bg: '#98D4E2', fg: '#000' },
-  'M14': { bg: '#662483', fg: '#fff' },
-  'M15': { bg: '#B90845', fg: '#fff' },
-  'M16': { bg: '#F3A4BA', fg: '#000' },
-  'M17': { bg: '#D5C900', fg: '#000' },
-  'M18': { bg: '#00A88F', fg: '#fff' },
-  'A': { bg: '#E2231A', fg: '#fff' },
-  'B': { bg: '#427DBD', fg: '#fff' },
-  'C': { bg: '#FCD946', fg: '#000' },
-  'D': { bg: '#00643C', fg: '#fff' },
-  'E': { bg: '#C9910D', fg: '#fff' },
-  'T1': { bg: '#0064B0', fg: '#fff' },
-  'T2': { bg: '#B90845', fg: '#fff' },
-  'T3a': { bg: '#FF7E2E', fg: '#fff' },
-  'T3b': { bg: '#FF7E2E', fg: '#fff' },
-  'T4': { bg: '#E2231A', fg: '#fff' },
-  'T5': { bg: '#662483', fg: '#fff' },
-  'T6': { bg: '#9F9825', fg: '#fff' },
-  'T7': { bg: '#9F9825', fg: '#fff' },
-  'T8': { bg: '#0064B0', fg: '#fff' },
-  'T9': { bg: '#B90845', fg: '#fff' },
-  'T11': { bg: '#00814F', fg: '#fff' },
-  'T13': { bg: '#FF7E2E', fg: '#fff' },
-};
+import { getLineBadge } from '@/lib/transit-colors';
 
 function parseLines(linesStr) {
   if (!linesStr) return [];
   return String(linesStr).split(/[,;\s|]/).map(s => s.trim()).filter(Boolean);
-}
-
-function getLineBadgeStyle(line, mode) {
-  if (mode === 'metro') {
-    const key = `M${line}`;
-    if (RATP_COLORS[key]) return RATP_COLORS[key];
-  }
-  if (mode === 'rer') {
-    if (RATP_COLORS[line]) return RATP_COLORS[line];
-  }
-  if (mode === 'tram') {
-    const key = line.startsWith('T') ? line : `T${line}`;
-    if (RATP_COLORS[key]) return RATP_COLORS[key];
-  }
-  return { bg: '#888', fg: '#fff' };
 }
 
 function walkingTime(meters) {
@@ -314,7 +259,7 @@ export default function AssetsMandatInline({ mandat, reload }) {
                       <div key={i} className="flex items-center gap-1.5 text-[10px]">
                         <div className="flex gap-0.5 flex-shrink-0">
                           {lines.length > 0 ? lines.slice(0, 4).map((l, j) => {
-                            const c = getLineBadgeStyle(l, s.mode);
+                            const c = getLineBadge(l, s.mode);
                             return (
                               <span key={j} style={{ backgroundColor: c.bg, color: c.fg }} className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded font-bold text-[9px]">
                                 {l}

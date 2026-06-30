@@ -12,6 +12,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { callGraph } from '@/lib/microsoft-graph';
+import Anthropic from '@anthropic-ai/sdk';
 
 export const maxDuration = 60;
 
@@ -20,6 +21,8 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 async function verifyToken(token) {
   if (!token) return null;
@@ -169,7 +172,7 @@ export async function POST(request, { params }) {
       }
     }
 
-    // 4. Construire le prompt pour GPT-4o
+    // 4. Construire le prompt pour Claude
     const today = new Date().toISOString().split('T')[0];
 
     const clientResume = {
@@ -275,32 +278,28 @@ ${questionnaire ? JSON.stringify(questionnaire.reponses || questionnaire, null, 
 
 Génère maintenant l'analyse stratégique en JSON STRICT selon le format demandé.`;
 
-    // 5. Appel GPT-4o
-    const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
+    // 5. Appel Claude (Sonnet 4.6)
+    let aiMessage;
+    try {
+      aiMessage = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2000,
         temperature: 0.4,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage },
-        ],
-      }),
-    });
-
-    if (!openaiRes.ok) {
-      const errText = await openaiRes.text();
-      console.error('[analyze] OpenAI error:', errText);
-      return new Response(JSON.stringify({ ok: false, error: 'Erreur OpenAI: ' + errText.slice(0, 200) }), { status: 500 });
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }],
+      });
+    } catch (e) {
+      console.error('[analyze] Claude error:', e);
+      return new Response(JSON.stringify({ ok: false, error: 'Erreur IA: ' + String(e?.message || '').slice(0, 200) }), { status: 500 });
     }
 
-    const openaiData = await openaiRes.json();
-    const rawResponse = openaiData.choices?.[0]?.message?.content || '{}';
+    let rawResponse = (aiMessage.content || [])
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('\n')
+      .trim() || '{}';
+    // Filet de sécurité : retire d'éventuels ``` autour du JSON.
+    rawResponse = rawResponse.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
     let parsed;
     try {
       parsed = JSON.parse(rawResponse);
@@ -314,7 +313,7 @@ Génère maintenant l'analyse stratégique en JSON STRICT selon le format demand
       nb_deals: deals.length,
       nb_emails: emails.length,
       has_questionnaire: !!questionnaire,
-      tokens_used: openaiData.usage?.total_tokens || 0,
+      tokens_used: (aiMessage.usage?.input_tokens || 0) + (aiMessage.usage?.output_tokens || 0),
     };
 
     // 6. Sauvegarder dans client_analyses

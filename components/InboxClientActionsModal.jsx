@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { X, UserPlus, Link2, Search, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
+import OwnerSelect from './OwnerSelect';
 
 // ─────────────────────────────────────────────────────────
 // Helper : déduit prénom/nom depuis le "from.name" Outlook
@@ -54,6 +55,15 @@ export default function InboxClientActionsModal({
 }) {
   const { user } = useAuth();
   const [tab, setTab] = useState('create'); // 'create' | 'link'
+  const [teamProfiles, setTeamProfiles] = useState([]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    supabase
+      .from('profiles')
+      .select('id, prenom, nom, role, actif')
+      .then(({ data }) => setTeamProfiles(data || []));
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -280,18 +290,12 @@ function CreateClientForm({ fromName, fromEmail, emailSubject, emailPreview, use
             <option>Froid</option>
           </select>
         </Field>
-        <Field label="Resp.">
-          <select
-            value={data.owner}
-            onChange={(e) => upd('owner', e.target.value)}
-            className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm"
-          >
-            <option value="TB">TB</option>
-            <option value="TE">TE</option>
-            <option value="LH">LH</option>
-            <option value="PK">PK</option>
-          </select>
-        </Field>
+        <OwnerSelect
+          value={data.owner}
+          onChange={(v) => upd('owner', v)}
+          profiles={teamProfiles}
+          label="Resp."
+        />
       </div>
 
       {/* Notes libres */}
