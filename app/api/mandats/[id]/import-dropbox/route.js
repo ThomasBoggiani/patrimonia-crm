@@ -89,14 +89,14 @@ export async function POST(request, { params }) {
       return new Response(JSON.stringify({ ok: false, error: 'Dropbox a renvoyé une page web, pas le dossier. Le lien doit être un lien de DOSSIER partagé en accès public.' }), { status: 502, headers: { 'Content-Type': 'application/json' } });
     }
     // Garde-fou taille : un trop gros dossier ferait dépasser la limite de temps/mémoire.
-    const MAX_ZIP_BYTES = 60 * 1024 * 1024; // 60 Mo
+    const MAX_ZIP_BYTES = 100 * 1024 * 1024; // 100 Mo
     const lenHeader = parseInt(res.headers.get('content-length') || '0', 10);
     if (lenHeader && lenHeader > MAX_ZIP_BYTES) {
-      return new Response(JSON.stringify({ ok: false, error: 'Dossier Dropbox trop volumineux pour l\'import direct (> 60 Mo). Dépose les pièces clés (mandat, DPE, état locatif…) une par une, ou allège le dossier.' }), { status: 413, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ ok: false, error: 'Dossier Dropbox trop volumineux pour l\'import direct (> 100 Mo). Mets surtout les documents (mandat, DPE, taxe, diagnostics, état locatif) dans le dossier partagé ; les photos lourdes peuvent être ajoutées ensuite via « Photos ».' }), { status: 413, headers: { 'Content-Type': 'application/json' } });
     }
     const zipBuffer = Buffer.from(await res.arrayBuffer());
     if (zipBuffer.length > MAX_ZIP_BYTES) {
-      return new Response(JSON.stringify({ ok: false, error: 'Dossier Dropbox trop volumineux pour l\'import direct (> 60 Mo). Dépose les pièces clés une par une.' }), { status: 413, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ ok: false, error: 'Dossier Dropbox trop volumineux pour l\'import direct (> 100 Mo). Mets surtout les documents dans le dossier ; les photos lourdes peuvent être ajoutées ensuite.' }), { status: 413, headers: { 'Content-Type': 'application/json' } });
     }
 
     // 2) Décompresser
