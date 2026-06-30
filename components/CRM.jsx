@@ -865,7 +865,7 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
               </div>
               <div className="space-y-1.5">
                 {tasksRetard.slice(0, 10).map(t => (
-                  <TaskRow key={t.id} task={t} mandats={mandats} variant="late" />
+                  <TaskRow key={t.id} task={t} mandats={mandats} clients={clients} variant="late" />
                 ))}
                 {tasksRetard.length > 10 && (
                   <div className="text-xs text-stone-500 italic px-2.5 pt-1">
@@ -884,7 +884,7 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
               </div>
               <div className="space-y-1.5">
                 {tasksAujourdhui.slice(0, 5).map(t => (
-                  <TaskRow key={t.id} task={t} mandats={mandats} variant="today" />
+                  <TaskRow key={t.id} task={t} mandats={mandats} clients={clients} variant="today" />
                 ))}
               </div>
             </div>
@@ -898,7 +898,7 @@ function Dashboard({ mandats, clients, deals, todos, reload, allProfiles = [], o
               </div>
               <div className="space-y-1.5">
                 {tasksSemaine.slice(0, 5).map(t => (
-                  <TaskRow key={t.id} task={t} mandats={mandats} variant="week" />
+                  <TaskRow key={t.id} task={t} mandats={mandats} clients={clients} variant="week" />
                 ))}
               </div>
             </div>
