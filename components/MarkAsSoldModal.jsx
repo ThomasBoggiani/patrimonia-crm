@@ -41,16 +41,44 @@ export default function MarkAsSoldModal({ mandat, clients = [], onClose, onSucce
     if (!newClient.nom.trim()) { alert('Le nom est requis'); return; }
     try {
       const { data: { user } } = await supabase.auth.getUser();
+
+      // Source unique = contacts : trouver/créer le contact avant le client
+      const emailNormalized = (newClient.email || '').toLowerCase().trim() || null;
+      let contactId = null;
+      if (emailNormalized) {
+        const { data: existing } = await supabase
+          .from('contacts').select('id').eq('email', emailNormalized).maybeSingle();
+        if (existing?.id) contactId = existing.id;
+      }
+      if (!contactId) {
+        const { data: newContact, error: contactError } = await supabase
+          .from('contacts')
+          .insert({
+            prenom: newClient.prenom || null,
+            nom: newClient.nom || 'Sans nom',
+            societe: newClient.societe || null,
+            email: emailNormalized,
+            tel: newClient.tel || null,
+            postures: ['acheteur'],
+            categorie: 'autre',
+            qualite: 'neutre',
+            created_by: user?.id || null,
+          })
+          .select('id').single();
+        if (contactError) console.error('[MarkAsSold] création contact:', contactError);
+        else contactId = newContact.id;
+      }
+
       const { data: created, error } = await supabase.from('clients').insert({
         nom: newClient.nom,
         prenom: newClient.prenom || null,
         societe: newClient.societe || null,
-        email: newClient.email || null,
+        email: emailNormalized,
         tel: newClient.tel || null,
         typologie: 'Investisseur',
         statut: 'Actif',
+        contact_id: contactId,
         created_by: user?.id,
-        
       }).select().single();
       if (error || !created) { alert('Erreur création client : ' + (error?.message || 'inconnue')); return; }
       clients.push(created);

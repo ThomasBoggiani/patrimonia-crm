@@ -1103,6 +1103,52 @@ export default function ClientsTab({ clients, contacts, loadingContacts, loadCon
     let clientId = clientData.id;
     let contactId = clientData.contactId || clientData.contact_id;
 
+    // ═══ SOURCE UNIQUE = contacts ═══
+    // L'identité (nom/prénom/société/email/tél) doit vivre dans la table contacts.
+    // On garantit donc un contact lié, et on y synchronise l'identité.
+    const emailNormalized = (snakeData.email || '').toLowerCase().trim() || null;
+    if (snakeData.email !== undefined) snakeData.email = emailNormalized; // email aligné côté client aussi
+    const contactIdentity = {
+      prenom: snakeData.prenom || null,
+      nom: snakeData.nom || 'Sans nom',
+      societe: snakeData.societe || null,
+      email: emailNormalized,
+      tel: snakeData.tel || null,
+    };
+
+    if (!contactId) {
+      // 1) Pas encore de contact : on cherche par email, sinon on en crée un
+      if (emailNormalized) {
+        const { data: existing } = await supabase
+          .from('contacts').select('id').eq('email', emailNormalized).maybeSingle();
+        if (existing?.id) contactId = existing.id;
+      }
+      if (!contactId) {
+        const { data: newContact, error: contactError } = await supabase
+          .from('contacts')
+          .insert({
+            ...contactIdentity,
+            postures: ['acheteur'],
+            categorie: categorie || 'autre',
+            qualite: 'neutre',
+            created_by: user?.id || null,
+          })
+          .select('id').single();
+        if (contactError) console.error('[handleSave] création contact:', contactError);
+        else contactId = newContact.id;
+      }
+    } else {
+      // 2) Contact déjà lié : on synchronise l'identité vers le contact (source de vérité)
+      const { error: syncError } = await supabase
+        .from('contacts')
+        .update({ ...contactIdentity, updated_at: new Date().toISOString() })
+        .eq('id', contactId);
+      if (syncError) console.warn('[handleSave] sync identité contact:', syncError);
+    }
+
+    // On relie toujours le client à son contact
+    if (contactId) snakeData.contact_id = contactId;
+
     if (clientData.id) {
       snakeData.updated_by = user?.id;
       await supabase.from('clients').update(snakeData).eq('id', clientData.id);
@@ -1110,7 +1156,7 @@ export default function ClientsTab({ clients, contacts, loadingContacts, loadCon
       delete snakeData.id;
       snakeData.created_by = user?.id;
       const { data: created } = await supabase.from('clients').insert(snakeData).select().single();
-      if (created) { clientId = created.id; contactId = created.contact_id; }
+      if (created) { clientId = created.id; contactId = created.contact_id || contactId; }
     }
 
     if (contactId && categorie !== undefined) {

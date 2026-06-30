@@ -146,6 +146,35 @@ export function MandantModal({ mandat, onClose, onUpdate }) {
   });
   const [saving, setSaving] = useState(false);
 
+  // Sprint 3 — Chantier 3 : source unique = contacts via le pivot mandat_contacts.
+  // Si aucun mandant_info JSON n'a encore été saisi mais qu'un contact mandant
+  // est déjà relié (pivot), on préremplit le formulaire depuis ce contact — ça
+  // évite qu'un enregistrement « formulaire vide » écrase un bon contact.
+  useEffect(() => {
+    const dejaJson = mandat.mandantInfo || mandat.mandant_info;
+    if (dejaJson || !mandat?.id) return;
+    (async () => {
+      const { data: links } = await supabase
+        .from('mandat_contacts')
+        .select('contact:contacts(prenom, nom, societe, email, tel, type_contact)')
+        .eq('mandat_id', mandat.id)
+        .eq('role', 'mandant')
+        .limit(1);
+      const c = links?.[0]?.contact;
+      if (!c) return;
+      const isSociete = c.type_contact === 'personne_morale';
+      setData(prev => ({
+        ...prev,
+        civilite: isSociete ? 'Société' : prev.civilite,
+        nom: c.nom || prev.nom,
+        prenom: isSociete ? prev.prenom : (c.prenom || prev.prenom),
+        raisonSociale: isSociete ? (c.societe || c.nom || prev.raisonSociale) : prev.raisonSociale,
+        email: c.email || prev.email,
+        telephones: c.tel ? [{ label: 'Mobile', numero: c.tel }] : prev.telephones,
+      }));
+    })();
+  }, [mandat?.id]);
+
   const update = (k, v) => setData({ ...data, [k]: v });
 
   const addPhone = () => update('telephones', [...(data.telephones || []), { label: 'Mobile', numero: '' }]);
@@ -156,10 +185,78 @@ export function MandantModal({ mandat, onClose, onUpdate }) {
   };
   const removePhone = (i) => update('telephones', (data.telephones || []).filter((_, idx) => idx !== i));
 
+  // Sprint 3 — Chantier 3 : à l'enregistrement, on range le mandant comme une
+  // PERSONNE dans `contacts` (source unique) et on garantit le lien dans le pivot
+  // `mandat_contacts` (rôle « mandant »). On continue d'écrire le JSON
+  // `mandant_info` pendant la transition (rien n'est retiré).
+  async function syncMandantContact() {
+    const isSociete = data.civilite === 'Société' || data.civilite === 'SCI';
+    const nom = (isSociete ? data.raisonSociale : data.nom) || '';
+    const prenom = isSociete ? '' : (data.prenom || '');
+    const societe = isSociete ? (data.raisonSociale || null) : null;
+    const email = (data.email || '').toLowerCase().trim() || null;
+    const tel = (data.telephones || []).map(t => t?.numero).find(n => n && n.trim()) || null;
+
+    // Rien d'exploitable → on ne crée pas un contact vide.
+    if (!nom && !prenom && !societe && !email && !tel) return;
+
+    const identity = { prenom: prenom || null, nom: nom || 'Sans nom', societe, email, tel };
+
+    // a) Un lien mandant existe déjà sur ce mandat ? → on met à jour CE contact.
+    const { data: links } = await supabase
+      .from('mandat_contacts')
+      .select('id, contact_id')
+      .eq('mandat_id', mandat.id)
+      .eq('role', 'mandant');
+    const existingLink = links?.[0] || null;
+    let contactId = existingLink?.contact_id || null;
+
+    // b) Sinon, on cherche un contact existant par email.
+    if (!contactId && email) {
+      const { data: byEmail } = await supabase
+        .from('contacts').select('id').eq('email', email).maybeSingle();
+      if (byEmail?.id) contactId = byEmail.id;
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!contactId) {
+      // c) Toujours rien → on crée le contact.
+      const { data: created, error } = await supabase
+        .from('contacts')
+        .insert({
+          ...identity,
+          type_contact: isSociete ? 'personne_morale' : 'personne_physique',
+          postures: ['vendeur'],
+          qualite: 'neutre',
+          created_by: user?.id || null,
+        })
+        .select('id').single();
+      if (error) { console.error('[MandantModal] création contact:', error); return; }
+      contactId = created.id;
+    } else {
+      // Contact déjà connu → on y synchronise l'identité (source de vérité).
+      const { error: syncErr } = await supabase
+        .from('contacts')
+        .update({ ...identity, updated_at: new Date().toISOString() })
+        .eq('id', contactId);
+      if (syncErr) console.warn('[MandantModal] sync identité contact:', syncErr);
+    }
+
+    // d) On garantit le lien pivot (rôle mandant) s'il n'existe pas encore.
+    if (!existingLink && contactId) {
+      const { error: linkErr } = await supabase.from('mandat_contacts').insert({
+        mandat_id: mandat.id, contact_id: contactId, role: 'mandant', est_principal: true,
+      });
+      if (linkErr) console.warn('[MandantModal] lien mandat_contacts:', linkErr);
+    }
+  }
+
   const handleSave = async () => {
     setSaving(true);
     try {
       await supabase.from('mandats').update({ mandant_info: data }).eq('id', mandat.id);
+      await syncMandantContact();
       if (onUpdate) onUpdate();
       onClose();
     } catch (e) {
