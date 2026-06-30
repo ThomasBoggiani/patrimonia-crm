@@ -28,48 +28,51 @@ export default function MyProfile({ mandats = [], todos = [], clients = [], deal
     <div className="p-6 md:p-8 max-w-5xl mx-auto">
       <div className="mb-6">
         <h1 className="font-display text-3xl md:text-4xl font-semibold text-ink mb-1">Ma fiche</h1>
-        <p className="text-sage-dark text-sm">Gérer mes informations, mon lien questionnaire, ma rémunération et mes raccourcis</p>
+        <p className="text-sage-dark text-sm">Gérer mes informations, mon questionnaire, ma signature, mon style d'écriture et mes intégrations</p>
       </div>
 
       <div className="flex gap-1 mb-6 border-b border-cream-dark overflow-x-auto">
-        <TabButton active={tab === 'profil'} onClick={() => setTab('profil')} icon={User} label="Profil" />
-        <TabButton active={tab === 'questionnaire'} onClick={() => setTab('questionnaire')} icon={Link2} label="Mon questionnaire" />
+        <TabButton active={tab === 'profil'} onClick={() => setTab('profil')} icon={User} label="Mon profil" />
         <TabButton active={tab === 'remuneration'} onClick={() => setTab('remuneration')} icon={TrendingUp} label="Ma rémunération" />
-        <TabButton active={tab === 'signature'} onClick={() => setTab('signature')} icon={Mail} label="Ma signature" />
-        <TabButton active={tab === 'style'} onClick={() => setTab('style')} icon={PenLine} label="Style d'écriture" />
-        <TabButton active={tab === 'integrations'} onClick={() => setTab('integrations')} icon={Plug} label="Intégrations" />
         {isManager && (
           <TabButton active={tab === 'direction'} onClick={() => setTab('direction')} icon={Shield} label="Direction" />
         )}
       </div>
 
       {tab === 'profil' && (
-        <ProfileEditor profile={profile} userId={user?.id} onSaved={refreshProfile} />
-      )}
+        <div className="space-y-8">
+          <ProfileEditor profile={profile} userId={user?.id} onSaved={refreshProfile} />
 
-      {tab === 'questionnaire' && (
-        <QuestionnaireSection profile={profile} isManager={isManager} allProfiles={allProfiles} />
+          <SectionHeading icon={PenLine} title="Mon style d'écriture" />
+          <ToneOfVoiceEditor profile={profile} isManager={isManager} onSaved={refreshProfile} />
+
+          <SectionHeading icon={Mail} title="Ma signature email" />
+          <EmailSignatureEditor profile={profile} onSaved={refreshProfile} />
+
+          <SectionHeading icon={Link2} title="Mon questionnaire" />
+          <QuestionnaireSection profile={profile} isManager={isManager} allProfiles={allProfiles} />
+
+          <SectionHeading icon={Plug} title="Mes intégrations" />
+          <IntegrationsTab />
+        </div>
       )}
 
       {tab === 'remuneration' && RemunerationComponent && (
         <RemunerationComponent mandats={mandats} allProfiles={allProfiles} />
       )}
 
-      {tab === 'signature' && (
-        <EmailSignatureEditor profile={profile} onSaved={refreshProfile} />
-      )}
-
-      {tab === 'style' && (
-        <ToneOfVoiceEditor profile={profile} isManager={isManager} onSaved={refreshProfile} />
-      )}
-
-      {tab === 'integrations' && (
-        <IntegrationsTab />
-      )}
-
       {tab === 'direction' && isManager && DirectionComponent && (
         <DirectionComponent mandats={mandats} deals={deals} clients={clients} todos={todos} allProfiles={allProfiles} />
       )}
+    </div>
+  );
+}
+
+function SectionHeading({ icon: Icon, title }) {
+  return (
+    <div className="flex items-center gap-2 pt-4 border-t border-cream-dark">
+      {Icon && <Icon className="w-4 h-4 text-sage-dark" />}
+      <h2 className="font-display text-lg font-semibold text-ink">{title}</h2>
     </div>
   );
 }
