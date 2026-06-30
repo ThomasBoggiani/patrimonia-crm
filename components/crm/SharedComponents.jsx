@@ -100,7 +100,7 @@ export function TaskRow({ task, mandats = [], clients = [], variant, reload }) {
   async function validateTask(e) {
     e.stopPropagation();
     await supabase.from('todos').update({
-      statut: 'Termine',
+      statut: 'Terminé',
       updated_at: new Date().toISOString(),
     }).eq('id', task.id);
     if (reload) reload();
@@ -299,7 +299,7 @@ export function TaskInline({ task, mandats = [], clients = [], allProfiles = [],
 
   async function toggle() {
     await supabase.from('todos').update({
-      statut: isDone ? 'A faire' : 'Termine',
+      statut: isDone ? 'À faire' : 'Terminé',
       updated_at: new Date().toISOString(),
     }).eq('id', task.id);
     if (onUpdate) onUpdate();
@@ -362,9 +362,9 @@ export function TaskInline({ task, mandats = [], clients = [], allProfiles = [],
         </div>
         <select value={editData.statut} onChange={e => setEditData({ ...editData, statut: e.target.value })}
           className="w-full px-2 py-1.5 border border-stone-200 rounded text-sm bg-white">
-          <option>A faire</option>
+          <option>À faire</option>
           <option>En cours</option>
-          <option>Termine</option>
+          <option>Terminé</option>
         </select>
         <select value={editData.assignedToUserId || ''} onChange={e => {
           const userId = e.target.value || null;
