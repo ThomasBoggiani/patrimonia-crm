@@ -388,7 +388,6 @@ export default function CRM() {
     { id: 'agenda', label: 'Agenda', icon: Calendar },
     { id: 'annonces', label: 'Annonces', icon: Megaphone },
     { id: 'emailings', label: 'Emailings & Sourcing', icon: Mail },
-    { id: 'integrations', label: 'Intégrations', icon: Plug },
     ...(isAdmin(profile) ? [{ id: 'team', label: 'Équipe', icon: Users, admin: true }] : [])
   ];
 
