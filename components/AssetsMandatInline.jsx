@@ -8,7 +8,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getLineBadge } from '@/lib/transit-colors';
 
 function parseLines(linesStr) {
@@ -75,6 +75,8 @@ const TYPE_FR = {
 export default function AssetsMandatInline({ mandat, reload }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // Sprint 4 — C2 : génération AUTO des vues/risques au 1er affichage si adresse présente
+  const autoTriedRef = useRef(null);
 
   const generatedAt = mandat?.assetsGeneratedAt || mandat?.assets_generated_at;
   const cacheBuster = generatedAt ? `?v=${new Date(generatedAt).getTime()}` : '';
@@ -135,6 +137,15 @@ export default function AssetsMandatInline({ mandat, reload }) {
       setLoading(false);
     }
   }
+
+  // Génère les assets automatiquement la 1re fois : mandat avec adresse mais jamais généré.
+  // Garde-fou autoTriedRef (1 essai par mandat) pour éviter toute boucle.
+  useEffect(() => {
+    if (mandat?.id && mandat?.adresse && !generatedAt && !loading && autoTriedRef.current !== mandat.id) {
+      autoTriedRef.current = mandat.id;
+      regenerate();
+    }
+  }, [mandat?.id, mandat?.adresse, generatedAt]);
 
   return (
     <div id="assets" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">

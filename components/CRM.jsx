@@ -1,13 +1,13 @@
 'use client'; import { useSearchParams } from 'next/navigation';
 // redeploy pour activer Google Maps API key
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Building2, Users, Handshake, CheckSquare, Megaphone, FileQuestion, 
   Mail, Plus, Search, Calendar, Phone, MessageSquare, 
   MapPin, FileText, Trash2, Edit2, X, Check, 
   LayoutGrid, List, QrCode, Clock, AlertCircle,
   ChevronRight, Home, Send, Upload, Download,
-  Circle, CheckCircle2, Eye, Copy, Sparkles,
+  Circle, CheckCircle2, Eye, EyeOff, Copy, Sparkles,
   FileUp, Loader2, AlertTriangle, Info, Wand2, Mic,
   User as UserIcon, LogOut, Shield, Menu,
   Image as ImageIcon, Camera, Plug, FolderOpen, Trophy, TrendingUp, Inbox, Video,
@@ -24,7 +24,6 @@ import { getPriceTTC, getPriceNV, isNVEstimated, getCommission, isCommissionEsti
 import AIAssistantChat from './AIAssistantChat';
 import MarkAsSoldModal from './MarkAsSoldModal';
 import CascadeSelectMulti from './CascadeSelectMulti';
-import DocumentsModal from './DocumentsModal';
 import AgendaTab from './AgendaTab';
 import TeamTab from './TeamTab';
 import MyProfile from './MyProfile';
@@ -46,7 +45,7 @@ import DiffusionInline from './DiffusionInline';
 import MandatStatsInline from './MandatStatsInline';
 import AssetsMandatInline from './AssetsMandatInline';
 import RapportMandantModal from './RapportMandantModal';
-import { VisiteModal, MandantModal } from './MandatModals';
+import { VisiteModal } from './MandatModals';
 import CascadeSelect from './CascadeSelect';
 import MediasModal from './MediasModal'; 
 import MediasInline from './MediasInline'; 
@@ -1681,6 +1680,18 @@ function MandatsKanban({ mandats, onSelectMandat, reload, secondaryDisplay = 'm2
     </div>
   );
 }
+// Sprint 4 — C1 : pièces du dossier nécessaires à la constitution d'un mandat.
+// category = catégorie de doc utilisée pour ranger la pièce (cf. import-folder).
+const PIECES_DOSSIER = [
+  { key: 'fiche',        label: 'Fiche / mandat',            obligatoire: true,  category: 'mandat',       emoji: '📄' },
+  { key: 'etat_locatif', label: 'État locatif + descriptif', obligatoire: true,  category: 'notes',        emoji: '🏢' },
+  { key: 'dpe',          label: 'DPE',                       obligatoire: true,  category: 'diagnostics',  emoji: '⚡' },
+  { key: 'taxe',         label: 'Taxe foncière',             obligatoire: true,  category: 'autre',        emoji: '🧾' },
+  { key: 'diagnostics',  label: 'Diagnostics (amiante, plomb…)', obligatoire: true, category: 'diagnostics', emoji: '🔬' },
+  { key: 'photos',       label: 'Photos',                    obligatoire: false, category: 'plans_photos', emoji: '🖼️' },
+  { key: 'plans',        label: 'Plans',                     obligatoire: false, category: 'plans_photos', emoji: '📐' },
+];
+
 function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   const { profile } = useAuth();
   const userInitials = (profile?.prenom && profile?.nom) ? getCurrentUserInitials(profile) : 'TB';
@@ -1727,6 +1738,12 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   const [deleting, setDeleting] = useState(false);
   const [merging, setMerging] = useState(false);
   const folderInputRef = React.useRef(null);
+  // Sprint 4 — C1 : check-list des pièces du dossier
+  const [piecesPresent, setPiecesPresent] = useState(new Set());
+  const pieceInputRef = React.useRef(null);
+  const pendingPieceRef = React.useRef(null);
+  // Sprint 4 — import Dropbox par lien
+  const [dropboxUrl, setDropboxUrl] = useState('');
 
   const update = (k, v) => setData({ ...data, [k]: v });
 
@@ -1848,7 +1865,8 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
 // À COPIER ENTIÈREMENT dans MandatForm pour remplacer la version cassée
 // ═══════════════════════════════════════════════════════════════════
 
-async function handleFolderImport(event) {
+async function handleFolderImport(event, opts = {}) {
+  const { pieceKey = null, forcedCategory = null } = opts;
   const files = Array.from(event.target.files || []);
   if (files.length === 0) return;
   setImportResult(null);
@@ -1926,7 +1944,7 @@ async function handleFolderImport(event) {
           body: JSON.stringify({
             token,
             type: 'file_meta',
-            category,
+            category: forcedCategory || category,
             nom: file.name,
             storage_path: storagePath,
             taille_bytes: compressed.size,
@@ -1986,12 +2004,159 @@ async function handleFolderImport(event) {
       categoriesByLabel,
     });
     if (folderInputRef.current) folderInputRef.current.value = '';
+    if (pieceInputRef.current) pieceInputRef.current.value = '';
+    if (pieceKey) {
+      setPiecesPresent(prev => { const s = new Set(prev); s.add(pieceKey); return s; });
+    } else {
+      // Import en vrac : on coche au mieux la check-list selon les catégories détectées
+      const labelToPieces = { 'Mandat': ['fiche'], 'Diagnostics': ['dpe', 'diagnostics'], 'Plans & photos': ['photos', 'plans'], 'Notes': ['etat_locatif'], 'Autre': ['taxe'] };
+      const found = Object.keys(categoriesByLabel).flatMap(l => labelToPieces[l] || []);
+      if (found.length) setPiecesPresent(prev => { const s = new Set(prev); found.forEach(k => s.add(k)); return s; });
+    }
   } catch (e) {
     console.error('[FolderImport] Erreur:', e);
     alert('Erreur : ' + e.message);
     setImportProgress(null);
   }
 }
+
+  // Sprint 4 — Import d'un dossier Dropbox par lien : télécharge+dépose les fichiers
+  // (route import-dropbox) puis enchaîne l'analyse IA de chaque fichier (import-folder),
+  // comme l'import local. Crée le mandat si besoin.
+  async function handleDropboxImport() {
+    const url = (dropboxUrl || '').trim();
+    if (!url) { alert('Colle d\'abord le lien Dropbox du dossier.'); return; }
+    setImportResult(null);
+    setImportProgress({ current: 0, total: 0, fileName: 'Connexion à Dropbox…' });
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { alert('Session expirée'); setImportProgress(null); return; }
+
+      // 1) Mandat (créé si nécessaire)
+      let mandatId = mandat?.id || data.id;
+      if (!mandatId) {
+        const { data: created, error: createErr } = await supabase.from('mandats').insert({
+          nom: data.nom || 'Nouveau mandat (import Dropbox)',
+          type: data.type || "Immeuble d'habitation",
+          statut: 'Sourcing',
+          owner: data.owner || userInitials,
+          pourvoyeur_id: data.pourvoyeurId || null,
+          vendeur_id: data.vendeurId || null,
+          commercialisation: data.commercialisation || 'Off-market',
+        }).select().single();
+        if (createErr || !created) { alert('Erreur création mandat : ' + (createErr?.message || 'inconnue')); setImportProgress(null); return; }
+        mandatId = created.id;
+        setData(d => ({ ...d, id: mandatId }));
+      }
+
+      // 2) Télécharger + décompresser le dossier Dropbox (côté serveur)
+      const dbRes = await fetch('/api/mandats/' + mandatId + '/import-dropbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, dropbox_url: url }),
+      });
+      // Lecture robuste : si le serveur renvoie autre chose que du JSON (timeout/erreur
+      // plateforme), on affiche le message brut au lieu de planter sur JSON.parse.
+      const dbText = await dbRes.text();
+      let dbData;
+      try { dbData = JSON.parse(dbText); }
+      catch { dbData = { ok: false, error: (dbText || '').slice(0, 200).trim() || `Erreur serveur (HTTP ${dbRes.status})` }; }
+      if (!dbData.ok) { alert('Dropbox : ' + (dbData.error || 'échec')); setImportProgress(null); return; }
+      const files = dbData.files || [];
+      if (files.length === 0) { alert('Aucun fichier exploitable dans ce dossier Dropbox.'); setImportProgress(null); return; }
+
+      // 3) Analyse IA fichier par fichier (même pipeline que l'import local)
+      let totalFilled = 0, errors = 0;
+      const allExtracted = {};
+      const categoriesByLabel = {};
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        setImportProgress({ current: i + 1, total: files.length, fileName: f.nom });
+        let category = 'autre', extractedData = {};
+        try {
+          const aiRes = await fetch('/api/mandats/' + mandatId + '/import-folder', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token, storage_path: f.storage_path, applyToMandat: true }),
+          });
+          const aiData = await aiRes.json();
+          if (aiData.ok) {
+            category = aiData.category || 'autre';
+            extractedData = aiData.data || {};
+            totalFilled += (aiData.filled?.length || 0);
+          } else { errors++; }
+        } catch (e) { errors++; }
+
+        await fetch('/api/mandats/' + mandatId + '/documents', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, type: 'file_meta', category, nom: f.nom, storage_path: f.storage_path, taille_bytes: f.taille, mime_type: f.mime_type }),
+        });
+
+        const label = ({ mandat: 'Mandat', diagnostics: 'Diagnostics', plans_photos: 'Plans & photos', notes: 'Notes', mandant: 'Mandant', autre: 'Autre' })[category] || 'Autre';
+        categoriesByLabel[label] = (categoriesByLabel[label] || 0) + 1;
+        for (const [k, v] of Object.entries(extractedData || {})) {
+          if (v !== null && v !== undefined && v !== '') allExtracted[k] = v;
+        }
+      }
+
+      // 4) Recharger le mandat dans le formulaire
+      const { data: refreshed } = await supabase.from('mandats').select('*').eq('id', mandatId).maybeSingle();
+      if (refreshed) {
+        const newData = { ...data, id: refreshed.id };
+        const newFilled = new Set();
+        for (const [snake, camel] of Object.entries(FIELD_MAP)) {
+          if (refreshed[snake] !== null && refreshed[snake] !== undefined && refreshed[snake] !== '') {
+            newData[camel] = refreshed[snake];
+            if (allExtracted[snake] !== undefined) newFilled.add(camel);
+          }
+        }
+        if (newData.prix && newData.surface && !newData.prixM2) { newData.prixM2 = Math.round(newData.prix / newData.surface); newFilled.add('prixM2'); }
+        setData(newData);
+        setFilledFields(newFilled);
+      }
+
+      // 5) Cocher la check-list au mieux selon les catégories détectées
+      const labelToPieces = { 'Mandat': ['fiche'], 'Diagnostics': ['dpe', 'diagnostics'], 'Plans & photos': ['photos', 'plans'], 'Notes': ['etat_locatif'], 'Autre': ['taxe'] };
+      const found = Object.keys(categoriesByLabel).flatMap(l => labelToPieces[l] || []);
+      if (found.length) setPiecesPresent(prev => { const s = new Set(prev); found.forEach(k => s.add(k)); return s; });
+
+      setImportProgress(null);
+      setImportResult({ total: files.length, success: files.length - errors, errors, totalFilled, categoriesByLabel });
+      setDropboxUrl('');
+    } catch (e) {
+      console.error('[DropboxImport] Erreur:', e);
+      alert('Erreur : ' + e.message);
+      setImportProgress(null);
+    }
+  }
+
+  // Sprint 4 — C1 : crée une tâche pour chaque pièce OBLIGATOIRE manquante (ne bloque pas).
+  async function createMissingPieceTasks(mandatId) {
+    if (!mandatId) return 0;
+    const manquantes = PIECES_DOSSIER.filter(p => p.obligatoire && !piecesPresent.has(p.key));
+    if (manquantes.length === 0) return 0;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const echeance = new Date();
+      echeance.setDate(echeance.getDate() + 7);
+      const rows = manquantes.map(p => ({
+        titre: `Pièce manquante au dossier : ${p.label}`,
+        priorite: 'Haute',
+        statut: 'À faire',
+        echeance: echeance.toISOString().split('T')[0],
+        assignee: getCurrentUserName(profile),
+        assigned_to_user_id: user?.id || null,
+        created_by: user?.id || null,
+        lien_type: 'mandat',
+        lien_id: mandatId,
+      }));
+      await supabase.from('todos').insert(rows);
+      return manquantes.length;
+    } catch (e) {
+      console.warn('[pieces] création tâches manquantes:', e.message);
+      return 0;
+    }
+  }
 
   async function handleCreateClient(prefillName) {
     setNewClientPrefill(prefillName);
@@ -2043,10 +2208,95 @@ async function handleFolderImport(event) {
 
        {/* Documents : import + lien + Dropbox (composant unifié avec validation IA) */}
         <div className="p-6 border-b border-stone-200 bg-gradient-to-br from-sage-50/70 to-cream-50">
-          {data.id ? (
+          {mandat ? (
             <DocumentsInline mandat={data} onUpdate={() => {}} />
           ) : (
-            <p className="text-xs text-stone-500 text-center">Enregistrez le mandat pour pouvoir importer des documents.</p>
+            <div>
+              {/* Sprint 4 — C1 : check-list des pièces du dossier (création du mandat) */}
+              <input ref={pieceInputRef} type="file" multiple className="hidden" onChange={e => handleFolderImport(e, { pieceKey: pendingPieceRef.current?.key, forcedCategory: pendingPieceRef.current?.category })} />
+              <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderImport} />
+
+              <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-stone-800">Constituez le dossier — l'IA crée le mandat</p>
+                  <p className="text-xs text-stone-500">Déposez chaque pièce (ou tout en vrac, l'IA range). Une pièce obligatoire manquante deviendra une tâche.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => folderInputRef.current?.click()}
+                  disabled={!!importProgress}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-sage-light text-sage-darker rounded-lg text-xs hover:bg-sage-50 disabled:opacity-50 font-medium flex-shrink-0"
+                >
+                  {importProgress ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileUp className="w-3.5 h-3.5" />}
+                  Tout déposer en vrac
+                </button>
+              </div>
+
+              {/* Sprint 4 — import par lien Dropbox public */}
+              <div className="flex items-center gap-2 mb-3 p-2 bg-amber-50/60 border border-amber-200 rounded-lg flex-wrap">
+                <span className="text-xs text-amber-800 font-medium flex items-center gap-1 flex-shrink-0">📁 Dropbox</span>
+                <input
+                  type="url"
+                  value={dropboxUrl}
+                  onChange={e => setDropboxUrl(e.target.value)}
+                  placeholder="Coller le lien public du dossier Dropbox…"
+                  className="flex-1 min-w-[160px] px-2 py-1.5 border border-amber-200 rounded text-xs focus:outline-none focus:border-amber-400"
+                />
+                <button
+                  type="button"
+                  onClick={handleDropboxImport}
+                  disabled={!!importProgress || !dropboxUrl.trim()}
+                  className="px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 flex-shrink-0"
+                >
+                  Importer
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {PIECES_DOSSIER.map(p => {
+                  const present = piecesPresent.has(p.key);
+                  return (
+                    <div key={p.key} className={`flex items-center gap-3 px-3 py-2 rounded-lg border ${present ? 'border-emerald-200 bg-emerald-50/50' : (p.obligatoire ? 'border-stone-200 bg-white' : 'border-dashed border-stone-300 bg-white')}`}>
+                      <span className="text-lg flex-shrink-0">{p.emoji}</span>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium text-stone-800">{p.label}</span>
+                        {p.obligatoire
+                          ? <span className="text-[10px] text-red-500 ml-1">· obligatoire</span>
+                          : <span className="text-[10px] text-stone-400 ml-1">· recommandé</span>}
+                      </div>
+                      {present ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-emerald-700 flex-shrink-0"><Check className="w-3.5 h-3.5" /> déposé</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => { pendingPieceRef.current = p; pieceInputRef.current?.click(); }}
+                          disabled={!!importProgress}
+                          className="px-3 py-1 text-xs text-sage-darker border border-sage-light rounded-lg hover:bg-sage-50 disabled:opacity-50 flex-shrink-0"
+                        >
+                          Déposer
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {importProgress && (
+                <div className="mt-3 text-xs text-stone-600">
+                  {importProgress.current}/{importProgress.total} — {importProgress.fileName}
+                </div>
+              )}
+
+              {(() => {
+                const oblig = PIECES_DOSSIER.filter(p => p.obligatoire);
+                const okCount = oblig.filter(p => piecesPresent.has(p.key)).length;
+                return (
+                  <div className="mt-2 text-[11px] text-stone-500">
+                    {okCount}/{oblig.length} pièces obligatoires déposées · les manquantes deviendront des tâches à l'enregistrement.
+                  </div>
+                );
+              })()}
+            </div>
           )}
 
           {importResult && (
@@ -2221,6 +2471,7 @@ async function handleFolderImport(event) {
               lots={data.etatLocatif || []}
               onChange={(newLots) => update('etatLocatif', newLots)}
               prixNet={parseFloat(data.prixNetVendeur || data.prix || 0)}
+              mandatId={data.id || null}
             />
           </div>
 
@@ -2317,7 +2568,7 @@ async function handleFolderImport(event) {
             </div>
           )}
           <button onClick={onClose} className="px-4 py-2 text-sm text-stone-700 hover:bg-cream-200 rounded-lg">Annuler</button>
-          <button onClick={() => onSave(data, [])} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Enregistrer</button>
+          <button onClick={async () => { if (!mandat && data.id) await createMissingPieceTasks(data.id); onSave(data, []); }} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Enregistrer</button>
         </div>
 
         {/* Modale de fusion */}
@@ -2361,11 +2612,82 @@ async function handleFolderImport(event) {
 // ═══════════════════════════════════════════════════════════════════
 // EtatLocatifEditor — Tableau de saisie des lots (version enrichie)
 // Tableau large avec scroll horizontal
-// Champs : Lot, Type, Surface, Locataire, Loyer mois/an, Charges récup mois, Charges non récup an,
-//          Début bail, Durée, Échéance (auto), Loyer potentiel mois, Statut
+// Champs : Lot, Type, Surface, Locataire, Loyer mois/an, Loyer optimisé mois (= potentiel),
+//          Charges récup mois, Charges non récup an, Début bail, Durée, Échéance (auto), Statut
 // ═══════════════════════════════════════════════════════════════════
-function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
+function EtatLocatifEditor({ lots = [], onChange, prixNet = 0, mandatId = null }) {
   const safeLots = Array.isArray(lots) ? lots : [];
+
+  // Sprint 4 — Étape B : importer les lots depuis un document (PDF/scan d'état locatif)
+  const fileInputRef = useRef(null);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState(null);
+
+  function mapAiLot(l, idx) {
+    const debut = l.bail_debut || '';
+    const duree = parseInt(l.bail_duree) || 0;
+    let echeance = '';
+    if (debut && duree > 0) {
+      try {
+        const d = new Date(debut);
+        d.setFullYear(d.getFullYear() + duree);
+        echeance = d.toISOString().split('T')[0];
+      } catch { echeance = ''; }
+    }
+    return {
+      numero: l.numero != null && l.numero !== '' ? String(l.numero) : String(idx + 1),
+      type: l.type || '',
+      surface: parseFloat(l.surface) || 0,
+      locataire: l.locataire || '',
+      loyer: parseFloat(l.loyer) || 0,
+      charges_recup: 0,
+      charges_non_recup: 0,
+      bail_debut: debut,
+      bail_duree: duree || 9,
+      bail_echeance: echeance,
+      loyer_potentiel: 0,
+      statut: l.statut === 'libre' ? 'libre' : (l.statut === 'vacant' ? 'vacant' : 'loué'),
+    };
+  }
+
+  async function handleImportDoc(file) {
+    if (!file || !mandatId) return;
+    setImporting(true);
+    setImportMsg(null);
+    let storagePath = null;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Session expirée — reconnecte-toi.');
+      const cleanName = (file.name || 'etat-locatif').replace(/[^a-zA-Z0-9._-]/g, '_');
+      storagePath = mandatId + '/etat-locatif-temp/' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '_' + cleanName;
+      const { error: upErr } = await supabase.storage.from('mandat-docs').upload(storagePath, file, { contentType: file.type || 'application/octet-stream', upsert: false });
+      if (upErr) throw new Error('Envoi du fichier échoué : ' + upErr.message);
+
+      const res = await fetch('/api/mandats/' + mandatId + '/extract-etat-locatif', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, storage_path: storagePath }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Lecture du document échouée');
+
+      const newLots = (data.lots || []).map(mapAiLot);
+      if (newLots.length === 0) {
+        setImportMsg({ type: 'warn', text: "Aucun lot détecté. Vérifie que c'est bien un état locatif, ou saisis les lots à la main." });
+      } else {
+        onChange([...safeLots, ...newLots]);
+        const n = newLots.length;
+        setImportMsg({ type: 'ok', text: `${n} lot${n > 1 ? 's' : ''} importé${n > 1 ? 's' : ''}. Vérifie les valeurs, puis ajoute le loyer optimisé.` });
+      }
+    } catch (e) {
+      setImportMsg({ type: 'err', text: e.message || 'Erreur' });
+    } finally {
+      if (storagePath) { try { await supabase.storage.from('mandat-docs').remove([storagePath]); } catch { /* nettoyage best-effort */ } }
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
 
   function addLot() {
     onChange([...safeLots, {
@@ -2416,6 +2738,25 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
 
   return (
     <div className="space-y-3">
+      {/* Sprint 4 — Étape B : import des lots depuis un document */}
+      {mandatId && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <input ref={fileInputRef} type="file" accept=".pdf,image/*" className="hidden" onChange={e => handleImportDoc(e.target.files?.[0])} />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-sage-50 text-sage-darker border border-sage-light rounded-lg hover:bg-sage-100 disabled:opacity-50"
+            title="L'IA lit un document d'état locatif (PDF ou scan) et pré-remplit les lots"
+          >
+            {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileUp className="w-3.5 h-3.5" />}
+            {importing ? 'Lecture du document…' : '📄 Importer depuis un document'}
+          </button>
+          {importMsg && (
+            <span className={`text-xs ${importMsg.type === 'ok' ? 'text-emerald-700' : importMsg.type === 'warn' ? 'text-amber-700' : 'text-red-600'}`}>{importMsg.text}</span>
+          )}
+        </div>
+      )}
       {safeLots.length === 0 ? (
         <div className="text-center py-6 bg-white border border-dashed border-stone-300 rounded-lg">
           <div className="text-sm text-stone-500 mb-2">Aucun lot pour ce mandat</div>
@@ -2435,12 +2776,12 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
                   <th className="px-2 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Locataire</th>
                   <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Loyer €/mois</th>
                   <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Loyer €/an</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-amber-700 uppercase whitespace-nowrap bg-amber-50/50" title="Loyer optimisé : potentiel après revalorisation ou relocation. Sert au calcul du rendement optimisé.">Loyer optimisé €/mois</th>
                   <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap" title="Charges récupérables (refacturées au locataire)">Ch. récup. €/mois</th>
                   <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap" title="Charges non récupérables (à la charge du propriétaire)">Ch. non récup. €/an</th>
                   <th className="px-2 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Début bail</th>
                   <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Durée (ans)</th>
                   <th className="px-2 py-2 text-left text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap" title="Calculée automatiquement depuis début + durée. Modifiable.">Échéance</th>
-                  <th className="px-2 py-2 text-right text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap" title="Loyer potentiel après revalorisation ou relocation">Loyer potentiel €/mois</th>
                   <th className="px-2 py-2 text-center text-[10px] font-semibold text-stone-600 uppercase whitespace-nowrap">Statut</th>
                   <th className="w-8"></th>
                 </tr>
@@ -2461,10 +2802,10 @@ function EtatLocatifEditor({ lots = [], onChange, prixNet = 0 }) {
                   <td></td>
                   <td className="px-2 py-2 text-xs font-semibold text-right whitespace-nowrap">{sumLoyer > 0 ? `${sumLoyer.toLocaleString('fr-FR')} €` : '—'}</td>
                   <td className="px-2 py-2 text-xs font-semibold text-right whitespace-nowrap">{sumLoyer > 0 ? `${(sumLoyer * 12).toLocaleString('fr-FR')} €` : '—'}</td>
+                  <td className="px-2 py-2 text-xs font-semibold text-right text-amber-700 whitespace-nowrap bg-amber-50/50">{sumLoyerPotentiel > 0 ? `${sumLoyerPotentiel.toLocaleString('fr-FR')} €` : '—'}</td>
                   <td className="px-2 py-2 text-xs font-semibold text-right whitespace-nowrap">{sumChargesRecup > 0 ? `${sumChargesRecup.toLocaleString('fr-FR')} €` : '—'}</td>
                   <td className="px-2 py-2 text-xs font-semibold text-right whitespace-nowrap">{sumChargesNonRecup > 0 ? `${sumChargesNonRecup.toLocaleString('fr-FR')} €` : '—'}</td>
                   <td colSpan={3}></td>
-                  <td className="px-2 py-2 text-xs font-semibold text-right text-amber-700 whitespace-nowrap">{sumLoyerPotentiel > 0 ? `${sumLoyerPotentiel.toLocaleString('fr-FR')} €` : '—'}</td>
                   <td colSpan={2}></td>
                 </tr>
               </tfoot>
@@ -2590,6 +2931,18 @@ function LotRow({ lot, index, onUpdate, onRemove }) {
           className="w-28 px-1.5 py-1 border border-stone-200 rounded text-xs text-right bg-stone-50"
         />
       </td>
+      <td className="px-2 py-1.5 bg-amber-50/40">
+        <input
+          type="number"
+          step="any"
+          value={potMois}
+          onChange={e => setPotMois(e.target.value)}
+          onBlur={commitPotMois}
+          placeholder={loyerMois || '0'}
+          className="w-24 px-1.5 py-1 border border-amber-200 rounded text-xs text-right bg-white"
+          title="Loyer optimisé visé (après travaux ou relocation). Laisser vide = on reprend le loyer actuel."
+        />
+      </td>
       <td className="px-2 py-1.5">
         <input type="number" step="any" value={lot.charges_recup || ''} onChange={e => onUpdate(index, 'charges_recup', parseFloat(e.target.value) || 0)} className="w-24 px-1.5 py-1 border border-stone-200 rounded text-xs text-right" />
       </td>
@@ -2604,17 +2957,6 @@ function LotRow({ lot, index, onUpdate, onRemove }) {
       </td>
       <td className="px-2 py-1.5">
         <input type="date" value={lot.bail_echeance || ''} onChange={e => onUpdate(index, 'bail_echeance', e.target.value)} className="px-1.5 py-1 border border-stone-200 rounded text-xs bg-stone-50" title="Calculée automatiquement, modifiable" />
-      </td>
-      <td className="px-2 py-1.5">
-        <input
-          type="number"
-          step="any"
-          value={potMois}
-          onChange={e => setPotMois(e.target.value)}
-          onBlur={commitPotMois}
-          placeholder={loyerMois || '0'}
-          className="w-24 px-1.5 py-1 border border-stone-200 rounded text-xs text-right"
-        />
       </td>
       <td className="px-2 py-1.5 text-center">
         <select value={lot.statut || 'loué'} onChange={e => onUpdate(index, 'statut', e.target.value)} className="px-1.5 py-1 border border-stone-200 rounded text-xs">
@@ -2738,6 +3080,8 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
   const [showAvisValeur, setShowAvisValeur] = useState(false);
   const [showRapportMandant, setShowRapportMandant] = useState(false);
   const [mandatContacts, setMandatContacts] = useState([]);
+  // Sprint 4 — bouton pour masquer/afficher les honoraires (commission + net vendeur)
+  const [showHonoraires, setShowHonoraires] = useState(true);
 
   // Charge les contacts liés au mandat (pivot mandat_contacts)
   async function reloadMandatContacts() {
@@ -2811,6 +3155,15 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
     'Off-market': 'bg-stone-900 text-amber-300 border-amber-500/30'
   }[mandat.commercialisation] || 'bg-stone-100 text-stone-700 border-stone-200';
 
+  // Sprint 4 — les helpers prix (lib/priceDisplay) lisent du snake_case ;
+  // le mandat est en camelCase → on normalise pour que net vendeur / commission
+  // soient corrects (sinon ils retombaient toujours sur l'estimation 5%).
+  const mandatPrix = {
+    prix: mandat.prix,
+    prix_net_vendeur: mandat.prixNetVendeur ?? mandat.prix_net_vendeur,
+    honoraires_montant: mandat.honorairesMontant ?? mandat.honoraires_montant,
+  };
+
   return (
     <div className="p-8 max-w-7xl">
 
@@ -2821,6 +3174,15 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           <p className="text-stone-500 flex items-center gap-2 text-sm">
             <MapPin className="w-4 h-4" />{mandat.adresse}
           </p>
+          {/* Type de mandat + responsable commercial (remontés dans l'en-tête — Sprint 4 A3) */}
+          <div className="flex items-center gap-2 flex-wrap mt-2">
+            <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-xs font-medium ${commColor}`}>
+              <div className={`w-1.5 h-1.5 rounded-full ${isPublished ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400'}`} title={isPublished ? 'Publié' : 'Non publié'} />
+              <span>{mandat.commercialisation}</span>
+            </div>
+            <span className="text-[10px] uppercase tracking-wider text-stone-400 font-semibold">Resp.</span>
+            <OwnerSelector mandat={mandat} reload={reload} />
+          </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <button onClick={() => setAiAnalyzeOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-gradient-to-br from-sage-100 to-sage-200 text-sage-darker rounded-lg text-sm hover:from-sage-200 hover:to-sage-300 font-medium border border-sage-light" title="Analyser tous les documents du mandat avec l'IA">
@@ -2906,12 +3268,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           <button onClick={() => onOpenEmailDrafts?.(mandat.id)} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Préparer mails personnalisés aux acquéreurs">
             📧 Préparer mails clients
           </button>
-          <div className="flex-1" />
-          <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-xs font-medium ${commColor}`}>
-            <div className={`w-1.5 h-1.5 rounded-full ${isPublished ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400'}`} title={isPublished ? 'Publié' : 'Non publié'} />
-            <span>{mandat.commercialisation}</span>
-          </div>
-          <OwnerSelector mandat={mandat} reload={reload} />
         </div>
       </div>
 
@@ -2922,15 +3278,27 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Analyse financière</h2>
             <div className="grid grid-cols-4 gap-4">
               <div className="col-span-1">
-                <div className="text-xs uppercase tracking-wide text-stone-500 mb-1">Prix annoncé (TTC)</div>
-                <div className="text-2xl font-display font-semibold text-stone-900">{formatPrix(getPriceTTC(mandat))}</div>
-                <div className="text-[11px] text-stone-500 mt-1 leading-tight">
-                  Net vendeur : <span className="font-medium">{formatPrix(getPriceNV(mandat))}</span>
-                  {isNVEstimated(mandat) && <span className="text-amber-600 ml-1" title="Honoraires non renseignés, estimation à 5%">~ estimé</span>}
-                  <br />
-                  Commission : <span className="font-medium text-emerald-700">{formatPrix(getCommission(mandat))}</span>
-                  {isCommissionEstimated(mandat) && <span className="text-amber-600 ml-1" title="Commission estimée à 5% du TTC">~ estimée</span>}
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-xs uppercase tracking-wide text-stone-500">Prix frais d'agence inclus</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowHonoraires(v => !v)}
+                    className="text-stone-400 hover:text-stone-700"
+                    title={showHonoraires ? 'Masquer les honoraires' : 'Afficher les honoraires'}
+                  >
+                    {showHonoraires ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                  </button>
                 </div>
+                <div className="text-2xl font-display font-semibold text-stone-900">{formatPrix(getPriceTTC(mandatPrix))}</div>
+                {showHonoraires && (
+                  <div className="text-[11px] text-stone-500 mt-1 leading-tight">
+                    Net vendeur : <span className="font-medium">{formatPrix(getPriceNV(mandatPrix))}</span>
+                    {isNVEstimated(mandatPrix) && <span className="text-amber-600 ml-1" title="Honoraires non renseignés, estimation à 5%">~ estimé</span>}
+                    <br />
+                    Commission : <span className="font-medium text-emerald-700">{formatPrix(getCommission(mandatPrix))}</span>
+                    {isCommissionEstimated(mandatPrix) && <span className="text-amber-600 ml-1" title="Commission estimée à 5% du TTC">~ estimée</span>}
+                  </div>
+                )}
               </div>
               <DetailItem label="Prix au m²" value={mandat.prixM2 ? `${parseFloat(mandat.prixM2).toLocaleString('fr')}€` : '—'} />
               <DetailItem label="Loyers annuels" value={(() => {
@@ -3257,12 +3625,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
       {/* ═══ MODALS ═══ */}
       {openModal === 'visite' && (
         <VisiteModal mandat={mandat} onClose={() => setOpenModal(null)} onUpdate={reload} />
-      )}
-      {openModal === 'mandant' && (
-        <MandantModal mandat={mandat} onClose={() => { setOpenModal(null); reloadMandatContacts(); }} onUpdate={reload} />
-      )}
-      {openModal === 'documents' && (
-        <DocumentsModal mandat={mandat} onClose={() => setOpenModal(null)} />
       )}
       {openModal === 'medias' && (
         <MediasModal mandat={mandat} onClose={() => setOpenModal(null)} onUpdate={reload} />
