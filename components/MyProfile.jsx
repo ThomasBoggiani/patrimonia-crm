@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   User, TrendingUp, Building2, CheckSquare, Users as UsersIcon,
   Save, Loader2, Phone, Mail, Briefcase, Lock,
-  Link2, Copy, ExternalLink, Eye
+  Link2, Copy, ExternalLink, Eye, PenLine
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
@@ -35,6 +35,7 @@ export default function MyProfile({ mandats = [], todos = [], clients = [], allP
         <TabButton active={tab === 'questionnaire'} onClick={() => setTab('questionnaire')} icon={Link2} label="Mon questionnaire" />
         <TabButton active={tab === 'remuneration'} onClick={() => setTab('remuneration')} icon={TrendingUp} label="Ma rémunération" />
         <TabButton active={tab === 'signature'} onClick={() => setTab('signature')} icon={Mail} label="Ma signature" />
+        <TabButton active={tab === 'style'} onClick={() => setTab('style')} icon={PenLine} label="Style d'écriture" />
       </div>
 
       {tab === 'profil' && (
@@ -51,6 +52,10 @@ export default function MyProfile({ mandats = [], todos = [], clients = [], allP
 
       {tab === 'signature' && (
         <EmailSignatureEditor profile={profile} onSaved={refreshProfile} />
+      )}
+
+      {tab === 'style' && (
+        <ToneOfVoiceEditor profile={profile} isManager={isManager} onSaved={refreshProfile} />
       )}
     </div>
   );
@@ -362,6 +367,180 @@ function Field({ label, icon: Icon, required, className = '', children }) {
         <span>{label}{required && <span className="text-red-500">*</span>}</span>
       </label>
       {children}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// ToneOfVoiceEditor — style d'écriture perso + ton entreprise (managers)
+// Le ton est appliqué par l'Assistant Patrimonia aux emails et messages.
+// ─────────────────────────────────────────────────────────
+function ToneOfVoiceEditor({ profile, isManager, onSaved }) {
+  // Ton personnel (profiles.tone_of_voice)
+  const [perso, setPerso] = useState(profile.tone_of_voice || '');
+  const [savingPerso, setSavingPerso] = useState(false);
+  const [savedPersoAt, setSavedPersoAt] = useState(null);
+  const [errorPerso, setErrorPerso] = useState(null);
+
+  // Ton entreprise (settings.tone_of_voice_entreprise), chargé seulement pour les managers
+  const [entreprise, setEntreprise] = useState('');
+  const [loadingEntreprise, setLoadingEntreprise] = useState(isManager);
+  const [savingEntreprise, setSavingEntreprise] = useState(false);
+  const [savedEntrepriseAt, setSavedEntrepriseAt] = useState(null);
+  const [errorEntreprise, setErrorEntreprise] = useState(null);
+
+  useEffect(() => {
+    if (!isManager) return;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('settings')
+          .select('value')
+          .eq('key', 'tone_of_voice_entreprise')
+          .maybeSingle();
+        // value est jsonb : soit {"texte":"..."} soit une chaîne
+        let texte = '';
+        if (data?.value) {
+          if (typeof data.value === 'string') texte = data.value;
+          else if (typeof data.value === 'object' && typeof data.value.texte === 'string') texte = data.value.texte;
+        }
+        setEntreprise(texte);
+      } catch (e) {
+        setErrorEntreprise(e.message);
+      } finally {
+        setLoadingEntreprise(false);
+      }
+    })();
+  }, [isManager]);
+
+  const handleSavePerso = async () => {
+    setSavingPerso(true);
+    setErrorPerso(null);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ tone_of_voice: perso })
+        .eq('id', profile.id);
+      if (error) throw error;
+      setSavedPersoAt(Date.now());
+      onSaved?.();
+      setTimeout(() => setSavedPersoAt(null), 2500);
+    } catch (err) {
+      setErrorPerso(err.message);
+    } finally {
+      setSavingPerso(false);
+    }
+  };
+
+  const handleSaveEntreprise = async () => {
+    setSavingEntreprise(true);
+    setErrorEntreprise(null);
+    try {
+      const { error } = await supabase
+        .from('settings')
+        .update({ value: { texte: entreprise }, updated_at: new Date().toISOString(), updated_by: profile.id })
+        .eq('key', 'tone_of_voice_entreprise');
+      if (error) throw error;
+      setSavedEntrepriseAt(Date.now());
+      setTimeout(() => setSavedEntrepriseAt(null), 2500);
+    } catch (err) {
+      setErrorEntreprise(err.message);
+    } finally {
+      setSavingEntreprise(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Ton personnel */}
+      <div className="bg-white rounded-xl border border-cream-dark p-6">
+        <div className="mb-4">
+          <h2 className="font-display text-xl font-semibold text-ink mb-1">Mon style d'écriture</h2>
+          <p className="text-sm text-ink/60">
+            Décris ta façon d'écrire (ton, formules, niveau de formalité, signature…). L'Assistant Patrimonia s'en sert pour rédiger tes emails et messages à ta manière.
+            {isManager ? '' : ' Il reste toujours dans le respect du ton de voix de l\'entreprise.'}
+          </p>
+        </div>
+
+        <textarea
+          value={perso}
+          onChange={e => setPerso(e.target.value)}
+          rows={10}
+          placeholder={"Ex : Vouvoiement systématique. Règle des 3 C : Clair, Concis, Précis. Bullet points pour simplifier. Pas d'emoji. Accroches « Comme évoqué », « Comme convenu ». Clôture « Bien à vous, Thomas »."}
+          className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm leading-relaxed focus:outline-none focus:border-sage resize-y"
+        />
+
+        {errorPerso && (
+          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+            {errorPerso}
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-3 pt-4 mt-4 border-t border-cream-dark">
+          {savedPersoAt && (
+            <span className="text-xs text-sage-dark">✓ Enregistré</span>
+          )}
+          <button
+            onClick={handleSavePerso}
+            disabled={savingPerso}
+            className="flex items-center gap-2 px-5 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink disabled:opacity-50"
+          >
+            {savingPerso ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Enregistrer mon style
+          </button>
+        </div>
+      </div>
+
+      {/* Ton entreprise — managers uniquement */}
+      {isManager && (
+        <div className="bg-white rounded-xl border border-sage/30 p-6">
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Lock className="w-3.5 h-3.5 text-sage-dark" />
+              <h2 className="font-display text-xl font-semibold text-ink">Ton de voix de l'entreprise</h2>
+            </div>
+            <p className="text-sm text-ink/60">
+              Socle commun à toute l'agence. Il est <strong>prioritaire</strong> : le style personnel de chaque commercial s'applique dans le respect de ce ton. Réservé à la direction.
+            </p>
+          </div>
+
+          {loadingEntreprise ? (
+            <div className="py-8 text-center">
+              <Loader2 className="w-5 h-5 animate-spin text-sage-dark mx-auto" />
+            </div>
+          ) : (
+            <>
+              <textarea
+                value={entreprise}
+                onChange={e => setEntreprise(e.target.value)}
+                rows={10}
+                placeholder={"Ex : Agence patrimoniale off-market, Paris & Île-de-France. Registre premium feutré mais accessible. Vouvoiement. Ton mesuré et factuel, sans survente. Jamais d'emoji. Prudence sur les engagements."}
+                className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm leading-relaxed focus:outline-none focus:border-sage resize-y"
+              />
+
+              {errorEntreprise && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                  {errorEntreprise}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-4 mt-4 border-t border-cream-dark">
+                {savedEntrepriseAt && (
+                  <span className="text-xs text-sage-dark">✓ Enregistré</span>
+                )}
+                <button
+                  onClick={handleSaveEntreprise}
+                  disabled={savingEntreprise}
+                  className="flex items-center gap-2 px-5 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink disabled:opacity-50"
+                >
+                  {savingEntreprise ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Enregistrer le ton entreprise
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
