@@ -2497,7 +2497,9 @@ async function handleFolderImport(event, opts = {}) {
             </div>
           </div>
 
-          {/* SECTION 3 : ÉTAT LOCATIF */}
+          {/* SECTION 3 : ÉTAT LOCATIF — seulement en ÉDITION (retiré de la création pour l'alléger ;
+              les loyers viennent de l'IA, le détail des lots se fait sur la fiche du mandat) */}
+          {mandat && (
           <div className={sectionClass}>
             <h3 className={sectionTitleClass}>🏢 État locatif</h3>
             <p className="text-xs text-stone-500 mb-3">
@@ -2510,6 +2512,7 @@ async function handleFolderImport(event, opts = {}) {
               mandatId={data.id || null}
             />
           </div>
+          )}
 
           {/* SECTION 4 : CARACTÉRISTIQUES TECHNIQUES */}
           <div className={sectionClass}>
