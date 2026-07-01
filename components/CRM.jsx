@@ -2087,8 +2087,8 @@ async function handleFolderImport(event, opts = {}) {
       // 3) Analyse IA — SEULEMENT les documents pertinents pour les champs du mandat
       // (état locatif, titre, CU, ERP, DPE, taxe, mandat…). Les autres (baux/diagnostics
       // par lot, attestations de surface…) sont juste rangés, pas analysés → rapide.
-      const PRIORITY = /etat.?locatif|\bmandat\b|titre|propri|urbanis|\bcu\b|erp|risqu|\bdpe\b|taxe|fonci|avis|assainiss/i;
-      const MAX_ANALYZE = 15;
+      const PRIORITY = /etat.?locatif|\bmandat\b|titre|propri|urbanis|\bcu\b|erp|risqu|\bdpe\b|taxe|fonci|avis/i;
+      const MAX_ANALYZE = 6; // limite basse : PDF = beaucoup de tokens IA (429 sinon)
       let analyzed = 0;
       let totalFilled = 0, errors = 0;
       let firstAiError = null;
