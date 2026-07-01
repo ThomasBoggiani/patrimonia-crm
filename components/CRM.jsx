@@ -2007,6 +2007,10 @@ async function handleFolderImport(event, opts = {}) {
         newData.prixM2 = Math.round(newData.prix / newData.surface);
         newFilled.add('prixM2');
       }
+      // Titre lisible : si vide ou générique (= un type de bien), on reprend l'adresse.
+      if ((!newData.nom || newData.nom === newData.type || /^(immeuble|appartement|maison|terrain|local|studio|bureau|nouveau mandat|import)/i.test(newData.nom)) && newData.adresse) {
+        newData.nom = newData.adresse;
+      }
       setData(newData);
       setFilledFields(newFilled);
     }
@@ -2238,8 +2242,8 @@ async function handleFolderImport(event, opts = {}) {
   const sectionTitleClass = "font-display text-base font-semibold text-stone-900 mb-4 flex items-center gap-2";
 
   return (
-    <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-6" onClick={handleCancel}>
-      <div className="bg-white rounded-xl shadow-luxe-hover max-w-3xl w-full max-h-[92vh] overflow-y-auto scrollbar-thin" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 bg-cream-50 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-luxe max-w-4xl w-full mx-auto my-4 md:my-6 min-h-[calc(100vh-2rem)]">
 
         <div className="flex items-center justify-between p-6 border-b border-stone-200 sticky top-0 bg-white z-10">
           <div>
