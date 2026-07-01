@@ -2079,18 +2079,25 @@ async function handleFolderImport(event, opts = {}) {
         const f = files[i];
         setImportProgress({ current: i + 1, total: files.length, fileName: f.nom });
         let category = 'autre', extractedData = {};
-        try {
-          const aiRes = await fetch('/api/mandats/' + mandatId + '/import-folder', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token, storage_path: f.storage_path, applyToMandat: true }),
-          });
-          const aiData = await aiRes.json();
-          if (aiData.ok) {
-            category = aiData.category || 'autre';
-            extractedData = aiData.data || {};
-            totalFilled += (aiData.filled?.length || 0);
-          } else { errors++; }
-        } catch (e) { errors++; }
+        const isImage = (f.mime_type || '').startsWith('image/');
+        if (isImage) {
+          // Photo : pas d'analyse IA (inutile pour remplir les champs, et lent). On la range simplement.
+          category = 'plans_photos';
+        } else {
+          try {
+            const aiRes = await fetch('/api/mandats/' + mandatId + '/import-folder', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token, storage_path: f.storage_path, applyToMandat: true }),
+            });
+            const aiText = await aiRes.text();
+            let aiData; try { aiData = JSON.parse(aiText); } catch { aiData = { ok: false }; }
+            if (aiData.ok) {
+              category = aiData.category || 'autre';
+              extractedData = aiData.data || {};
+              totalFilled += (aiData.filled?.length || 0);
+            } else { errors++; }
+          } catch (e) { errors++; }
+        }
 
         await fetch('/api/mandats/' + mandatId + '/documents', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
