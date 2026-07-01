@@ -2011,6 +2011,11 @@ async function handleFolderImport(event, opts = {}) {
       if ((!newData.nom || newData.nom === newData.type || /^(immeuble|appartement|maison|terrain|local|studio|bureau|nouveau mandat|import)/i.test(newData.nom)) && newData.adresse) {
         newData.nom = newData.adresse;
       }
+      // Honoraires : taux 5% par défaut si absent, et montant € calculé auto (prix FAI × taux).
+      if (!newData.honorairesTaux) newData.honorairesTaux = 5;
+      if (newData.prix && newData.honorairesTaux && !newData.honorairesMontant) {
+        newData.honorairesMontant = Math.round((+newData.prix) * (+newData.honorairesTaux) / 100);
+      }
       setData(newData);
       setFilledFields(newFilled);
     }
@@ -2452,18 +2457,6 @@ async function handleFolderImport(event, opts = {}) {
                       />
                       <span className="block text-[10px] text-stone-400 mt-1">
                         {auto.actuel != null ? `Auto : ${auto.actuel}% — saisir une valeur pour forcer` : 'À ce jour, locataires en place'}
-                      </span>
-                    </Field>
-                    <Field label="Rendement optimisé (%)">
-                      <input
-                        type="number" step="0.01"
-                        value={data.rendementOptimise || ''}
-                        onChange={e => update('rendementOptimise', e.target.value === '' ? null : +e.target.value)}
-                        placeholder={placeholderOpt}
-                        className={fieldClass('rendementOptimise')}
-                      />
-                      <span className="block text-[10px] text-stone-400 mt-1">
-                        {auto.optimise != null ? `Auto : ${auto.optimise}% — saisir une valeur pour forcer` : 'Potentiel après travaux ou relocation'}
                       </span>
                     </Field>
                   </div>
