@@ -1753,6 +1753,25 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
 
   const update = (k, v) => setData({ ...data, [k]: v });
 
+  // Auto-refresh : après ajout/analyse d'un document, on recharge les champs du
+  // mandat depuis la base (ne touche que les champs vides pour ne pas écraser tes saisies).
+  async function refreshFormFromMandat() {
+    if (!data.id) return;
+    const { data: refreshed } = await supabase.from('mandats').select('*').eq('id', data.id).maybeSingle();
+    if (!refreshed) return;
+    setData(d => {
+      const nd = { ...d };
+      const isEmpty = (v) => v === null || v === undefined || v === '' || v === 0;
+      for (const [snake, camel] of Object.entries(FIELD_MAP)) {
+        if (refreshed[snake] !== null && refreshed[snake] !== undefined && refreshed[snake] !== '' && isEmpty(nd[camel])) {
+          nd[camel] = refreshed[snake];
+        }
+      }
+      if (refreshed.code_postal && isEmpty(nd.code_postal)) nd.code_postal = refreshed.code_postal;
+      return nd;
+    });
+  }
+
   // Annuler : si un mandat a été créé par un import (brouillon) et non enregistré,
   // on le supprime pour ne pas laisser de mandat fantôme dans la liste.
   async function handleCancel() {
@@ -2283,7 +2302,7 @@ async function handleFolderImport(event, opts = {}) {
        {/* Documents : import + lien + Dropbox (composant unifié avec validation IA) */}
         <div className="p-6 border-b border-stone-200 bg-gradient-to-br from-sage-50/70 to-cream-50">
           {mandat ? (
-            <DocumentsInline mandat={data} onUpdate={() => {}} />
+            <DocumentsInline mandat={data} onUpdate={refreshFormFromMandat} />
           ) : (
             <div>
               {/* Sprint 4 — C1 : check-list des pièces du dossier (création du mandat) */}
