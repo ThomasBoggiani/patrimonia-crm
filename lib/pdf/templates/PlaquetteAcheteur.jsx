@@ -52,6 +52,44 @@ function LineBadge({ line, mode }) {
   );
 }
 
+// ─── Photos : mise en page adaptative (remplit la page selon le nombre) ───
+function PhotosLayout({ photos }) {
+  const n = photos.length;
+  if (n === 1) {
+    return <Image src={photos[0]} style={{ width: '100%', height: 500, objectFit: 'cover', borderRadius: 3 }} />;
+  }
+  if (n === 2) {
+    return (
+      <View>
+        {photos.map((u, i) => (
+          <Image key={i} src={u} style={{ width: '100%', height: 248, objectFit: 'cover', borderRadius: 3, marginBottom: i === 0 ? 14 : 0 }} />
+        ))}
+      </View>
+    );
+  }
+  if (n === 3) {
+    return (
+      <View>
+        <Image src={photos[0]} style={{ width: '100%', height: 300, objectFit: 'cover', borderRadius: 3, marginBottom: 14 }} />
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          {photos.slice(1).map((u, i) => (
+            <Image key={i} src={u} style={{ width: '48.5%', height: 205, objectFit: 'cover', borderRadius: 3 }} />
+          ))}
+        </View>
+      </View>
+    );
+  }
+  // 4 à 6 photos : grille 2 colonnes qui remplit la hauteur
+  const h = n <= 4 ? 238 : 162;
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+      {photos.map((u, i) => (
+        <Image key={i} src={u} style={{ width: '48.5%', height: h, objectFit: 'cover', borderRadius: 3, marginBottom: 14 }} />
+      ))}
+    </View>
+  );
+}
+
 function walkingTime(meters) {
   const m = parseInt(meters);
   if (!m) return '';
@@ -99,13 +137,13 @@ function buildTeamForPlaquette({ mandat, sender, allMembers }) {
 }
 
 function TeamCard({ member, palette, size = 100, compact = false }) {
-  const photoSize = compact ? 80 : size;
+  const photoSize = compact ? 74 : size;
   const marginBottomCard = compact ? 6 : 12;
   const marginBottomPhoto = compact ? 6 : 10;
   const initials = (member?.name || '?').split(' ').map(s => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
 
   return (
-    <View style={{ alignItems: 'center', maxWidth: 200, marginHorizontal: 16, marginBottom: marginBottomCard }}>
+    <View style={{ alignItems: 'center', width: 150, maxWidth: 150, marginHorizontal: 8, marginBottom: marginBottomCard }}>
       {member.photo ? (
         <Image src={member.photo} style={{ width: photoSize, height: photoSize, borderRadius: photoSize / 2, objectFit: 'cover', marginBottom: marginBottomPhoto }} />
       ) : (
@@ -195,7 +233,7 @@ export default function PlaquetteAcheteur({
   const palette = isOffMarket ? COLORS.offmarket : COLORS.standard;
 
   const photos = normalizePhotos(mandat);
-  const photoChunks = chunkPhotos(photos, 9);
+  const photoChunks = chunkPhotos(photos, 6);
 
   // ─── Assets : ordre de priorité : mandat (BDD) → locationImages (live) ───
   const aerialSrc = mandat?.satellite_image_url || locationImages?.satellite || null;
@@ -234,7 +272,6 @@ export default function PlaquetteAcheteur({
   if (hasPhotos) { tocItems.push({ label: 'PHOTOS', page: `P. ${p}` }); p += photoChunks.length; }
   if (hasPlans) { tocItems.push({ label: 'PLANS', page: `P. ${p}` }); p += mandat.plans.length; }
   if (hasEtatLocatif) tocItems.push({ label: 'ETAT LOCATIF', page: `P. ${p++}` });
-  tocItems.push({ label: 'INFORMATIONS FINANCIÈRES', page: `P. ${p++}` });
   if (hasRisques) tocItems.push({ label: 'RISQUES NATURELS', page: `P. ${p++}` });
   tocItems.push({ label: 'NOTRE EQUIPE', page: `P. ${p++}` });
 
@@ -348,7 +385,7 @@ export default function PlaquetteAcheteur({
         <SectionTitle title="LE BIEN" isOffMarket={isOffMarket} />
         {!!description && (
           <View style={styles.descriptionBlock}>
-            <Text style={styles.descriptionText}>{description}</Text>
+            <Text style={[styles.descriptionText, { textAlign: 'left' }]}>{description}</Text>
           </View>
         )}
         {cards.length > 0 && (
@@ -357,6 +394,14 @@ export default function PlaquetteAcheteur({
               <Card key={i} number={c.number} label={c.label} isOffMarket={isOffMarket} />
             ))}
           </CardsRow>
+        )}
+        {finRows.length > 0 && (
+          <View style={{ marginTop: 36 }}>
+            <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: palette.accent || '#7E6F4F', textTransform: 'uppercase', letterSpacing: 1.5, textAlign: 'center', marginBottom: 2 }}>
+              Prix &amp; conditions
+            </Text>
+            <FinancialTable rows={finRows} isOffMarket={isOffMarket} />
+          </View>
         )}
         <PageFooter isOffMarket={isOffMarket} />
       </Page>
@@ -547,9 +592,9 @@ export default function PlaquetteAcheteur({
       {photoChunks.map((chunk, pageIndex) => (
         <Page key={`photos-${pageIndex}`} size="A4" style={styles.page}>
           <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
-          <SectionTitle title="PHOTOS" isOffMarket={isOffMarket} />
-          <View style={{ marginTop: 16 }}>
-            <PhotoGrid photos={chunk.map(url => ({ url }))} isOffMarket={isOffMarket} />
+          <SectionTitle title={photoChunks.length > 1 ? `PHOTOS (${pageIndex + 1}/${photoChunks.length})` : 'PHOTOS'} isOffMarket={isOffMarket} />
+          <View style={{ marginTop: 18 }}>
+            <PhotosLayout photos={chunk} />
           </View>
           <PageFooter isOffMarket={isOffMarket} />
         </Page>
@@ -654,14 +699,6 @@ export default function PlaquetteAcheteur({
         </Page>
       )}
 
-      {/* ─── INFORMATIONS FINANCIÈRES ─── */}
-      <Page size="A4" style={styles.page}>
-        <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
-        <SectionTitle title={"INFORMATIONS\nFINANCIÈRES"} multiLine={true} isOffMarket={isOffMarket} />
-        <FinancialTable rows={finRows} isOffMarket={isOffMarket} />
-        <PageFooter isOffMarket={isOffMarket} />
-      </Page>
-
       {/* ─── RISQUES NATURELS ─── */}
       {hasRisques && (
         <Page size="A4" style={styles.page}>
@@ -711,9 +748,9 @@ export default function PlaquetteAcheteur({
         <SectionTitle title="NOTRE ÉQUIPE" isOffMarket={isOffMarket} />
 
         {team.length > 0 && (
-          <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 30 }}>
+          <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 14 }}>
             {dossier.length > 0 && (
-              <View style={{ marginBottom: 30 }}>
+              <View style={{ marginBottom: 18 }}>
                 <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: palette.accent || '#9CAF88', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 10, textAlign: 'center' }}>
                   Pour ce dossier
                 </Text>
@@ -726,7 +763,7 @@ export default function PlaquetteAcheteur({
             )}
 
             {dossier.length > 0 && autres.length > 0 && (
-              <View style={{ borderBottomWidth: 0.5, borderBottomColor: palette.muted || '#999', marginVertical: 24, marginHorizontal: 60 }} />
+              <View style={{ borderBottomWidth: 0.5, borderBottomColor: palette.muted || '#999', marginVertical: 14, marginHorizontal: 60 }} />
             )}
 
             {autres.length > 0 && (() => {
@@ -735,13 +772,13 @@ export default function PlaquetteAcheteur({
               const autresSansBoss = autres.filter(m => !isBossInAutres(m));
 
               return (
-                <View style={{ marginTop: 24 }}>
+                <View style={{ marginTop: 10 }}>
                   <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: palette.accent || '#9CAF88', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 10, textAlign: 'center' }}>
                     À votre service
                   </Text>
 
                   {bossEntry && (
-                    <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: autresSansBoss.length > 0 ? 28 : 0 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: autresSansBoss.length > 0 ? 18 : 0 }}>
                       <TeamCard member={bossEntry} palette={palette} compact />
                     </View>
                   )}
