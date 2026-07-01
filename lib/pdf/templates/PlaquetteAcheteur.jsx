@@ -36,6 +36,7 @@ import {
   formatRendement,
   safeText,
   normalizePhotos,
+  selectPhotosForPlaquette,
   chunkPhotos,
   ensureAbsoluteUrl,
 } from '../helpers';
@@ -232,7 +233,7 @@ export default function PlaquetteAcheteur({
   const styles = getStyles(isOffMarket);
   const palette = isOffMarket ? COLORS.offmarket : COLORS.standard;
 
-  const photos = normalizePhotos(mandat);
+  const photos = selectPhotosForPlaquette(mandat);
   const photoChunks = chunkPhotos(photos, 6);
 
   // ─── Assets : ordre de priorité : mandat (BDD) → locationImages (live) ───
@@ -316,7 +317,12 @@ export default function PlaquetteAcheteur({
     finRows.push({ label: 'Loyers annuels HT/HC', value: formatPrix(loyers) });
   }
 
-  const description = safeText(mandat?.description, '');
+  // Nettoyage : retire un préfixe technique de migration (« _[Migration …] Ancien type : … _ »)
+  // hérité de l'ancienne base — invisible pour l'acheteur. On ne coupe que ce bloc en tête.
+  const description = safeText(mandat?.description, '')
+    .replace(/^\s*_\[Migration[\s\S]*?_(?=\s|$)/i, '')   // bloc « _[Migration …] … _ » encadré d'underscores
+    .replace(/^\s*\[Migration[^\]]*\][^\n]*\n?/i, '')      // variante sans underscores
+    .trim();
 
   // ─── Compteurs transports ───
   const transportCounts = transports ? {
