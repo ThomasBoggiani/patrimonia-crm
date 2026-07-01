@@ -2073,6 +2073,7 @@ async function handleFolderImport(event, opts = {}) {
 
       // 3) Analyse IA fichier par fichier (même pipeline que l'import local)
       let totalFilled = 0, errors = 0;
+      let firstAiError = null;
       const allExtracted = {};
       const categoriesByLabel = {};
       for (let i = 0; i < files.length; i++) {
@@ -2095,7 +2096,8 @@ async function handleFolderImport(event, opts = {}) {
               category = aiData.category || 'autre';
               extractedData = aiData.data || {};
               totalFilled += (aiData.filled?.length || 0);
-            } else { errors++; }
+              if (aiData.aiError && !firstAiError) firstAiError = aiData.aiError;
+            } else { errors++; if (!firstAiError) firstAiError = aiData.details || aiData.error || null; }
           } catch (e) { errors++; }
         }
 
@@ -2135,6 +2137,7 @@ async function handleFolderImport(event, opts = {}) {
       setImportProgress(null);
       setImportResult({ total: files.length, success: files.length - errors, errors, totalFilled, categoriesByLabel });
       setDropboxUrl('');
+      if (firstAiError) alert('Import terminé, mais l\'analyse IA d\'un document a échoué.\n\nDétail : ' + firstAiError + '\n\n(Le mandat et les documents sont bien créés ; certains champs peuvent ne pas être pré-remplis.)');
     } catch (e) {
       console.error('[DropboxImport] Erreur:', e);
       alert('Erreur : ' + e.message);
