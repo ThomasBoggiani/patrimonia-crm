@@ -186,39 +186,16 @@ async function analyzeDocument(buffer, mimeType) {
   let visionNote = null;
 
   if (mimeType === 'application/pdf' || mimeType.includes('pdf')) {
-    let pdfText = '';
-    try {
-      const parsed = await pdfParse(buffer);
-      pdfText = (parsed.text || '').trim();
-    } catch (parseErr) {
-      pdfText = '';
+    // On envoie le PDF DIRECTEMENT à Claude (il lit texte ET scans). Plus de
+    // pdf-parse ni mupdf (mupdf plantait « e is not a function »).
+    // Limite API : PDF jusqu'à ~32 Mo en base64. Au-delà, on saute.
+    if (buffer.length > 24 * 1024 * 1024) {
+      return { category: 'autre', extractedData: {}, unreadable: true, visionNote: 'PDF trop volumineux pour l\'analyse (> 24 Mo)' };
     }
-
-    if (pdfText && pdfText.length > 40) {
-      const MAX_CHARS = 30000;
-      if (pdfText.length > MAX_CHARS) {
-        pdfText = pdfText.slice(0, MAX_CHARS) + '\n\n[... suite tronquée ...]';
-      }
-      userContent = [{ type: 'text', text: 'Voici le contenu textuel du document :\n\n' + pdfText }];
-    } else {
-      let images = [], pageCount = 0, rendered = 0;
-      try {
-        ({ images, pageCount, rendered } = await renderPdfToImages(buffer));
-      } catch (rErr) {
-        // mupdf indisponible/en erreur : on n'échoue pas tout l'import, on saute ce doc.
-        return { category: 'autre', extractedData: {}, unreadable: true, visionNote: 'PDF non rendu (rendu image : ' + (rErr?.message || 'erreur') + ')' };
-      }
-      if (images.length === 0) {
-        return { category: 'autre', extractedData: {}, unreadable: true, visionNote: 'PDF illisible (aucune page rendue)' };
-      }
-      if (pageCount > rendered) {
-        visionNote = `Document de ${pageCount} pages — seules les ${rendered} premières ont été analysées. Si une info manque, dépose les pages suivantes séparément.`;
-      }
-      userContent = [
-        ...images.map(img => ({ type: 'image', source: { type: 'base64', media_type: img.media_type, data: img.data } })),
-        { type: 'text', text: 'Analyse ce document immobilier (rendu en image' + (images.length > 1 ? 's' : '') + '). Extrais les informations selon les règles.' },
-      ];
-    }
+    userContent = [
+      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') } },
+      { type: 'text', text: 'Analyse ce document immobilier (PDF). Extrais les informations selon les règles.' },
+    ];
   } else if (mimeType.startsWith('image/')) {
     const base64 = buffer.toString('base64');
     userContent = [

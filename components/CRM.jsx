@@ -2084,7 +2084,12 @@ async function handleFolderImport(event, opts = {}) {
       const files = dbData.files || [];
       if (files.length === 0) { alert('Aucun fichier exploitable dans ce dossier Dropbox.'); setImportProgress(null); return; }
 
-      // 3) Analyse IA fichier par fichier (même pipeline que l'import local)
+      // 3) Analyse IA — SEULEMENT les documents pertinents pour les champs du mandat
+      // (état locatif, titre, CU, ERP, DPE, taxe, mandat…). Les autres (baux/diagnostics
+      // par lot, attestations de surface…) sont juste rangés, pas analysés → rapide.
+      const PRIORITY = /etat.?locatif|\bmandat\b|titre|propri|urbanis|\bcu\b|erp|risqu|\bdpe\b|taxe|fonci|avis|assainiss/i;
+      const MAX_ANALYZE = 15;
+      let analyzed = 0;
       let totalFilled = 0, errors = 0;
       let firstAiError = null;
       const allExtracted = {};
@@ -2094,10 +2099,12 @@ async function handleFolderImport(event, opts = {}) {
         setImportProgress({ current: i + 1, total: files.length, fileName: f.nom });
         let category = 'autre', extractedData = {};
         const isImage = (f.mime_type || '').startsWith('image/');
+        const shouldAnalyze = !isImage && analyzed < MAX_ANALYZE && PRIORITY.test(f.nom || '');
         if (isImage) {
           // Photo : pas d'analyse IA (inutile pour remplir les champs, et lent). On la range simplement.
           category = 'plans_photos';
-        } else {
+        } else if (shouldAnalyze) {
+          analyzed++;
           try {
             const aiRes = await fetch('/api/mandats/' + mandatId + '/import-folder', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
