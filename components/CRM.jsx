@@ -2015,6 +2015,28 @@ async function handleFolderImport(event, opts = {}) {
       setFilledFields(newFilled);
     }
 
+    // Propriétaire extrait d'un titre/mandat → créer/sélectionner le contact propriétaire.
+    try {
+      const propNom = allExtracted.proprietaire_nom || allExtracted.proprietaire_societe;
+      if (propNom && !data.mandantClientId && !mandant) {
+        const { data: { user } } = await supabase.auth.getUser();
+        const { data: cli } = await supabase.from('clients').insert({
+          nom: propNom,
+          prenom: allExtracted.proprietaire_prenom || null,
+          societe: allExtracted.proprietaire_societe || null,
+          email: (allExtracted.proprietaire_email || '').toLowerCase().trim() || null,
+          tel: allExtracted.proprietaire_tel || null,
+          typologie: 'Mandant',
+          created_by: user?.id || null,
+          owner: data.owner || userInitials,
+        }).select().single();
+        if (cli) {
+          clients.push(cli);
+          setData(d => ({ ...d, mandantClientId: cli.id }));
+        }
+      }
+    } catch (e) { console.warn('[import] création propriétaire:', e.message); }
+
     setImportProgress(null);
     setImportResult({
       total: files.length,
