@@ -36,6 +36,7 @@ import {
   formatRendement,
   safeText,
   normalizePhotos,
+  selectPhotosForPlaquette,
   chunkPhotos,
   ensureAbsoluteUrl,
 } from '../helpers';
@@ -232,7 +233,7 @@ export default function PlaquetteAcheteur({
   const styles = getStyles(isOffMarket);
   const palette = isOffMarket ? COLORS.offmarket : COLORS.standard;
 
-  const photos = normalizePhotos(mandat);
+  const photos = selectPhotosForPlaquette(mandat);
   const photoChunks = chunkPhotos(photos, 6);
 
   // ─── Assets : ordre de priorité : mandat (BDD) → locationImages (live) ───

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Plus, Trash2, ExternalLink, Video, Globe, AlertCircle, Loader2, Image as ImageIcon, FileText, Star, GripVertical, Upload } from 'lucide-react';
+import { Plus, Trash2, ExternalLink, Video, Globe, AlertCircle, Loader2, Image as ImageIcon, FileText, Star, GripVertical, Upload, Check, BookOpen } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { compressImage } from '@/lib/photo-utils';
 
@@ -223,6 +223,16 @@ function PhotosTab({ mandat, photos, onChange, saving }) {
     onChange(photos.map((p, i) => ({ ...p, cover: i === idx, ordre: p.ordre ?? i })));
   }
 
+  function handleTogglePlaquette(idx) {
+    onChange(photos.map((p, i) => (i === idx ? { ...p, plaquette: !p.plaquette } : p)));
+  }
+
+  function setAllPlaquette(val) {
+    onChange(photos.map((p) => ({ ...p, plaquette: val })));
+  }
+
+  const nbSelected = photos.filter((p) => p.plaquette).length;
+
   function handleDragStart(idx) { setDraggedIdx(idx); }
   function handleDragOver(e, idx) { e.preventDefault(); setDragOverIdx(idx); }
   function handleDragEnd() { setDraggedIdx(null); setDragOverIdx(null); }
@@ -258,6 +268,21 @@ function PhotosTab({ mandat, photos, onChange, saving }) {
         />
       </div>
 
+      {photos.length > 0 && (
+        <div className="flex items-center gap-3 mb-3 px-3 py-2 bg-sage-50 border border-sage-light rounded-lg">
+          <BookOpen className="w-4 h-4 text-sage-darker flex-shrink-0" />
+          <p className="text-xs text-stone-600 flex-1">
+            {nbSelected > 0 ? (
+              <><strong className="text-sage-darker">{nbSelected} photo{nbSelected > 1 ? 's' : ''}</strong> dans la plaquette. Clique sur <BookOpen className="inline w-3 h-3 -mt-0.5" /> sur une photo pour l'ajouter/retirer.</>
+            ) : (
+              <>Aucune sélection : les <strong>{photos.length} photos</strong> iront dans la plaquette. Coche les plus belles avec <BookOpen className="inline w-3 h-3 -mt-0.5" /> pour n'en garder qu'une sélection.</>
+            )}
+          </p>
+          <button onClick={() => setAllPlaquette(true)} disabled={saving} className="text-xs px-2 py-1 rounded-md bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 disabled:opacity-50">Tout</button>
+          <button onClick={() => setAllPlaquette(false)} disabled={saving} className="text-xs px-2 py-1 rounded-md bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 disabled:opacity-50">Aucune</button>
+        </div>
+      )}
+
       {photos.length === 0 ? (
         <div className="text-sm text-stone-400 italic py-12 text-center bg-stone-50 rounded-lg border-2 border-dashed border-stone-200">
           Aucune photo. Cliquez sur « Ajouter des photos » pour commencer.
@@ -273,18 +298,30 @@ function PhotosTab({ mandat, photos, onChange, saving }) {
               onDragEnd={handleDragEnd}
               onDrop={(e) => handleDrop(e, idx)}
               className={`relative group aspect-square rounded-lg overflow-hidden border-2 transition-all cursor-move
-                ${p.cover ? 'border-amber-400 ring-2 ring-amber-200' : 'border-stone-200'}
+                ${p.cover ? 'border-amber-400 ring-2 ring-amber-200' : p.plaquette ? 'border-sage-dark' : 'border-stone-200'}
                 ${dragOverIdx === idx && draggedIdx !== idx ? 'ring-2 ring-sage-dark scale-105' : ''}
                 ${draggedIdx === idx ? 'opacity-50' : ''}
               `}
             >
-              <img src={p.url} alt="" className="w-full h-full object-cover" />
+              <img src={p.url} alt="" className={`w-full h-full object-cover ${p.plaquette ? '' : 'opacity-90'}`} />
               {p.cover && (
                 <div className="absolute top-1.5 left-1.5 bg-amber-400 text-amber-900 text-[10px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1">
                   <Star className="w-2.5 h-2.5 fill-current" /> Couverture
                 </div>
               )}
+              {p.plaquette && (
+                <div className="absolute bottom-1.5 left-1.5 bg-sage-dark text-white text-[10px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
+                  <BookOpen className="w-2.5 h-2.5" /> Plaquette
+                </div>
+              )}
               <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 flex gap-1">
+                <button
+                  onClick={() => handleTogglePlaquette(idx)}
+                  title={p.plaquette ? 'Retirer de la plaquette' : 'Ajouter à la plaquette'}
+                  className={`p-1.5 rounded-md shadow-sm ${p.plaquette ? 'bg-sage-dark hover:opacity-90' : 'bg-white/95 hover:bg-sage-50'}`}
+                >
+                  {p.plaquette ? <Check className="w-3.5 h-3.5 text-white" /> : <BookOpen className="w-3.5 h-3.5 text-sage-darker" />}
+                </button>
                 {!p.cover && (
                   <button onClick={() => handleSetCover(idx)} title="Définir comme couverture" className="p-1.5 bg-white/95 rounded-md hover:bg-amber-50 shadow-sm">
                     <Star className="w-3.5 h-3.5 text-amber-600" />
@@ -293,11 +330,6 @@ function PhotosTab({ mandat, photos, onChange, saving }) {
                 <button onClick={() => handleDelete(idx)} title="Supprimer" className="p-1.5 bg-white/95 rounded-md hover:bg-red-50 shadow-sm">
                   <Trash2 className="w-3.5 h-3.5 text-red-600" />
                 </button>
-              </div>
-              <div className="absolute bottom-1.5 left-1.5 opacity-0 group-hover:opacity-100">
-                <div className="bg-white/95 rounded p-1 shadow-sm">
-                  <GripVertical className="w-3 h-3 text-stone-500" />
-                </div>
               </div>
               <div className="absolute bottom-1.5 right-1.5 bg-stone-900/70 text-white text-[10px] px-1.5 py-0.5 rounded">
                 #{idx + 1}
