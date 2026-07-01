@@ -273,9 +273,9 @@ function PhotosTab({ mandat, photos, onChange, saving }) {
           <BookOpen className="w-4 h-4 text-sage-darker flex-shrink-0" />
           <p className="text-xs text-stone-600 flex-1">
             {nbSelected > 0 ? (
-              <><strong className="text-sage-darker">{nbSelected} photo{nbSelected > 1 ? 's' : ''}</strong> dans la plaquette. Clique sur <BookOpen className="inline w-3 h-3 -mt-0.5" /> sur une photo pour l'ajouter/retirer.</>
+              <><strong className="text-sage-darker">{nbSelected} photo{nbSelected > 1 ? 's' : ''}</strong> dans la plaquette. Bouton « Plaquette » en haut de chaque photo pour l'ajouter/retirer.</>
             ) : (
-              <>Aucune sélection : les <strong>{photos.length} photos</strong> iront dans la plaquette. Coche les plus belles avec <BookOpen className="inline w-3 h-3 -mt-0.5" /> pour n'en garder qu'une sélection.</>
+              <>Aucune sélection : les <strong>{photos.length} photos</strong> iront dans la plaquette. Clique sur le bouton <strong>« Plaquette »</strong> en haut des plus belles pour n'en garder qu'une sélection.</>
             )}
           </p>
           <button onClick={() => setAllPlaquette(true)} disabled={saving} className="text-xs px-2 py-1 rounded-md bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 disabled:opacity-50">Tout</button>
@@ -309,26 +309,24 @@ function PhotosTab({ mandat, photos, onChange, saving }) {
                   <Star className="w-2.5 h-2.5 fill-current" /> Couverture
                 </div>
               )}
-              {p.plaquette && (
-                <div className="absolute bottom-1.5 left-1.5 bg-sage-dark text-white text-[10px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
-                  <BookOpen className="w-2.5 h-2.5" /> Plaquette
-                </div>
-              )}
-              <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 flex gap-1">
-                <button
-                  onClick={() => handleTogglePlaquette(idx)}
-                  title={p.plaquette ? 'Retirer de la plaquette' : 'Ajouter à la plaquette'}
-                  className={`p-1.5 rounded-md shadow-sm ${p.plaquette ? 'bg-sage-dark hover:opacity-90' : 'bg-white/95 hover:bg-sage-50'}`}
-                >
-                  {p.plaquette ? <Check className="w-3.5 h-3.5 text-white" /> : <BookOpen className="w-3.5 h-3.5 text-sage-darker" />}
-                </button>
+              <div className="absolute top-1.5 right-1.5 flex gap-1 items-center">
+                {/* Couverture + suppression : au survol */}
                 {!p.cover && (
-                  <button onClick={() => handleSetCover(idx)} title="Définir comme couverture" className="p-1.5 bg-white/95 rounded-md hover:bg-amber-50 shadow-sm">
+                  <button onClick={() => handleSetCover(idx)} title="Définir comme couverture" className="hidden group-hover:flex p-1.5 bg-white/95 rounded-md hover:bg-amber-50 shadow-sm">
                     <Star className="w-3.5 h-3.5 text-amber-600" />
                   </button>
                 )}
-                <button onClick={() => handleDelete(idx)} title="Supprimer" className="p-1.5 bg-white/95 rounded-md hover:bg-red-50 shadow-sm">
+                <button onClick={() => handleDelete(idx)} title="Supprimer" className="hidden group-hover:flex p-1.5 bg-white/95 rounded-md hover:bg-red-50 shadow-sm">
                   <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                </button>
+                {/* Plaquette : toujours visible */}
+                <button
+                  onClick={() => handleTogglePlaquette(idx)}
+                  title={p.plaquette ? 'Retirer de la plaquette' : 'Ajouter à la plaquette'}
+                  className={`flex items-center gap-1 pl-2 pr-2.5 py-1.5 rounded-md shadow-sm text-[11px] font-medium ${p.plaquette ? 'bg-sage-dark text-white hover:opacity-90' : 'bg-white/95 text-sage-darker hover:bg-sage-50'}`}
+                >
+                  {p.plaquette ? <Check className="w-3.5 h-3.5" /> : <BookOpen className="w-3.5 h-3.5" />}
+                  {p.plaquette ? 'Incluse' : 'Plaquette'}
                 </button>
               </div>
               <div className="absolute bottom-1.5 right-1.5 bg-stone-900/70 text-white text-[10px] px-1.5 py-0.5 rounded">
