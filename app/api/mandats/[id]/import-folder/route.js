@@ -103,6 +103,13 @@ ATTENTION PARTICULIÈRE AU DPE / AUDIT ÉNERGÉTIQUE (document prioritaire) :
 - "cout_energie_annuel" : le coût annuel d'énergie estimé, en euros (un nombre, ex : 1850). Souvent présenté comme une fourchette "entre X et Y €/an" : prends la valeur haute, ou la moyenne si une seule fourchette.
 - "surface" : la surface mentionnée. Pour un lot/appartement c'est la surface loi Carrez ou habitable ; pour un immeuble c'est la surface utile/habitable totale. Mets la surface en m² (un nombre).
 - "code_postal" : le code postal de l'adresse du bien (5 chiffres, ex : "75008"). Présent sur tout DPE, mandat ou avis. Extrais-le précisément, c'est essentiel pour la localisation.
+- LE PROPRIÉTAIRE / VENDEUR / MANDANT (surtout sur un titre de propriété, un mandat, une taxe foncière) :
+  - "proprietaire_nom" : nom de famille (personne physique) OU raison sociale (SCI, société). Ex : "Dupont" ou "SCI LEA".
+  - "proprietaire_prenom" : prénom si personne physique.
+  - "proprietaire_societe" : raison sociale si c'est une société/SCI (sinon vide).
+  - "proprietaire_email" : email du propriétaire si présent.
+  - "proprietaire_tel" : téléphone du propriétaire si présent.
+  N'invente jamais : n'extrais le propriétaire que s'il est clairement identifié dans le document.
 
 Réponds UNIQUEMENT avec un JSON valide (pas de backticks markdown). Format exact :
 
@@ -141,7 +148,12 @@ Réponds UNIQUEMENT avec un JSON valide (pas de backticks markdown). Format exac
     "nb_lots": 146,
     "description": "...",
     "highlights": ["..."],
-    "commercialisation": "Mandat exclusif|Mandat simple|Off-market"
+    "commercialisation": "Mandat exclusif|Mandat simple|Off-market",
+    "proprietaire_nom": "SCI LEA",
+    "proprietaire_prenom": "...",
+    "proprietaire_societe": "SCI LEA",
+    "proprietaire_email": "...",
+    "proprietaire_tel": "..."
   }
 }
 
@@ -318,6 +330,9 @@ export async function POST(request, { params }) {
           const updates = {};
           for (const [key, value] of Object.entries(extractedData)) {
             if (value === null || value === undefined || value === '') continue;
+            // proprietaire_* ne sont PAS des colonnes de mandats : on ne les écrit pas
+            // (sinon l'update échoue), mais ils restent dans `data` (pour créer le contact).
+            if (key.startsWith('proprietaire_')) continue;
             if (currentMandat[key] !== value) {
               updates[key] = value;
               filled.push(key);
