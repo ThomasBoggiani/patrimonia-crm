@@ -1682,14 +1682,18 @@ function MandatsKanban({ mandats, onSelectMandat, reload, secondaryDisplay = 'm2
 }
 // Sprint 4 — C1 : pièces du dossier nécessaires à la constitution d'un mandat.
 // category = catégorie de doc utilisée pour ranger la pièce (cf. import-folder).
+// Pièces du dossier — toutes CONSEILLÉES (aucune obligatoire). On les dépose une
+// par une (un doc analysé à la fois → pas de souci de quota IA). Quelques docs
+// clés suffisent à créer le mandat, le reste se complète à la main.
 const PIECES_DOSSIER = [
-  { key: 'fiche',        label: 'Fiche / mandat',            obligatoire: true,  category: 'mandat',       emoji: '📄' },
-  { key: 'etat_locatif', label: 'État locatif + descriptif', obligatoire: true,  category: 'notes',        emoji: '🏢' },
-  { key: 'dpe',          label: 'DPE',                       obligatoire: true,  category: 'diagnostics',  emoji: '⚡' },
-  { key: 'taxe',         label: 'Taxe foncière',             obligatoire: true,  category: 'autre',        emoji: '🧾' },
-  { key: 'diagnostics',  label: 'Diagnostics (amiante, plomb…)', obligatoire: true, category: 'diagnostics', emoji: '🔬' },
-  { key: 'photos',       label: 'Photos',                    obligatoire: false, category: 'plans_photos', emoji: '🖼️' },
-  { key: 'plans',        label: 'Plans',                     obligatoire: false, category: 'plans_photos', emoji: '📐' },
+  { key: 'fiche',        label: 'Fiche / mandat',                category: 'mandat',       emoji: '📄' },
+  { key: 'etat_locatif', label: 'État locatif + descriptif',     category: 'notes',        emoji: '🏢' },
+  { key: 'titre',        label: 'Titre de propriété',            category: 'mandant',      emoji: '📜' },
+  { key: 'dpe',          label: 'DPE',                           category: 'diagnostics',  emoji: '⚡' },
+  { key: 'taxe',         label: 'Taxe foncière',                 category: 'autre',        emoji: '🧾' },
+  { key: 'diagnostics',  label: 'Diagnostics (amiante, plomb…)', category: 'diagnostics',  emoji: '🔬' },
+  { key: 'photos',       label: 'Photos',                        category: 'plans_photos', emoji: '🖼️' },
+  { key: 'plans',        label: 'Plans',                         category: 'plans_photos', emoji: '📐' },
 ];
 
 function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
@@ -2087,8 +2091,8 @@ async function handleFolderImport(event, opts = {}) {
       // 3) Analyse IA — SEULEMENT les documents pertinents pour les champs du mandat
       // (état locatif, titre, CU, ERP, DPE, taxe, mandat…). Les autres (baux/diagnostics
       // par lot, attestations de surface…) sont juste rangés, pas analysés → rapide.
-      const PRIORITY = /etat.?locatif|\bmandat\b|titre|propri|urbanis|\bcu\b|erp|risqu|\bdpe\b|taxe|fonci|avis|assainiss/i;
-      const MAX_ANALYZE = 15;
+      const PRIORITY = /etat.?locatif|\bmandat\b|titre|propri|urbanis|\bcu\b|erp|risqu|\bdpe\b|taxe|fonci|avis/i;
+      const MAX_ANALYZE = 6; // limite basse : PDF = beaucoup de tokens IA (429 sinon)
       let analyzed = 0;
       let totalFilled = 0, errors = 0;
       let firstAiError = null;
@@ -2257,8 +2261,8 @@ async function handleFolderImport(event, opts = {}) {
 
               <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-stone-800">Constituez le dossier — l'IA crée le mandat</p>
-                  <p className="text-xs text-stone-500">Déposez chaque pièce (ou tout en vrac, l'IA range). Une pièce obligatoire manquante deviendra une tâche.</p>
+                  <p className="text-sm font-medium text-stone-800">Constituez le dossier — l'IA remplit les champs</p>
+                  <p className="text-xs text-stone-500">Déposez les documents dont vous disposez, un par un (tous conseillés). Quelques-uns suffisent — le reste se complète à la main.</p>
                 </div>
                 <button
                   type="button"
@@ -2267,27 +2271,7 @@ async function handleFolderImport(event, opts = {}) {
                   className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-sage-light text-sage-darker rounded-lg text-xs hover:bg-sage-50 disabled:opacity-50 font-medium flex-shrink-0"
                 >
                   {importProgress ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileUp className="w-3.5 h-3.5" />}
-                  Tout déposer en vrac
-                </button>
-              </div>
-
-              {/* Sprint 4 — import par lien Dropbox public */}
-              <div className="flex items-center gap-2 mb-3 p-2 bg-amber-50/60 border border-amber-200 rounded-lg flex-wrap">
-                <span className="text-xs text-amber-800 font-medium flex items-center gap-1 flex-shrink-0">📁 Dropbox</span>
-                <input
-                  type="url"
-                  value={dropboxUrl}
-                  onChange={e => setDropboxUrl(e.target.value)}
-                  placeholder="Coller le lien public du dossier Dropbox…"
-                  className="flex-1 min-w-[160px] px-2 py-1.5 border border-amber-200 rounded text-xs focus:outline-none focus:border-amber-400"
-                />
-                <button
-                  type="button"
-                  onClick={handleDropboxImport}
-                  disabled={!!importProgress || !dropboxUrl.trim()}
-                  className="px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 flex-shrink-0"
-                >
-                  Analyser
+                  Déposer plusieurs fichiers
                 </button>
               </div>
 
@@ -2295,13 +2279,11 @@ async function handleFolderImport(event, opts = {}) {
                 {PIECES_DOSSIER.map(p => {
                   const present = piecesPresent.has(p.key);
                   return (
-                    <div key={p.key} className={`flex items-center gap-3 px-3 py-2 rounded-lg border ${present ? 'border-emerald-200 bg-emerald-50/50' : (p.obligatoire ? 'border-stone-200 bg-white' : 'border-dashed border-stone-300 bg-white')}`}>
+                    <div key={p.key} className={`flex items-center gap-3 px-3 py-2 rounded-lg border ${present ? 'border-emerald-200 bg-emerald-50/50' : 'border-dashed border-stone-300 bg-white'}`}>
                       <span className="text-lg flex-shrink-0">{p.emoji}</span>
                       <div className="flex-1 min-w-0">
                         <span className="text-sm font-medium text-stone-800">{p.label}</span>
-                        {p.obligatoire
-                          ? <span className="text-[10px] text-red-500 ml-1">· obligatoire</span>
-                          : <span className="text-[10px] text-stone-400 ml-1">· recommandé</span>}
+                        <span className="text-[10px] text-stone-400 ml-1">· conseillé</span>
                       </div>
                       {present ? (
                         <span className="inline-flex items-center gap-1 text-xs text-emerald-700 flex-shrink-0"><Check className="w-3.5 h-3.5" /> déposé</span>
@@ -2326,15 +2308,11 @@ async function handleFolderImport(event, opts = {}) {
                 </div>
               )}
 
-              {(() => {
-                const oblig = PIECES_DOSSIER.filter(p => p.obligatoire);
-                const okCount = oblig.filter(p => piecesPresent.has(p.key)).length;
-                return (
-                  <div className="mt-2 text-[11px] text-stone-500">
-                    {okCount}/{oblig.length} pièces obligatoires déposées · les manquantes deviendront des tâches à l'enregistrement.
-                  </div>
-                );
-              })()}
+              <div className="mt-2 text-[11px] text-stone-500">
+                {piecesPresent.size > 0
+                  ? `${piecesPresent.size} document(s) déposé(s). Vérifiez les champs, puis Enregistrez.`
+                  : 'Déposez au moins un document (ou remplissez les champs à la main), puis Enregistrez.'}
+              </div>
             </div>
           )}
 
