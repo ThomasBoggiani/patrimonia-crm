@@ -316,7 +316,12 @@ export default function PlaquetteAcheteur({
     finRows.push({ label: 'Loyers annuels HT/HC', value: formatPrix(loyers) });
   }
 
-  const description = safeText(mandat?.description, '');
+  // Nettoyage : retire un préfixe technique de migration (« _[Migration …] Ancien type : … _ »)
+  // hérité de l'ancienne base — invisible pour l'acheteur. On ne coupe que ce bloc en tête.
+  const description = safeText(mandat?.description, '')
+    .replace(/^\s*_\[Migration[\s\S]*?_(?=\s|$)/i, '')   // bloc « _[Migration …] … _ » encadré d'underscores
+    .replace(/^\s*\[Migration[^\]]*\][^\n]*\n?/i, '')      // variante sans underscores
+    .trim();
 
   // ─── Compteurs transports ───
   const transportCounts = transports ? {
