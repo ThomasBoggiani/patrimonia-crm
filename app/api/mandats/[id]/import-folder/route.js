@@ -201,7 +201,13 @@ async function analyzeDocument(buffer, mimeType) {
       }
       userContent = [{ type: 'text', text: 'Voici le contenu textuel du document :\n\n' + pdfText }];
     } else {
-      const { images, pageCount, rendered } = await renderPdfToImages(buffer);
+      let images = [], pageCount = 0, rendered = 0;
+      try {
+        ({ images, pageCount, rendered } = await renderPdfToImages(buffer));
+      } catch (rErr) {
+        // mupdf indisponible/en erreur : on n'échoue pas tout l'import, on saute ce doc.
+        return { category: 'autre', extractedData: {}, unreadable: true, visionNote: 'PDF non rendu (rendu image : ' + (rErr?.message || 'erreur') + ')' };
+      }
       if (images.length === 0) {
         return { category: 'autre', extractedData: {}, unreadable: true, visionNote: 'PDF illisible (aucune page rendue)' };
       }
@@ -223,12 +229,17 @@ async function analyzeDocument(buffer, mimeType) {
     return { category: 'autre', extractedData: {}, skipped: true, visionNote: null };
   }
 
-  const response = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 2000,
-    system: PROMPT,
-    messages: [{ role: 'user', content: userContent }],
-  });
+  let response;
+  try {
+    response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2000,
+      system: PROMPT,
+      messages: [{ role: 'user', content: userContent }],
+    });
+  } catch (aErr) {
+    throw new Error('appel IA : ' + (aErr?.message || aErr));
+  }
 
   const text = response.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
 
