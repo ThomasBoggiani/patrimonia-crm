@@ -1744,8 +1744,19 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   const pendingPieceRef = React.useRef(null);
   // Sprint 4 — import Dropbox par lien
   const [dropboxUrl, setDropboxUrl] = useState('');
+  // Mandat créé automatiquement par un import (brouillon) : supprimé si l'utilisateur annule.
+  const [autoCreatedId, setAutoCreatedId] = useState(null);
 
   const update = (k, v) => setData({ ...data, [k]: v });
+
+  // Annuler : si un mandat a été créé par un import (brouillon) et non enregistré,
+  // on le supprime pour ne pas laisser de mandat fantôme dans la liste.
+  async function handleCancel() {
+    if (autoCreatedId) {
+      try { await supabase.from('mandats').delete().eq('id', autoCreatedId); } catch { /* best-effort */ }
+    }
+    onClose();
+  }
 
   // ═══ Suppression du mandat ═══
   async function handleDeleteMandat() {
@@ -1893,6 +1904,7 @@ async function handleFolderImport(event, opts = {}) {
       }
       mandatId = created.id;
       setData(d => ({ ...d, id: mandatId }));
+      setAutoCreatedId(mandatId);
     }
 
     let totalFilled = 0;
@@ -2048,6 +2060,7 @@ async function handleFolderImport(event, opts = {}) {
         if (createErr || !created) { alert('Erreur création mandat : ' + (createErr?.message || 'inconnue')); setImportProgress(null); return; }
         mandatId = created.id;
         setData(d => ({ ...d, id: mandatId }));
+        setAutoCreatedId(mandatId);
       }
 
       // 2) Récupérer les fichiers du dossier Dropbox.
@@ -2125,6 +2138,10 @@ async function handleFolderImport(event, opts = {}) {
           }
         }
         if (newData.prix && newData.surface && !newData.prixM2) { newData.prixM2 = Math.round(newData.prix / newData.surface); newFilled.add('prixM2'); }
+        // Nom lisible : si l'IA n'a pas trouvé de nom, on reprend l'adresse.
+        if ((!newData.nom || /import dropbox|nouveau mandat/i.test(newData.nom)) && newData.adresse) {
+          newData.nom = newData.adresse;
+        }
         setData(newData);
         setFilledFields(newFilled);
       }
@@ -2210,7 +2227,7 @@ async function handleFolderImport(event, opts = {}) {
   const sectionTitleClass = "font-display text-base font-semibold text-stone-900 mb-4 flex items-center gap-2";
 
   return (
-    <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-6" onClick={onClose}>
+    <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-6" onClick={handleCancel}>
       <div className="bg-white rounded-xl shadow-luxe-hover max-w-3xl w-full max-h-[92vh] overflow-y-auto scrollbar-thin" onClick={e => e.stopPropagation()}>
 
         <div className="flex items-center justify-between p-6 border-b border-stone-200 sticky top-0 bg-white z-10">
@@ -2218,7 +2235,7 @@ async function handleFolderImport(event, opts = {}) {
             <h2 className="font-display text-2xl font-semibold text-stone-900">{mandat ? 'Modifier' : 'Nouveau'} mandat</h2>
             <p className="text-xs text-stone-500 mt-0.5">Importe un dossier — l'IA pré-remplit automatiquement</p>
           </div>
-          <button onClick={onClose} className="text-stone-500 hover:text-stone-900"><X className="w-5 h-5" /></button>
+          <button onClick={handleCancel} className="text-stone-500 hover:text-stone-900"><X className="w-5 h-5" /></button>
         </div>
 
        {/* Documents : import + lien + Dropbox (composant unifié avec validation IA) */}
@@ -2263,7 +2280,7 @@ async function handleFolderImport(event, opts = {}) {
                   disabled={!!importProgress || !dropboxUrl.trim()}
                   className="px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 flex-shrink-0"
                 >
-                  Importer
+                  Analyser
                 </button>
               </div>
 
@@ -2582,8 +2599,8 @@ async function handleFolderImport(event, opts = {}) {
               </button>
             </div>
           )}
-          <button onClick={onClose} className="px-4 py-2 text-sm text-stone-700 hover:bg-cream-200 rounded-lg">Annuler</button>
-          <button onClick={async () => { if (!mandat && data.id) await createMissingPieceTasks(data.id); onSave(data, []); }} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Enregistrer</button>
+          <button onClick={handleCancel} className="px-4 py-2 text-sm text-stone-700 hover:bg-cream-200 rounded-lg">Annuler</button>
+          <button onClick={async () => { if (!mandat && data.id) await createMissingPieceTasks(data.id); setAutoCreatedId(null); onSave(data, []); }} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Enregistrer</button>
         </div>
 
         {/* Modale de fusion */}
