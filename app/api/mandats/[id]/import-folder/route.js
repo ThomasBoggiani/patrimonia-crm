@@ -110,6 +110,10 @@ ATTENTION PARTICULIÈRE AU DPE / AUDIT ÉNERGÉTIQUE (document prioritaire) :
   - "proprietaire_email" : email du propriétaire si présent.
   - "proprietaire_tel" : téléphone du propriétaire si présent.
   N'invente jamais : n'extrais le propriétaire que s'il est clairement identifié dans le document.
+- "type" : la FAMILLE d'actif, STRICTEMENT l'une de ces valeurs exactes : "Immeubles" (immeuble entier / de rapport / mixte), "Hôtels", "Résidentiel" (UN appartement, studio ou maison seul), "Terrains", "Parking", "Locaux commerciaux". Un IMMEUBLE ENTIER = "Immeubles" (surtout PAS "Résidentiel").
+- "sous_type" : la sous-famille correspondante, STRICTEMENT l'une de : Immeubles → "Mixte" | "Tertiaire" | "Habitation" ; Hôtels → "Hébergements hôteliers" | "Hôtels classiques" | "Sociaux" ; Résidentiel → "Appartements" | "Maison" | "Hôtels particuliers" ; Locaux commerciaux → "Bureaux" | "Boutiques" | "Retails Park". (Terrains et Parking : pas de sous_type.)
+- "description" : rédige un PITCH commercial court et vendeur (2 à 4 phrases), PAS une simple description factuelle. Mets en avant les atouts : emplacement, standing, potentiel, rendement, rareté. Ton haut de gamme et sobre. Base-toi UNIQUEMENT sur les infos réelles du document (n'invente pas de prestations). Ex : "Immeuble de rapport idéalement situé à La Plaine Saint-Denis, à deux pas des transports. 28 lots offrant un rendement attractif et un réel potentiel de revalorisation. Une opportunité rare pour un investisseur patrimonial."
+- "highlights" : 3 à 6 points forts très courts (max 6 mots chacun), style puces de plaquette. Ex : ["Emplacement recherché", "Fort potentiel locatif", "28 lots", "Rendement attractif"].
 
 Réponds UNIQUEMENT avec un JSON valide (pas de backticks markdown). Format exact :
 
@@ -120,8 +124,8 @@ Réponds UNIQUEMENT avec un JSON valide (pas de backticks markdown). Format exac
     "adresse": "...",
     "ville": "...",
     "code_postal": "75008",
-    "type": "Appartement|Studio|Maison|Immeuble|Terrain|Local commercial|Bureau",
-    "sous_type": "T1|T2|T3|...",
+    "type": "Immeubles|Hôtels|Résidentiel|Terrains|Parking|Locaux commerciaux",
+    "sous_type": "Mixte|Tertiaire|Habitation|Appartements|Maison|Bureaux|...",
     "surface": 28.36,
     "nb_pieces": 2,
     "nb_chambres": 1,
