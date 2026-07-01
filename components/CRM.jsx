@@ -1714,9 +1714,9 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
     chargesAnnuelles: 0, taxeFonciere: 0,
     dpeConsommation: 0, dpeEmissions: 0, dpeDate: null,
     mandatNumero: '', mandatType: '', mandatDateEcheance: null,
-    honorairesTaux: 0, honorairesMontant: 0, honorairesCharge: '',
+    honorairesTaux: 5, honorairesMontant: 0, honorairesCharge: '',
     mandantClientId: null,
-    pourvoyeurId: null,
+    pourvoyeurId: profile?.id || null,
     vendeurId: null,
   });
 
@@ -1861,7 +1861,7 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   }
 
   const FIELD_MAP = {
-    nom: 'nom', adresse: 'adresse', ville: 'ville', type: 'type',
+    nom: 'nom', adresse: 'adresse', ville: 'ville', code_postal: 'code_postal', type: 'type',
     sous_type: 'sousType', surface: 'surface',
     nb_pieces: 'nbPieces', nb_chambres: 'nbChambres', etage: 'etage',
     annee_construction: 'anneeConstruction',
@@ -2353,7 +2353,7 @@ async function handleFolderImport(event, opts = {}) {
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Ville"><input type="text" value={data.ville || ''} onChange={e => update('ville', e.target.value)} className={fieldClass('ville')} /></Field>
                 <Field label="Code postal"><input type="text" value={data.code_postal || ''} onChange={e => update('code_postal', e.target.value)} className={fieldClass('code_postal')} /></Field>
-                <Field label="Surface (m²)"><input type="number" value={data.surface} onChange={e => update('surface', +e.target.value)} className={fieldClass('surface')} /></Field>
+                <Field label="Surface (m²)"><input type="number" value={data.surface} onChange={e => { const surface = +e.target.value; setData(d => ({ ...d, surface, prixM2: surface ? Math.round((+d.prix || 0) / surface) : d.prixM2 })); }} className={fieldClass('surface')} /></Field>
               </div>
               <Field label="Marché">
                 <div className="flex gap-2">
@@ -2410,7 +2410,7 @@ async function handleFolderImport(event, opts = {}) {
                 <Field label="&Eacute;ch&eacute;ance"><input type="date" value={data.mandatDateEcheance || ''} onChange={e => update('mandatDateEcheance', e.target.value)} className={fieldClass('mandatDateEcheance')} /></Field>
               </div>
               <div className="grid grid-cols-3 gap-3">
-                <Field label="Prix annonc&eacute; TTC (&euro;)"><input type="number" value={data.prix} onChange={e => update('prix', +e.target.value)} className={fieldClass('prix')} placeholder="Honoraires inclus" /></Field>
+                <Field label="Prix frais d'agence inclus (&euro;)"><input type="number" value={data.prix} onChange={e => { const prix = +e.target.value; setData(d => ({ ...d, prix, prixM2: (+d.surface) ? Math.round(prix / (+d.surface)) : d.prixM2, honorairesMontant: (+d.honorairesTaux) ? Math.round(prix * (+d.honorairesTaux) / 100) : d.honorairesMontant })); }} className={fieldClass('prix')} placeholder="Honoraires inclus" /></Field>
                 <Field label="Prix/m&sup2; (&euro;)"><input type="number" value={data.prixM2} onChange={e => update('prixM2', +e.target.value)} className={fieldClass('prixM2')} /></Field>
                 <Field label="Loyers/an (&euro;)"><input type="number" value={data.loyersAnnuels} onChange={e => update('loyersAnnuels', +e.target.value)} className={fieldClass('loyersAnnuels')} /></Field>
               </div>
@@ -2448,7 +2448,7 @@ async function handleFolderImport(event, opts = {}) {
                 );
               })()}
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Honoraires (%)"><input type="number" step="0.01" value={data.honorairesTaux || 0} onChange={e => update('honorairesTaux', +e.target.value)} className={fieldClass('honorairesTaux')} /></Field>
+                <Field label="Honoraires (%)"><input type="number" step="0.01" value={data.honorairesTaux || 0} onChange={e => { const taux = +e.target.value; setData(d => ({ ...d, honorairesTaux: taux, honorairesMontant: Math.round((+d.prix || 0) * taux / 100) })); }} className={fieldClass('honorairesTaux')} /></Field>
                 <Field label="Honoraires (&euro;)"><input type="number" value={data.honorairesMontant || 0} onChange={e => update('honorairesMontant', +e.target.value)} className={fieldClass('honorairesMontant')} /></Field>
               </div>
               <div className="grid grid-cols-2 gap-3">
