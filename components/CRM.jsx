@@ -1753,6 +1753,25 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
 
   const update = (k, v) => setData({ ...data, [k]: v });
 
+  // Auto-refresh : après ajout/analyse d'un document, on recharge les champs du
+  // mandat depuis la base (ne touche que les champs vides pour ne pas écraser tes saisies).
+  async function refreshFormFromMandat() {
+    if (!data.id) return;
+    const { data: refreshed } = await supabase.from('mandats').select('*').eq('id', data.id).maybeSingle();
+    if (!refreshed) return;
+    setData(d => {
+      const nd = { ...d };
+      const isEmpty = (v) => v === null || v === undefined || v === '' || v === 0;
+      for (const [snake, camel] of Object.entries(FIELD_MAP)) {
+        if (refreshed[snake] !== null && refreshed[snake] !== undefined && refreshed[snake] !== '' && isEmpty(nd[camel])) {
+          nd[camel] = refreshed[snake];
+        }
+      }
+      if (refreshed.code_postal && isEmpty(nd.code_postal)) nd.code_postal = refreshed.code_postal;
+      return nd;
+    });
+  }
+
   // Annuler : si un mandat a été créé par un import (brouillon) et non enregistré,
   // on le supprime pour ne pas laisser de mandat fantôme dans la liste.
   async function handleCancel() {
@@ -2283,7 +2302,7 @@ async function handleFolderImport(event, opts = {}) {
        {/* Documents : import + lien + Dropbox (composant unifié avec validation IA) */}
         <div className="p-6 border-b border-stone-200 bg-gradient-to-br from-sage-50/70 to-cream-50">
           {mandat ? (
-            <DocumentsInline mandat={data} onUpdate={() => {}} />
+            <DocumentsInline mandat={data} onUpdate={refreshFormFromMandat} />
           ) : (
             <div>
               {/* Sprint 4 — C1 : check-list des pièces du dossier (création du mandat) */}
@@ -3112,6 +3131,50 @@ function MandatContactsSection({ mandatContacts, onAdd, onRemove }) {
     </div>
   );
 }
+// Sprint 4 — Score « qualité du dossier » : ce qui est prêt / manquant pour les documents (plaquette, avis de valeur).
+function DossierScore({ mandat, mandatContacts = [] }) {
+  const photos = getPhotos(mandat);
+  const lots = mandat.etatLocatif || mandat.etat_locatif || [];
+  const rdt = computeRendements(mandat);
+  const hasMandant = (mandatContacts || []).some(mc => mc.role === 'mandant' || mc.role === 'proprietaire') || !!(mandat.mandantClientId || mandat.mandant_client_id);
+  const hasCadastre = !!(mandat.cadastreImageUrl || mandat.cadastre_image_url || mandat.parcelleData || mandat.parcelle_data);
+  const items = [
+    { label: 'Adresse', ok: !!mandat.adresse },
+    { label: 'Prix', ok: parseFloat(mandat.prix) > 0 },
+    { label: 'Pitch', ok: !!(mandat.description && mandat.description.trim()) },
+    { label: 'État locatif', ok: Array.isArray(lots) && lots.length > 0 },
+    { label: 'Rdt optimisé', ok: rdt.optimise != null && rdt.optimise > 0 },
+    { label: 'Propriétaire', ok: hasMandant },
+    { label: 'Photos', ok: photos.length > 0 },
+    { label: 'DPE', ok: parseFloat(mandat.dpeConsommation) > 0 },
+    { label: 'Cadastre', ok: hasCadastre, auto: true },
+  ];
+  const done = items.filter(i => i.ok).length;
+  const pct = Math.round((done / items.length) * 100);
+  return (
+    <div id="score" className={`rounded-xl p-5 border scroll-mt-32 ${pct >= 80 ? 'bg-emerald-50/50 border-emerald-200' : 'bg-cream-50/60 border-cream-dark'}`}>
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">📊</span>
+          <span className="font-display text-base font-semibold text-stone-900">Qualité du dossier — {pct}%</span>
+        </div>
+        <span className="text-xs text-stone-500">{done}/{items.length} éléments prêts</span>
+      </div>
+      <div className="h-2 bg-white rounded-full overflow-hidden mb-3 border border-stone-200">
+        <div className={`h-full ${pct >= 80 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-stone-400'}`} style={{ width: `${pct}%` }} />
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map(it => (
+          <span key={it.label} className={`text-xs px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${it.ok ? 'bg-white border-emerald-200 text-emerald-700' : 'bg-white border-dashed border-stone-300 text-stone-400'}`}>
+            {it.ok ? <Check className="w-3 h-3" /> : <Circle className="w-3 h-3" />}
+            {it.label}{it.auto ? <span className="opacity-60"> (auto)</span> : null}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, annonces, allProfiles = [], onOpenMatching, onOpenEmailDrafts }) {
   const [openModal, setOpenModal] = useState(null); // 'photos' | 'visite' | 'mandant' | null
   const [aiAnalyzeOpen, setAiAnalyzeOpen] = useState(false);
@@ -3312,6 +3375,8 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
 
       <div className="space-y-4">
         <div className="col-span-3 space-y-4">
+          {/* ═══ SCORE QUALITÉ DU DOSSIER (Sprint 4) ═══ */}
+          <DossierScore mandat={mandat} mandatContacts={mandatContacts} />
           {/* ═══ ANALYSE FINANCIÈRE — REMONTÉE EN PREMIÈRE POSITION ═══ */}
           <div id="finance" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Analyse financière</h2>
