@@ -7,7 +7,7 @@
 // ===================================================================
 
 import { createClient } from '@supabase/supabase-js';
-import { refreshAccessToken, listSharedLinkFiles, downloadSharedLinkFile } from '@/lib/dropbox';
+import { refreshAccessToken, listSharedLinkFiles, downloadSharedLinkFile, getSharedLinkPath, listFolderByPath, downloadFileByPath } from '@/lib/dropbox';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -87,10 +87,18 @@ export async function POST(request, { params }) {
       }
     }
 
-    // 3) Lister les fichiers du dossier partagé
+    // 3) Lister les fichiers du dossier.
+    // Priorité : si le compte possède le dossier → liste récursive par chemin (fiable).
+    // Sinon → parcours du lien partagé (moins fiable sur les sous-dossiers).
     let listed;
+    let ownerPath = null;
     try {
-      listed = await listSharedLinkFiles({ accessToken, url: dropbox_url, maxFiles: MAX_FILES });
+      ownerPath = await getSharedLinkPath({ accessToken, url: dropbox_url });
+      if (ownerPath) {
+        listed = await listFolderByPath({ accessToken, path: ownerPath, maxFiles: MAX_FILES });
+      } else {
+        listed = await listSharedLinkFiles({ accessToken, url: dropbox_url, maxFiles: MAX_FILES });
+      }
     } catch (e) {
       return new Response(JSON.stringify({ ok: false, error: 'Lecture du dossier Dropbox échouée : ' + (e.message || '') }), { status: 502, headers: { 'Content-Type': 'application/json' } });
     }
@@ -108,7 +116,9 @@ export async function POST(request, { params }) {
       const batch = listed.slice(i, i + BATCH);
       const results = await Promise.all(batch.map(async (f) => {
         try {
-          const buf = await downloadSharedLinkFile({ accessToken, url: dropbox_url, path: f.path });
+          const buf = ownerPath
+            ? await downloadFileByPath({ accessToken, path: f.path })
+            : await downloadSharedLinkFile({ accessToken, url: dropbox_url, path: f.path });
           if (!buf || buf.length === 0) return null;
           const mime = mimeFromName(f.name);
           const storagePath = `${mandatId}/dropbox/${Date.now()}_${stamp}_${idx++}_${cleanName(f.name)}`;
