@@ -269,8 +269,17 @@ export async function POST(request, { params }) {
     const buffer = Buffer.from(arrayBuffer);
     const mimeType = fileData.type || 'application/octet-stream';
 
-    // Analyse du document (commune aux deux modes)
-    const { category, extractedData, visionNote, unreadable, skipped } = await analyzeDocument(buffer, mimeType);
+    // Analyse du document (commune aux deux modes). Résilient : une erreur d'analyse
+    // (IA surchargée, PDF illisible, trop d'images…) ne doit PAS renvoyer 500 —
+    // sinon un seul fichier casse tout l'import. On continue en rangeant le doc.
+    let analysis;
+    try {
+      analysis = await analyzeDocument(buffer, mimeType);
+    } catch (aiErr) {
+      console.error('[import-folder] analyzeDocument a échoué:', aiErr?.message);
+      analysis = { category: 'autre', extractedData: {}, aiError: aiErr?.message || 'analyse échouée' };
+    }
+    const { category, extractedData, visionNote, unreadable, skipped, aiError } = analysis;
 
     // ═══ MODE PROPOSE : on ne touche PAS au mandat, on renvoie le détail ═══
     if (mode === 'propose') {
@@ -339,7 +348,7 @@ export async function POST(request, { params }) {
     }
 
     return new Response(JSON.stringify({
-      ok: true, category, data: extractedData, filled, note: visionNote || null,
+      ok: true, category, data: extractedData, filled, note: visionNote || null, aiError: aiError || null,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (err) {
     console.error('[/api/mandats/[id]/import-folder] Erreur:', err);
