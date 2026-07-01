@@ -102,8 +102,17 @@ export async function POST(request, { params }) {
     } catch (e) {
       return new Response(JSON.stringify({ ok: false, error: 'Lecture du dossier Dropbox échouée : ' + (e.message || '') }), { status: 502, headers: { 'Content-Type': 'application/json' } });
     }
+
+    // Pour l'analyse, on ne prend que les DOCUMENTS (PDF, doc, xls…). Les PHOTOS
+    // (lourdes) sont ignorées ici pour ne pas dépasser le temps limite de la
+    // fonction — elles pourront être ajoutées séparément via « Photos ».
+    const IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif', 'bmp', 'tif', 'tiff']);
+    const isImageName = (n) => IMAGE_EXT.has((n.split('.').pop() || '').toLowerCase());
+    const skippedImages = listed.filter(f => isImageName(f.name)).length;
+    listed = listed.filter(f => !isImageName(f.name));
+
     if (!listed.length) {
-      return new Response(JSON.stringify({ ok: true, files: [], count: 0, errors: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ ok: true, files: [], count: 0, errors: [], skippedImages }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
     // 4) Télécharger + déposer chaque fichier (par lots)
@@ -136,7 +145,7 @@ export async function POST(request, { params }) {
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, files: uploaded, count: uploaded.length, errors, truncated: listed.length >= MAX_FILES }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ ok: true, files: uploaded, count: uploaded.length, errors, skippedImages, truncated: listed.length >= MAX_FILES }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (e) {
     console.error('[import-dropbox-account] error:', e);
     return new Response(JSON.stringify({ ok: false, error: e.message || 'Erreur serveur' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
