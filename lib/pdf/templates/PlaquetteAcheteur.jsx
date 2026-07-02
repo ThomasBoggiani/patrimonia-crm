@@ -195,6 +195,31 @@ function buildTeamForPlaquette({ mandat, sender, allMembers }) {
   return team;
 }
 
+// Carte signature compacte (bloc « Notre équipe » sur une demi-page)
+function SigCard({ member, isOffMarket }) {
+  const D = dt(isOffMarket);
+  const initials = (member?.name || '?').split(' ').map(s => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+  return (
+    <View style={{ alignItems: 'center', width: 150, marginHorizontal: 8 }}>
+      {member.photo ? (
+        <Image src={member.photo} style={{ width: 54, height: 54, borderRadius: 27, objectFit: 'cover', marginBottom: 6 }} />
+      ) : (
+        <View style={{ width: 54, height: 54, borderRadius: 27, backgroundColor: D.sageD, alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+          <Text style={{ color: '#FFFFFF', fontSize: 17, fontFamily: 'Helvetica-Bold' }}>{initials}</Text>
+        </View>
+      )}
+      <Text style={{ fontFamily: SERIF, fontSize: 12.5, color: D.ink, textAlign: 'center' }}>{member.name || '—'}</Text>
+      {!!member.role && <Text style={{ fontFamily: 'Helvetica', fontSize: 7.5, color: D.muted, textAlign: 'center', marginTop: 2 }}>{member.role}</Text>}
+      {!!member.email && <Text style={{ fontFamily: 'Helvetica', fontSize: 7, color: D.muted, textAlign: 'center', marginTop: 1 }}>{member.email}</Text>}
+    </View>
+  );
+}
+
+function SigLabel({ children, isOffMarket }) {
+  const D = dt(isOffMarket);
+  return <Text style={{ fontFamily: 'Helvetica', fontSize: 8.5, color: D.sageD, letterSpacing: 2, textAlign: 'center', marginBottom: 8, textTransform: 'uppercase' }}>{children}</Text>;
+}
+
 function TeamCard({ member, palette, size = 100, compact = false }) {
   const photoSize = compact ? 74 : size;
   const marginBottomCard = compact ? 6 : 12;
@@ -841,54 +866,53 @@ export default function PlaquetteAcheteur({
         <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
         <SectionTitle title="NOTRE ÉQUIPE" isOffMarket={isOffMarket} />
 
-        {team.length > 0 && (
-          <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 14 }}>
-            {dossier.length > 0 && (
-              <View style={{ marginBottom: 18 }}>
-                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: palette.accent || '#9CAF88', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 10, textAlign: 'center' }}>
-                  Pour ce dossier
-                </Text>
-                <View style={{ flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap' }}>
-                  {dossier.map((member, i) => (
-                    <TeamCard key={`d-${i}`} member={member} palette={palette} compact />
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {dossier.length > 0 && autres.length > 0 && (
-              <View style={{ borderBottomWidth: 0.5, borderBottomColor: palette.muted || '#999', marginVertical: 14, marginHorizontal: 60 }} />
-            )}
-
-            {autres.length > 0 && (() => {
-              const isBossInAutres = (m) => m?.is_boss === true;
-              const bossEntry = autres.find(isBossInAutres);
-              const autresSansBoss = autres.filter(m => !isBossInAutres(m));
-
-              return (
-                <View style={{ marginTop: 10 }}>
-                  <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: palette.accent || '#9CAF88', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 10, textAlign: 'center' }}>
-                    À votre service
-                  </Text>
-
-                  {bossEntry && (
-                    <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: autresSansBoss.length > 0 ? 18 : 0 }}>
-                      <TeamCard member={bossEntry} palette={palette} compact />
-                    </View>
-                  )}
-
-                  {autresSansBoss.length > 0 && (
-                    <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                      {autresSansBoss.map((member, i) => (
-                        <TeamCard key={`a-${i}`} member={member} palette={palette} compact />
+        {team.length > 0 && (() => {
+          const D = dt(isOffMarket);
+          const isBossInAutres = (m) => m?.is_boss === true;
+          const bossEntry = autres.find(isBossInAutres);
+          const autresSansBoss = autres.filter(m => !isBossInAutres(m));
+          return (
+            <View style={{ flex: 1, justifyContent: 'center' }}>
+              {/* Bloc signature encadré, compact (≈ demi-page) */}
+              <View style={{ borderWidth: 1, borderColor: D.gold, paddingVertical: 20, paddingHorizontal: 16 }}>
+                {dossier.length > 0 && (
+                  <View style={{ marginBottom: 6 }}>
+                    <SigLabel isOffMarket={isOffMarket}>Votre interlocuteur</SigLabel>
+                    <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
+                      {dossier.map((member, i) => (
+                        <SigCard key={`d-${i}`} member={member} isOffMarket={isOffMarket} />
                       ))}
                     </View>
-                  )}
-                </View>
-              );
-            })()}
-          </View>
-        )}
+                  </View>
+                )}
+
+                {dossier.length > 0 && autres.length > 0 && (
+                  <View style={{ borderBottomWidth: 0.5, borderBottomColor: D.hair, marginVertical: 14, marginHorizontal: 50 }} />
+                )}
+
+                {bossEntry && (
+                  <View style={{ marginBottom: autresSansBoss.length > 0 ? 14 : 0 }}>
+                    <SigLabel isOffMarket={isOffMarket}>La direction</SigLabel>
+                    <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
+                      <SigCard member={bossEntry} isOffMarket={isOffMarket} />
+                    </View>
+                  </View>
+                )}
+
+                {autresSansBoss.length > 0 && (
+                  <View>
+                    <SigLabel isOffMarket={isOffMarket}>L'équipe</SigLabel>
+                    <View style={{ flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap' }}>
+                      {autresSansBoss.map((member, i) => (
+                        <SigCard key={`a-${i}`} member={member} isOffMarket={isOffMarket} />
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </View>
+            </View>
+          );
+        })()}
 
         <PageFooter isOffMarket={isOffMarket} />
       </Page>
