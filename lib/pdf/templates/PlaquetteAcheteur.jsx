@@ -20,13 +20,7 @@ import React from 'react';
 import { Document, Page, View, Text, Image } from '@react-pdf/renderer';
 import { getStyles, COLORS, LAYOUT } from '../styles';
 import {
-  PageLogo,
-  SectionTitle,
   PageFooter,
-  Card,
-  CardsRow,
-  FinancialTable,
-  PhotoGrid,
   TableOfContents,
 } from '../components';
 import {
@@ -42,6 +36,70 @@ import {
 } from '../helpers';
 import { LOGO_IP_BASE64 } from '../logo-base64';
 import { getLineColor, LINE_TEXT_COLORS } from '../../transit-colors';
+
+// ═══════════════════════════════════════════════════════════════════
+// DESIGN ÉDITORIAL « HAUT DE GAMME » v15
+// Serif (Times, intégré à react-pdf), alignement à gauche, filet doré,
+// en-têtes discrets. Composants locaux qui remplacent ceux partagés
+// (l'avis de valeur n'est pas impacté). Gère standard + off-market.
+// ═══════════════════════════════════════════════════════════════════
+const SERIF = 'Times-Roman';
+const SERIF_B = 'Times-Bold';
+const SERIF_I = 'Times-Italic';
+const DTOK = {
+  light: { ink: '#26251F', sageD: '#586348', gold: '#AD966B', muted: '#8C8676', hair: '#E1DCCE', bg: '#FAF8F2' },
+  dark:  { ink: '#EDE9DF', sageD: '#C7A969', gold: '#C7A969', muted: '#9A9486', hair: '#3A342C', bg: '#1A1817' },
+};
+function dt(isOff) { return isOff ? DTOK.dark : DTOK.light; }
+
+function PageLogo({ isOffMarket }) {
+  const D = dt(isOffMarket);
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+      <Image src={LOGO_IP_BASE64} style={{ width: 30, height: 30, objectFit: 'contain' }} />
+      <Text style={{ fontFamily: 'Helvetica', fontSize: 7.5, color: D.muted, letterSpacing: 2.5 }}>IMMEUBLES & PATRIMOINE</Text>
+    </View>
+  );
+}
+
+function SectionTitle({ title, subtitle, isOffMarket }) {
+  const D = dt(isOffMarket);
+  const t = String(title || '').replace(/\n/g, ' ');
+  return (
+    <View style={{ marginBottom: 18 }}>
+      <View style={{ width: 46, height: 1.5, backgroundColor: D.gold, marginBottom: 10 }} />
+      <Text style={{ fontFamily: SERIF, fontSize: 26, color: D.ink }}>{t}</Text>
+      {subtitle ? <Text style={{ fontFamily: 'Helvetica', fontSize: 9, color: D.muted, marginTop: 5, letterSpacing: 2 }}>{String(subtitle).toUpperCase()}</Text> : null}
+    </View>
+  );
+}
+
+function CardsRow({ children }) {
+  return <View style={{ flexDirection: 'row', marginTop: 26, marginBottom: 6 }}>{children}</View>;
+}
+function Card({ number, label, isOffMarket }) {
+  const D = dt(isOffMarket);
+  return (
+    <View style={{ flex: 1, borderLeftWidth: 1, borderLeftColor: D.hair, paddingLeft: 12, marginRight: 10 }}>
+      <Text style={{ fontFamily: 'Helvetica', fontSize: 8, color: D.muted, letterSpacing: 1.2 }}>{String(label || '').toUpperCase()}</Text>
+      <Text style={{ fontFamily: SERIF, fontSize: 23, color: D.ink, marginTop: 5 }}>{number}</Text>
+    </View>
+  );
+}
+
+function FinancialTable({ rows, isOffMarket }) {
+  const D = dt(isOffMarket);
+  return (
+    <View style={{ marginTop: 4 }}>
+      {(rows || []).map((r, i) => (
+        <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', paddingVertical: 9, borderBottomWidth: 0.5, borderBottomColor: D.hair }}>
+          <Text style={{ fontFamily: 'Helvetica', fontSize: 10, color: D.muted, letterSpacing: 0.8 }}>{r.label}</Text>
+          <Text style={{ fontFamily: SERIF, fontSize: 15, color: D.ink }}>{r.value}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 function LineBadge({ line, mode }) {
   const bgColor = getLineColor(line, mode) || '#888';
@@ -351,28 +409,53 @@ export default function PlaquetteAcheteur({
       author="Immeubles & Patrimoine"
       subject="Plaquette de présentation"
     >
-      {/* ─── PAGE 1 : COUVERTURE ─── */}
-      <Page size="A4" style={styles.coverPage}>
-        <Image src={LOGO_IP_BASE64} style={styles.coverLogoLarge} />
+      {/* ─── PAGE 1 : COUVERTURE (éditoriale) ─── */}
+      <Page size="A4" style={{ backgroundColor: dt(isOffMarket).bg, fontFamily: 'Helvetica' }}>
         {photos[0] ? (
-          <Image src={photos[0]} style={styles.coverPhoto} />
+          <Image src={photos[0]} style={{ width: '100%', height: 505, objectFit: 'cover' }} />
         ) : (
-          <View style={styles.coverPhotoPlaceholder}>
-            <Text style={{ fontSize: 12, color: palette.muted, fontFamily: 'Helvetica-Oblique' }}>Photo principale du bien</Text>
+          <View style={{ width: '100%', height: 505, backgroundColor: '#D9D4C9', alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ fontSize: 11, color: '#8C8676', fontFamily: SERIF_I }}>Photo principale du bien</Text>
           </View>
         )}
-        <View style={styles.coverTitleBlock}>
-          <Text style={styles.coverTitle}>{safeText(mandat?.nom, 'BIEN À DÉCOUVRIR').toUpperCase()}</Text>
-          <Text style={styles.coverCity}>{safeText(mandat?.ville, '').toUpperCase()}</Text>
-          <Text style={styles.coverSubInfo}>
-            {[
-              mandat?.type ? mandat.type.toUpperCase() : '',
-              mandat?.surface ? `${formatSurface(mandat.surface)}` : '',
-              prixNet > 0 ? formatPrix(prixTotal) + ' HAI' : '',
-            ].filter(Boolean).join('  │  ')}
+        <View style={{ paddingHorizontal: 46, paddingTop: 30, flexGrow: 1 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <Text style={{ fontFamily: 'Helvetica', fontSize: 8.5, color: dt(isOffMarket).sageD, letterSpacing: 3, marginTop: 8 }}>
+              {safeText(mandat?.ville, '').toUpperCase()}
+            </Text>
+            <Image src={LOGO_IP_BASE64} style={{ width: 42, height: 42, objectFit: 'contain' }} />
+          </View>
+          <Text style={{ fontFamily: SERIF, fontSize: 34, color: dt(isOffMarket).ink, marginTop: 4, lineHeight: 1.05 }}>
+            {safeText(mandat?.nom, 'Bien à découvrir')}
           </Text>
+          {mandat?.type ? (
+            <Text style={{ fontFamily: SERIF_I, fontSize: 14, color: dt(isOffMarket).muted, marginTop: 6 }}>{mandat.type}</Text>
+          ) : null}
+          <View style={{ width: 46, height: 1.5, backgroundColor: dt(isOffMarket).gold, marginTop: 18, marginBottom: 16 }} />
+          <View style={{ flexDirection: 'row' }}>
+            {mandat?.surface ? (
+              <View style={{ marginRight: 40 }}>
+                <Text style={{ fontFamily: 'Helvetica', fontSize: 8, color: dt(isOffMarket).muted, letterSpacing: 1.4 }}>SURFACE</Text>
+                <Text style={{ fontFamily: SERIF, fontSize: 20, color: dt(isOffMarket).ink, marginTop: 4 }}>{formatSurface(mandat.surface)}</Text>
+              </View>
+            ) : null}
+            {prixNet > 0 ? (
+              <View style={{ marginRight: 40 }}>
+                <Text style={{ fontFamily: 'Helvetica', fontSize: 8, color: dt(isOffMarket).muted, letterSpacing: 1.4 }}>PRIX HAI</Text>
+                <Text style={{ fontFamily: SERIF, fontSize: 20, color: dt(isOffMarket).ink, marginTop: 4 }}>{formatPrix(prixTotal)}</Text>
+              </View>
+            ) : null}
+            {mandat?.rendement && parseFloat(mandat.rendement) > 0 ? (
+              <View>
+                <Text style={{ fontFamily: 'Helvetica', fontSize: 8, color: dt(isOffMarket).muted, letterSpacing: 1.4 }}>RENDEMENT</Text>
+                <Text style={{ fontFamily: SERIF, fontSize: 20, color: dt(isOffMarket).ink, marginTop: 4 }}>{parseFloat(mandat.rendement).toFixed(1).replace('.', ',')} %</Text>
+              </View>
+            ) : null}
+          </View>
         </View>
-        <Text style={styles.coverWebsite}>www.immeubles-patrimoine.fr</Text>
+        <Text style={{ fontFamily: 'Helvetica', fontSize: 8, color: dt(isOffMarket).muted, letterSpacing: 1.5, textAlign: 'center', marginBottom: 24 }}>
+          www.immeubles-patrimoine.fr
+        </Text>
       </Page>
 
       {/* ─── PAGE 2 : SOMMAIRE ─── */}
@@ -589,7 +672,12 @@ export default function PlaquetteAcheteur({
             </View>
           )}
 
-          <Image src={cadastreSrc} style={{ width: '100%', height: 320, objectFit: 'contain', marginTop: 16 }} />
+          <View style={{ marginTop: 16, borderWidth: 0.5, borderColor: dt(isOffMarket).hair, backgroundColor: '#FFFFFF', padding: 8 }}>
+            <Image src={cadastreSrc} style={{ width: '100%', height: 300, objectFit: 'contain' }} />
+          </View>
+          <Text style={{ fontFamily: SERIF_I, fontSize: 9, color: dt(isOffMarket).muted, marginTop: 8 }}>
+            Extrait du plan cadastral{parcelle?.section || parcelle?.numero ? ` — parcelle ${[parcelle?.section, parcelle?.numero].filter(Boolean).join(' ')}` : ''}. Document non contractuel.
+          </Text>
           <PageFooter isOffMarket={isOffMarket} />
         </Page>
       )}
