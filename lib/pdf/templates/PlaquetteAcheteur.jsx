@@ -52,6 +52,53 @@ const DTOK = {
 };
 function dt(isOff) { return isOff ? DTOK.dark : DTOK.light; }
 
+// En-tête courant : petit logo + nom, filet de séparation
+function RunningHeader({ isOffMarket, label }) {
+  const D = dt(isOffMarket);
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: D.hair, paddingBottom: 8, marginBottom: 15 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Image src={LOGO_IP_BASE64} style={{ width: 22, height: 22, objectFit: 'contain', marginRight: 7 }} />
+        <Text style={{ fontFamily: 'Helvetica', fontSize: 8, color: D.sageD, letterSpacing: 2 }}>IMMEUBLES & PATRIMOINE</Text>
+      </View>
+      {label ? <Text style={{ fontFamily: 'Helvetica', fontSize: 8, color: D.muted, letterSpacing: 2 }}>{String(label).toUpperCase()}</Text> : null}
+    </View>
+  );
+}
+
+// Pied de page : filet doré + coordonnées + numéro
+function PlqFooter({ isOffMarket }) {
+  const D = dt(isOffMarket);
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: D.gold, paddingTop: 9, marginTop: 12 }}>
+      <Text style={{ fontFamily: 'Helvetica', fontSize: 7.5, color: D.muted, letterSpacing: 0.4 }}>Immeubles &amp; Patrimoine · 06 84 40 81 09 · www.immeubles-patrimoine.fr</Text>
+      <Text style={{ fontFamily: 'Helvetica', fontSize: 7.5, color: D.muted }} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
+    </View>
+  );
+}
+
+// Page encadrée : cadre doré + en-tête + contenu + pied
+function PlqPage({ isOffMarket, label, children }) {
+  const D = dt(isOffMarket);
+  return (
+    <Page size="A4" style={{ backgroundColor: D.bg, padding: 16, fontFamily: 'Helvetica' }}>
+      <View style={{ flex: 1, borderWidth: 1, borderColor: D.gold, paddingVertical: 18, paddingHorizontal: 22 }}>
+        <RunningHeader isOffMarket={isOffMarket} label={label} />
+        <View style={{ flex: 1 }}>{children}</View>
+        <PlqFooter isOffMarket={isOffMarket} />
+      </View>
+    </Page>
+  );
+}
+
+// Bloc bordé (fond blanc) + photo en passe-partout
+function Box({ children, style = {} }) {
+  return <View style={[{ borderWidth: 1, borderColor: DTOK.light.hair, backgroundColor: '#FFFFFF' }, style]}>{children}</View>;
+}
+function Mat({ children, style = {} }) {
+  return <View style={[{ borderWidth: 1, borderColor: DTOK.light.hair, backgroundColor: '#FFFFFF', padding: 4 }, style]}>{children}</View>;
+}
+
 function PageLogo({ isOffMarket }) {
   const D = dt(isOffMarket);
   return (
@@ -115,13 +162,13 @@ function LineBadge({ line, mode }) {
 function PhotosLayout({ photos }) {
   const n = photos.length;
   if (n === 1) {
-    return <Image src={photos[0]} style={{ width: '100%', height: 500, objectFit: 'cover', borderRadius: 3 }} />;
+    return <Image src={photos[0]} style={{ width: '100%', height: 500, objectFit: 'cover', borderRadius: 2, borderWidth: 1, borderColor: '#E1DCCE' }} />;
   }
   if (n === 2) {
     return (
       <View>
         {photos.map((u, i) => (
-          <Image key={i} src={u} style={{ width: '100%', height: 248, objectFit: 'cover', borderRadius: 3, marginBottom: i === 0 ? 14 : 0 }} />
+          <Image key={i} src={u} style={{ width: '100%', height: 248, objectFit: 'cover', borderRadius: 2, borderWidth: 1, borderColor: '#E1DCCE', marginBottom: i === 0 ? 14 : 0 }} />
         ))}
       </View>
     );
@@ -129,10 +176,10 @@ function PhotosLayout({ photos }) {
   if (n === 3) {
     return (
       <View>
-        <Image src={photos[0]} style={{ width: '100%', height: 300, objectFit: 'cover', borderRadius: 3, marginBottom: 14 }} />
+        <Image src={photos[0]} style={{ width: '100%', height: 300, objectFit: 'cover', borderRadius: 2, borderWidth: 1, borderColor: '#E1DCCE', marginBottom: 14 }} />
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
           {photos.slice(1).map((u, i) => (
-            <Image key={i} src={u} style={{ width: '48.5%', height: 205, objectFit: 'cover', borderRadius: 3 }} />
+            <Image key={i} src={u} style={{ width: '48.5%', height: 205, objectFit: 'cover', borderRadius: 2, borderWidth: 1, borderColor: '#E1DCCE' }} />
           ))}
         </View>
       </View>
@@ -143,7 +190,7 @@ function PhotosLayout({ photos }) {
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
       {photos.map((u, i) => (
-        <Image key={i} src={u} style={{ width: '48.5%', height: h, objectFit: 'cover', borderRadius: 3, marginBottom: 14 }} />
+        <Image key={i} src={u} style={{ width: '48.5%', height: h, objectFit: 'cover', borderRadius: 2, borderWidth: 1, borderColor: '#E1DCCE', marginBottom: 14 }} />
       ))}
     </View>
   );
@@ -193,6 +240,31 @@ function buildTeamForPlaquette({ mandat, sender, allMembers }) {
   }
 
   return team;
+}
+
+// Carte signature compacte (bloc « Notre équipe » sur une demi-page)
+function SigCard({ member, isOffMarket }) {
+  const D = dt(isOffMarket);
+  const initials = (member?.name || '?').split(' ').map(s => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+  return (
+    <View style={{ alignItems: 'center', width: 150, marginHorizontal: 8 }}>
+      {member.photo ? (
+        <Image src={member.photo} style={{ width: 54, height: 54, borderRadius: 27, objectFit: 'cover', marginBottom: 6 }} />
+      ) : (
+        <View style={{ width: 54, height: 54, borderRadius: 27, backgroundColor: D.sageD, alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+          <Text style={{ color: '#FFFFFF', fontSize: 17, fontFamily: 'Helvetica-Bold' }}>{initials}</Text>
+        </View>
+      )}
+      <Text style={{ fontFamily: SERIF, fontSize: 12.5, color: D.ink, textAlign: 'center' }}>{member.name || '—'}</Text>
+      {!!member.role && <Text style={{ fontFamily: 'Helvetica', fontSize: 7.5, color: D.muted, textAlign: 'center', marginTop: 2 }}>{member.role}</Text>}
+      {!!member.email && <Text style={{ fontFamily: 'Helvetica', fontSize: 7, color: D.muted, textAlign: 'center', marginTop: 1 }}>{member.email}</Text>}
+    </View>
+  );
+}
+
+function SigLabel({ children, isOffMarket }) {
+  const D = dt(isOffMarket);
+  return <Text style={{ fontFamily: 'Helvetica', fontSize: 8.5, color: D.sageD, letterSpacing: 2, textAlign: 'center', marginBottom: 8, textTransform: 'uppercase' }}>{children}</Text>;
 }
 
 function TeamCard({ member, palette, size = 100, compact = false }) {
@@ -459,91 +531,97 @@ export default function PlaquetteAcheteur({
       </Page>
 
       {/* ─── PAGE 2 : SOMMAIRE ─── */}
-      <Page size="A4" style={styles.page}>
-        <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
-        <SectionTitle title="SOMMAIRE" isOffMarket={isOffMarket} />
-        <View style={{ marginTop: 30 }}>
+      <PlqPage isOffMarket={isOffMarket} label="Sommaire">
+        <SectionTitle title="Sommaire" subtitle="Le dossier" isOffMarket={isOffMarket} />
+        <View style={{ marginTop: 6 }}>
           <TableOfContents items={tocItems} isOffMarket={isOffMarket} />
         </View>
-        <PageFooter isOffMarket={isOffMarket} />
-      </Page>
+      </PlqPage>
 
       {/* ─── PAGE 3 : LE BIEN ─── */}
-      <Page size="A4" style={styles.page}>
-        <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
-        <SectionTitle title="LE BIEN" isOffMarket={isOffMarket} />
-        {!!description && (
-          <View style={styles.descriptionBlock}>
-            <Text style={[styles.descriptionText, { textAlign: 'left' }]}>{description}</Text>
-          </View>
-        )}
-        {cards.length > 0 && (
-          <CardsRow isOffMarket={isOffMarket}>
-            {cards.map((c, i) => (
-              <Card key={i} number={c.number} label={c.label} isOffMarket={isOffMarket} />
-            ))}
-          </CardsRow>
-        )}
+      <PlqPage isOffMarket={isOffMarket} label="Le bien">
+        <SectionTitle title="L'immeuble" subtitle="Le bien" isOffMarket={isOffMarket} />
+        <View style={{ flexDirection: 'row' }}>
+          {!!description && (
+            <Box style={{ flex: 1.4, padding: 14, marginRight: cards.length > 0 ? 12 : 0 }}>
+              <Text style={{ fontFamily: 'Helvetica', fontSize: 10.5, lineHeight: 1.7, color: dt(isOffMarket).ink }}>{description}</Text>
+            </Box>
+          )}
+          {cards.length > 0 && (
+            <Box style={{ flex: 1, padding: 0 }}>
+              <Text style={{ fontFamily: 'Helvetica', fontSize: 8, color: dt(isOffMarket).sageD, letterSpacing: 1.5, paddingHorizontal: 14, paddingTop: 11, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: dt(isOffMarket).hair }}>CHIFFRES CLÉS</Text>
+              <View style={{ paddingHorizontal: 14, paddingBottom: 4 }}>
+                {cards.map((c, i) => (
+                  <View key={i} style={{ paddingVertical: 7, borderBottomWidth: i < cards.length - 1 ? 0.5 : 0, borderBottomColor: dt(isOffMarket).hair }}>
+                    <Text style={{ fontFamily: 'Helvetica', fontSize: 8, color: dt(isOffMarket).muted, letterSpacing: 1 }}>{String(c.label).toUpperCase()}</Text>
+                    <Text style={{ fontFamily: SERIF, fontSize: 19, color: dt(isOffMarket).ink, marginTop: 2 }}>{c.number}</Text>
+                  </View>
+                ))}
+              </View>
+            </Box>
+          )}
+        </View>
         {finRows.length > 0 && (
-          <View style={{ marginTop: 36 }}>
-            <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: palette.accent || '#7E6F4F', textTransform: 'uppercase', letterSpacing: 1.5, textAlign: 'center', marginBottom: 2 }}>
-              Prix &amp; conditions
-            </Text>
-            <FinancialTable rows={finRows} isOffMarket={isOffMarket} />
+          <Box style={{ marginTop: 14, padding: 0 }}>
+            <Text style={{ fontFamily: 'Helvetica', fontSize: 8, color: dt(isOffMarket).sageD, letterSpacing: 1.5, paddingHorizontal: 16, paddingTop: 11, paddingBottom: 9, borderBottomWidth: 1, borderBottomColor: dt(isOffMarket).hair }}>PRIX &amp; CONDITIONS</Text>
+            <View style={{ paddingHorizontal: 16, paddingBottom: 2 }}>
+              <FinancialTable rows={finRows} isOffMarket={isOffMarket} />
+            </View>
+          </Box>
+        )}
+        {photos.length > 0 && (
+          <View style={{ flexDirection: 'row', marginTop: 14 }}>
+            {photos.slice(0, 2).map((u, i) => (
+              <Mat key={i} style={{ flex: 1, marginRight: i === 0 && photos.length > 1 ? 12 : 0 }}>
+                <Image src={u} style={{ width: '100%', height: 118, objectFit: 'cover' }} />
+              </Mat>
+            ))}
           </View>
         )}
-        <PageFooter isOffMarket={isOffMarket} />
-      </Page>
+      </PlqPage>
 
       {/* ─── PAGE 4 : LE BIEN EN IMAGES (fusion Street View + Aérien) ─── */}
       {hasBienImages && (
-        <Page size="A4" style={styles.page}>
-          <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
-          <SectionTitle title={"LE BIEN\nEN IMAGES"} multiLine={true} isOffMarket={isOffMarket} />
+        <PlqPage isOffMarket={isOffMarket} label="Images">
+          <SectionTitle title="Le bien en images" subtitle="Le bien" isOffMarket={isOffMarket} />
 
-          <Text style={[styles.descriptionText, { marginTop: 10, marginBottom: 14, fontSize: 10 }]}>
-            <Text style={{ fontFamily: 'Helvetica-Bold' }}>{safeText(mandat?.adresse, '')}</Text>
+          <Text style={{ fontFamily: 'Helvetica', fontSize: 10, color: dt(isOffMarket).muted, marginBottom: 14 }}>
+            <Text style={{ fontFamily: 'Helvetica-Bold', color: dt(isOffMarket).ink }}>{safeText(mandat?.adresse, '')}</Text>
             {mandat?.ville ? ` — ${safeText(mandat.ville, '')}` : ''}
           </Text>
 
           {hasStreetView && (
             <View style={{ marginBottom: 14 }}>
-              <Text style={{ fontSize: 8, color: palette.accent || '#9CAF88', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4, fontFamily: 'Helvetica-Bold' }}>
-                Façade depuis la rue
-              </Text>
-              <Image src={streetViewSrc} style={{ width: '100%', height: 200, objectFit: 'cover', borderRadius: 2 }} />
+              <Text style={{ fontSize: 8, color: dt(isOffMarket).sageD, letterSpacing: 1.5, marginBottom: 6, fontFamily: 'Helvetica' }}>FAÇADE DEPUIS LA RUE</Text>
+              <Mat><Image src={streetViewSrc} style={{ width: '100%', height: 218, objectFit: 'cover' }} /></Mat>
             </View>
           )}
 
           {hasAerial && (
             <View>
-              <Text style={{ fontSize: 8, color: palette.accent || '#9CAF88', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4, fontFamily: 'Helvetica-Bold' }}>
-                Vue aérienne
-              </Text>
-              <View style={{ position: 'relative' }}>
-                <Image src={aerialSrc} style={{ width: '100%', height: 220, objectFit: 'cover', borderRadius: 2 }} />
-                {/* Marker rouge centré */}
-                <View style={{ position: 'absolute', top: '50%', left: '50%', marginLeft: -8, marginTop: -20 }}>
-                  <View style={{ width: 16, height: 16, backgroundColor: '#DC2626', borderWidth: 2, borderColor: '#fff', borderRadius: 8 }} />
+              <Text style={{ fontSize: 8, color: dt(isOffMarket).sageD, letterSpacing: 1.5, marginBottom: 6, fontFamily: 'Helvetica' }}>VUE AÉRIENNE</Text>
+              <Mat>
+                <View style={{ position: 'relative' }}>
+                  <Image src={aerialSrc} style={{ width: '100%', height: 232, objectFit: 'cover' }} />
+                  <View style={{ position: 'absolute', top: '50%', left: '50%', marginLeft: -8, marginTop: -20 }}>
+                    <View style={{ width: 16, height: 16, backgroundColor: '#DC2626', borderWidth: 2, borderColor: '#fff', borderRadius: 8 }} />
+                  </View>
                 </View>
-              </View>
+              </Mat>
             </View>
           )}
-
-          <PageFooter isOffMarket={isOffMarket} />
-        </Page>
+        </PlqPage>
       )}
 
       {/* ─── PAGE 5 : LOCALISATION & ACCESSIBILITÉ (fusion Plan + Transports) ─── */}
       {hasLocalisation && (
-        <Page size="A4" style={styles.page}>
-          <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
-          <SectionTitle title={"LOCALISATION\n& ACCESSIBILITÉ"} multiLine={true} isOffMarket={isOffMarket} />
+        <PlqPage isOffMarket={isOffMarket} label="Accès">
+          <SectionTitle title="Localisation & accessibilité" subtitle="Situation" isOffMarket={isOffMarket} />
 
           {hasMapStatic && (
-            <View style={{ marginTop: 10, marginBottom: 12 }}>
-              <Image src={mapStaticSrc} style={{ width: '100%', height: 180, objectFit: 'cover', borderRadius: 2 }} />
-            </View>
+            <Mat style={{ marginBottom: 14 }}>
+              <Image src={mapStaticSrc} style={{ width: '100%', height: 190, objectFit: 'cover' }} />
+            </Mat>
           )}
 
           {hasTransports && (
@@ -606,18 +684,15 @@ export default function PlaquetteAcheteur({
               </View>
             </>
           )}
-
-          <PageFooter isOffMarket={isOffMarket} />
-        </Page>
+        </PlqPage>
       )}
 
       {/* ─── PAGE 6 : LE QUARTIER AU QUOTIDIEN ─── */}
       {hasQuartier && (
-        <Page size="A4" style={styles.page}>
-          <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
-          <SectionTitle title={"LE QUARTIER\nAU QUOTIDIEN"} multiLine={true} isOffMarket={isOffMarket} />
+        <PlqPage isOffMarket={isOffMarket} label="Quartier">
+          <SectionTitle title="Le quartier au quotidien" subtitle="Commodités" isOffMarket={isOffMarket} />
 
-          <Text style={[styles.descriptionText, { marginTop: 8, marginBottom: 12, fontSize: 9, fontStyle: 'italic', color: '#888' }]}>
+          <Text style={{ fontFamily: SERIF_I, fontSize: 9.5, color: dt(isOffMarket).muted, marginBottom: 14 }}>
             Commodités dans un rayon de 500 mètres autour du bien. Source : OpenStreetMap.
           </Text>
 
@@ -643,73 +718,56 @@ export default function PlaquetteAcheteur({
               );
             })}
           </View>
-
-          <PageFooter isOffMarket={isOffMarket} />
-        </Page>
+        </PlqPage>
       )}
 
       {/* ─── PAGE 7 : CADASTRE & PARCELLE ─── */}
       {hasCadastre && (
-        <Page size="A4" style={styles.page}>
-          <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
-          <SectionTitle title={"CADASTRE\n& PARCELLE"} multiLine={true} isOffMarket={isOffMarket} />
-
-          {!!mandat?.cadastre_description && (
-            <Text style={[styles.descriptionText, { marginVertical: 12 }]}>{mandat.cadastre_description}</Text>
-          )}
+        <PlqPage isOffMarket={isOffMarket} label="Parcelle">
+          <SectionTitle title="Cadastre & parcelle" subtitle="Situation" isOffMarket={isOffMarket} />
 
           {parcelle && (
-            <View style={{ marginTop: 14, marginHorizontal: 30, padding: 12, borderWidth: 0.5, borderColor: palette.muted || '#999', borderRadius: 4 }}>
-              <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: palette.accent || '#9CAF88', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
-                Référence cadastrale
-              </Text>
+            <Box style={{ padding: 12, marginBottom: 14 }}>
+              <Text style={{ fontSize: 8, fontFamily: 'Helvetica', color: dt(isOffMarket).sageD, letterSpacing: 1.5, marginBottom: 8 }}>RÉFÉRENCE CADASTRALE</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
                 {parcelle.commune && <ParcelleField label="Commune" value={parcelle.commune} />}
                 {parcelle.section && <ParcelleField label="Section" value={parcelle.section} />}
                 {parcelle.numero && <ParcelleField label="N° parcelle" value={parcelle.numero} />}
                 {parcelle.contenance && <ParcelleField label="Contenance" value={`${parcelle.contenance.toLocaleString('fr-FR')} m²`} />}
               </View>
-            </View>
+            </Box>
           )}
 
-          <View style={{ marginTop: 16, borderWidth: 0.5, borderColor: dt(isOffMarket).hair, backgroundColor: '#FFFFFF', padding: 8 }}>
-            <Image src={cadastreSrc} style={{ width: '100%', height: 300, objectFit: 'contain' }} />
-          </View>
+          <Mat><Image src={cadastreSrc} style={{ width: '100%', height: 322, objectFit: 'contain' }} /></Mat>
           <Text style={{ fontFamily: SERIF_I, fontSize: 9, color: dt(isOffMarket).muted, marginTop: 8 }}>
-            Extrait du plan cadastral{parcelle?.section || parcelle?.numero ? ` — parcelle ${[parcelle?.section, parcelle?.numero].filter(Boolean).join(' ')}` : ''}. Document non contractuel.
+            Extrait du plan cadastral — vue élargie au quartier{parcelle?.section || parcelle?.numero ? `, parcelle ${[parcelle?.section, parcelle?.numero].filter(Boolean).join(' ')}` : ''}. Document non contractuel.
           </Text>
-          <PageFooter isOffMarket={isOffMarket} />
-        </Page>
+        </PlqPage>
       )}
 
       {/* ─── PHOTOS ─── */}
       {photoChunks.map((chunk, pageIndex) => (
-        <Page key={`photos-${pageIndex}`} size="A4" style={styles.page}>
-          <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
-          <SectionTitle title={photoChunks.length > 1 ? `PHOTOS (${pageIndex + 1}/${photoChunks.length})` : 'PHOTOS'} isOffMarket={isOffMarket} />
-          <View style={{ marginTop: 18 }}>
+        <PlqPage key={`photos-${pageIndex}`} isOffMarket={isOffMarket} label={photoChunks.length > 1 ? `Photos ${pageIndex + 1}/${photoChunks.length}` : 'Photos'}>
+          <SectionTitle title={photoChunks.length > 1 ? `Photographies · ${pageIndex + 1}/${photoChunks.length}` : 'Photographies'} subtitle="Le bien en détail" isOffMarket={isOffMarket} />
+          <View style={{ marginTop: 4 }}>
             <PhotosLayout photos={chunk} />
           </View>
-          <PageFooter isOffMarket={isOffMarket} />
-        </Page>
+        </PlqPage>
       ))}
 
       {/* ─── PLANS ─── */}
       {hasPlans && mandat.plans.map((plan, i) => (
-        <Page key={`plan-${i}`} size="A4" style={styles.page}>
-          <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
-          <SectionTitle title="PLANS" isOffMarket={isOffMarket} />
-          <Image src={plan.url || plan} style={{ width: '100%', height: 500, objectFit: 'contain', marginTop: 24 }} />
-          {plan.caption && <Text style={[styles.descriptionText, { marginTop: 12, fontSize: 10 }]}>{plan.caption}</Text>}
-          <PageFooter isOffMarket={isOffMarket} />
-        </Page>
+        <PlqPage key={`plan-${i}`} isOffMarket={isOffMarket} label="Plans">
+          <SectionTitle title="Plans" subtitle="Le bien" isOffMarket={isOffMarket} />
+          <Mat style={{ marginTop: 4 }}><Image src={plan.url || plan} style={{ width: '100%', height: 500, objectFit: 'contain' }} /></Mat>
+          {plan.caption && <Text style={{ fontFamily: SERIF_I, fontSize: 10, color: dt(isOffMarket).muted, marginTop: 10 }}>{plan.caption}</Text>}
+        </PlqPage>
       ))}
 
       {/* ─── ÉTAT LOCATIF ─── */}
       {hasEtatLocatif && (
-        <Page size="A4" style={styles.page}>
-          <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
-          <SectionTitle title="ETAT LOCATIF" isOffMarket={isOffMarket} />
+        <PlqPage isOffMarket={isOffMarket} label="État locatif">
+          <SectionTitle title="État locatif" subtitle="Revenus" isOffMarket={isOffMarket} />
           {(() => {
             const lots = mandat.etat_locatif || [];
             const totalSurf = lots.reduce((s, l) => s + (parseFloat(l.surface) || 0), 0);
@@ -789,17 +847,15 @@ export default function PlaquetteAcheteur({
               </>
             );
           })()}
-          <PageFooter isOffMarket={isOffMarket} />
-        </Page>
+        </PlqPage>
       )}
 
       {/* ─── RISQUES NATURELS ─── */}
       {hasRisques && (
-        <Page size="A4" style={styles.page}>
-          <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
-          <SectionTitle title={"RISQUES\nNATURELS"} multiLine={true} isOffMarket={isOffMarket} />
+        <PlqPage isOffMarket={isOffMarket} label="Risques">
+          <SectionTitle title="Risques naturels" subtitle="Information réglementaire" isOffMarket={isOffMarket} />
 
-          <Text style={[styles.descriptionText, { marginTop: 8, marginBottom: 14, fontSize: 9, fontStyle: 'italic', color: '#888' }]}>
+          <Text style={{ fontFamily: SERIF_I, fontSize: 9, color: dt(isOffMarket).muted, marginBottom: 14 }}>
             Source : Géorisques (gouv.fr) — Information non contractuelle, en application de l'article L125-5 du code de l'environnement.
           </Text>
 
@@ -831,67 +887,62 @@ export default function PlaquetteAcheteur({
               );
             })}
           </View>
-
-          <PageFooter isOffMarket={isOffMarket} />
-        </Page>
+        </PlqPage>
       )}
 
       {/* ─── NOTRE ÉQUIPE ─── */}
-      <Page size="A4" style={styles.page}>
-        <PageLogo logoUrl={logoUrl} isOffMarket={isOffMarket} />
-        <SectionTitle title="NOTRE ÉQUIPE" isOffMarket={isOffMarket} />
+      <PlqPage isOffMarket={isOffMarket} label="Contact">
+        <SectionTitle title="Notre équipe" subtitle="Signature" isOffMarket={isOffMarket} />
 
-        {team.length > 0 && (
-          <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 14 }}>
-            {dossier.length > 0 && (
-              <View style={{ marginBottom: 18 }}>
-                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: palette.accent || '#9CAF88', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 10, textAlign: 'center' }}>
-                  Pour ce dossier
-                </Text>
-                <View style={{ flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap' }}>
-                  {dossier.map((member, i) => (
-                    <TeamCard key={`d-${i}`} member={member} palette={palette} compact />
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {dossier.length > 0 && autres.length > 0 && (
-              <View style={{ borderBottomWidth: 0.5, borderBottomColor: palette.muted || '#999', marginVertical: 14, marginHorizontal: 60 }} />
-            )}
-
-            {autres.length > 0 && (() => {
-              const isBossInAutres = (m) => m?.is_boss === true;
-              const bossEntry = autres.find(isBossInAutres);
-              const autresSansBoss = autres.filter(m => !isBossInAutres(m));
-
-              return (
-                <View style={{ marginTop: 10 }}>
-                  <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: palette.accent || '#9CAF88', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 10, textAlign: 'center' }}>
-                    À votre service
-                  </Text>
-
-                  {bossEntry && (
-                    <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: autresSansBoss.length > 0 ? 18 : 0 }}>
-                      <TeamCard member={bossEntry} palette={palette} compact />
-                    </View>
-                  )}
-
-                  {autresSansBoss.length > 0 && (
-                    <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                      {autresSansBoss.map((member, i) => (
-                        <TeamCard key={`a-${i}`} member={member} palette={palette} compact />
+        {team.length > 0 && (() => {
+          const D = dt(isOffMarket);
+          const isBossInAutres = (m) => m?.is_boss === true;
+          const bossEntry = autres.find(isBossInAutres);
+          const autresSansBoss = autres.filter(m => !isBossInAutres(m));
+          return (
+            <View style={{ flex: 1, justifyContent: 'center' }}>
+              {/* Bloc signature encadré, compact (≈ demi-page) */}
+              <View style={{ borderWidth: 1, borderColor: D.gold, paddingVertical: 20, paddingHorizontal: 16 }}>
+                {dossier.length > 0 && (
+                  <View style={{ marginBottom: 6 }}>
+                    <SigLabel isOffMarket={isOffMarket}>Votre interlocuteur</SigLabel>
+                    <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
+                      {dossier.map((member, i) => (
+                        <SigCard key={`d-${i}`} member={member} isOffMarket={isOffMarket} />
                       ))}
                     </View>
-                  )}
-                </View>
-              );
-            })()}
-          </View>
-        )}
+                  </View>
+                )}
 
-        <PageFooter isOffMarket={isOffMarket} />
-      </Page>
+                {dossier.length > 0 && autres.length > 0 && (
+                  <View style={{ borderBottomWidth: 0.5, borderBottomColor: D.hair, marginVertical: 14, marginHorizontal: 50 }} />
+                )}
+
+                {bossEntry && (
+                  <View style={{ marginBottom: autresSansBoss.length > 0 ? 14 : 0 }}>
+                    <SigLabel isOffMarket={isOffMarket}>La direction</SigLabel>
+                    <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
+                      <SigCard member={bossEntry} isOffMarket={isOffMarket} />
+                    </View>
+                  </View>
+                )}
+
+                {autresSansBoss.length > 0 && (
+                  <View>
+                    <SigLabel isOffMarket={isOffMarket}>L'équipe</SigLabel>
+                    <View style={{ flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap' }}>
+                      {autresSansBoss.map((member, i) => (
+                        <SigCard key={`a-${i}`} member={member} isOffMarket={isOffMarket} />
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </View>
+            </View>
+          );
+        })()}
+
+      </PlqPage>
     </Document>
   );
 }
@@ -899,9 +950,9 @@ export default function PlaquetteAcheteur({
 // ─── Helper : champ parcelle ───
 function ParcelleField({ label, value }) {
   return (
-    <View style={{ width: '50%', marginBottom: 6 }}>
-      <Text style={{ fontSize: 8, color: '#666', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</Text>
-      <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', marginTop: 2 }}>{value}</Text>
+    <View style={{ width: '25%', paddingRight: 6, marginBottom: 4 }}>
+      <Text style={{ fontSize: 7.5, color: '#8C8676', letterSpacing: 1 }}>{String(label).toUpperCase()}</Text>
+      <Text style={{ fontSize: 13, fontFamily: 'Times-Roman', color: '#26251F', marginTop: 2 }}>{value}</Text>
     </View>
   );
 }
