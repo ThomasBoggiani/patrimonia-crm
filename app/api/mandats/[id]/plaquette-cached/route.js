@@ -25,8 +25,14 @@ async function verifyToken(token) {
   return user;
 }
 
+// Version du cache : liée au déploiement (commit Git). Ainsi, à chaque nouveau
+// déploiement, la clé change → le cache se renouvelle automatiquement et les
+// améliorations du générateur sont visibles sans intervention manuelle.
+// Entre deux déploiements, le cache joue son rôle (pas de régénération à chaque envoi).
+const CACHE_VERSION = (process.env.VERCEL_GIT_COMMIT_SHA || 'dev').slice(0, 8);
+
 function getStoragePath(mandatId) {
-  return `${mandatId}.pdf`;
+  return `${mandatId}_${CACHE_VERSION}.pdf`;
 }
 
 export async function GET(request, { params }) {
@@ -53,11 +59,12 @@ export async function GET(request, { params }) {
     }
 
     const storagePath = getStoragePath(mandatId);
+    const forceFresh = ['1', 'true', 'yes'].includes((url.searchParams.get('fresh') || '').toLowerCase());
 
-    // 1. Cherche dans le cache
-    const { data: cachedFile, error: downloadErr } = await supabaseAdmin.storage
-      .from(BUCKET)
-      .download(storagePath);
+    // 1. Cherche dans le cache (sauf si ?fresh=1 → régénération forcée)
+    const { data: cachedFile, error: downloadErr } = forceFresh
+      ? { data: null, error: true }
+      : await supabaseAdmin.storage.from(BUCKET).download(storagePath);
 
     if (cachedFile && !downloadErr) {
       // Cache hit ! On retourne le PDF direct
