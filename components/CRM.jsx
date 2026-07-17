@@ -1031,6 +1031,7 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
     delete snakeData.created_at;
     delete snakeData.updated_at;
     let mandatId = mandat.id;
+    const isNouveauMandat = !mandat.id;
     if (mandat.id) {
       snakeData.updated_by = user?.id;
       await supabase.from('mandats').update(snakeData).eq('id', mandat.id);
@@ -1040,7 +1041,28 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
       const { data: created } = await supabase.from('mandats').insert(snakeData).select().single();
       if (created) mandatId = created.id;
     }
-    
+
+    // Pilier 2 — Nouveau mandat : tâches de démarrage automatiques (actions de
+    // commercialisation). Attribuées à celui qui agit ; réattribuables ensuite.
+    if (isNouveauMandat && mandatId) {
+      const starters = STARTER_MANDAT_TASKS.map(a => {
+        const echeance = new Date();
+        echeance.setDate(echeance.getDate() + (a.echeanceJours || 7));
+        return {
+          titre: a.titre,
+          priorite: a.priorite || 'Moyenne',
+          statut: 'À faire',
+          echeance: echeance.toISOString().split('T')[0],
+          assignee: getCurrentUserName(profile),
+          assigned_to_user_id: user?.id,
+          created_by: user?.id,
+          lien_type: 'mandat',
+          lien_id: mandatId,
+        };
+      });
+      await supabase.from('todos').insert(starters);
+    }
+
     // Créer les tâches liées au mandat pour les actions sélectionnées
     if (actions.length > 0 && mandatId) {
       const todosToInsert = actions.map(a => {
@@ -1685,6 +1707,16 @@ function MandatsKanban({ mandats, onSelectMandat, reload, secondaryDisplay = 'm2
 // Pièces du dossier — toutes CONSEILLÉES (aucune obligatoire). On les dépose une
 // par une (un doc analysé à la fois → pas de souci de quota IA). Quelques docs
 // clés suffisent à créer le mandat, le reste se complète à la main.
+// Tâches de démarrage créées automatiquement à la création d'un mandat.
+// Distinctes des « pièces manquantes » (qui portent sur les documents) : ici ce sont
+// les ACTIONS de commercialisation. Défauts modifiables — à affiner avec Thomas.
+const STARTER_MANDAT_TASKS = [
+  { titre: 'Réaliser / valider l\'avis de valeur', echeanceJours: 3, priorite: 'Haute' },
+  { titre: 'Organiser la prise de photos du bien', echeanceJours: 5, priorite: 'Moyenne' },
+  { titre: 'Rédiger et diffuser l\'annonce', echeanceJours: 7, priorite: 'Moyenne' },
+  { titre: 'Lancer la recherche d\'acquéreurs (matching)', echeanceJours: 7, priorite: 'Moyenne' },
+];
+
 const PIECES_DOSSIER = [
   { key: 'fiche',        label: 'Fiche / mandat',                category: 'mandat',       emoji: '📄' },
   { key: 'etat_locatif', label: 'État locatif + descriptif',     category: 'notes',        emoji: '🏢' },
