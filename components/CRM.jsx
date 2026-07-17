@@ -2223,31 +2223,58 @@ async function handleFolderImport(event, opts = {}) {
     }
   }
 
-  // Sprint 4 — C1 : crée une tâche pour chaque pièce OBLIGATOIRE manquante (ne bloque pas).
-  async function createMissingPieceTasks(mandatId) {
-    if (!mandatId) return 0;
-    const manquantes = PIECES_DOSSIER.filter(p => p.obligatoire && !piecesPresent.has(p.key));
-    if (manquantes.length === 0) return 0;
+  // Sprint 4 — C1 : synchronise les tâches « pièce manquante » du dossier.
+  // Toutes les pièces sont « conseillées » (plus de notion d'obligatoire) : on relance
+  // sur tout ce qui manque, sans jamais bloquer l'enregistrement.
+  //  - crée une tâche pour chaque pièce absente (sans doublonner une tâche déjà ouverte),
+  //  - clôture automatiquement les tâches des pièces qui sont arrivées depuis.
+  const PIECE_TASK_PREFIX = 'Pièce manquante au dossier : ';
+
+  async function syncPieceTasks(mandatId) {
+    if (!mandatId) return { crees: 0, clotures: 0 };
     try {
       const { data: { user } } = await supabase.auth.getUser();
+
+      const { data: ouvertes } = await supabase
+        .from('todos')
+        .select('id, titre')
+        .eq('lien_type', 'mandat')
+        .eq('lien_id', mandatId)
+        .neq('statut', 'Terminé');
+      const dejaOuvertes = new Map((ouvertes || []).map(t => [t.titre, t.id]));
+
+      // 1) Clôturer les relances dont la pièce est désormais présente
+      const aClore = PIECES_DOSSIER
+        .filter(p => piecesPresent.has(p.key))
+        .map(p => dejaOuvertes.get(PIECE_TASK_PREFIX + p.label))
+        .filter(Boolean);
+      if (aClore.length) {
+        await supabase.from('todos').update({ statut: 'Terminé' }).in('id', aClore);
+      }
+
+      // 2) Créer une relance pour chaque pièce encore absente
       const echeance = new Date();
       echeance.setDate(echeance.getDate() + 7);
-      const rows = manquantes.map(p => ({
-        titre: `Pièce manquante au dossier : ${p.label}`,
-        priorite: 'Haute',
-        statut: 'À faire',
-        echeance: echeance.toISOString().split('T')[0],
-        assignee: getCurrentUserName(profile),
-        assigned_to_user_id: user?.id || null,
-        created_by: user?.id || null,
-        lien_type: 'mandat',
-        lien_id: mandatId,
-      }));
-      await supabase.from('todos').insert(rows);
-      return manquantes.length;
+      const rows = PIECES_DOSSIER
+        .filter(p => !piecesPresent.has(p.key))
+        .map(p => ({
+          titre: PIECE_TASK_PREFIX + p.label,
+          priorite: 'Moyenne',
+          statut: 'À faire',
+          echeance: echeance.toISOString().split('T')[0],
+          assignee: getCurrentUserName(profile),
+          assigned_to_user_id: user?.id || null,
+          created_by: user?.id || null,
+          lien_type: 'mandat',
+          lien_id: mandatId,
+        }))
+        .filter(r => !dejaOuvertes.has(r.titre));
+      if (rows.length) await supabase.from('todos').insert(rows);
+
+      return { crees: rows.length, clotures: aClore.length };
     } catch (e) {
-      console.warn('[pieces] création tâches manquantes:', e.message);
-      return 0;
+      console.warn('[pieces] synchronisation des tâches:', e.message);
+      return { crees: 0, clotures: 0 };
     }
   }
 
@@ -2626,7 +2653,7 @@ async function handleFolderImport(event, opts = {}) {
             </div>
           )}
           <button onClick={handleCancel} className="px-4 py-2 text-sm text-stone-700 hover:bg-cream-200 rounded-lg">Annuler</button>
-          <button onClick={async () => { if (!mandat && data.id) await createMissingPieceTasks(data.id); setAutoCreatedId(null); onSave(data, []); }} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Enregistrer</button>
+          <button onClick={async () => { if (data.id) await syncPieceTasks(data.id); setAutoCreatedId(null); onSave(data, []); }} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Enregistrer</button>
         </div>
 
         {/* Modale de fusion */}
