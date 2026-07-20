@@ -399,6 +399,62 @@ function AddRoleModal({ contactId, contactName, mandats, onClose, onSuccess }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// AtraiterBanner — Bandeau très voyant tant que le contact n'a pas été qualifié
+// par téléphone. Disparaît dès qu'on le marque « traité » (et clôt la tâche).
+function AtraiterBanner({ client, onTraite }) {
+  const [saving, setSaving] = useState(false);
+  const dejaTraite = !!(client?.traiteLe || client?.traite_le);
+  if (dejaTraite) return null;
+
+  async function marquerTraite() {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('clients')
+        .update({ traite_le: new Date().toISOString() })
+        .eq('id', client.id);
+      if (error) {
+        alert(
+          /traite_le/i.test(error.message || '')
+            ? "La colonne « traite_le » n'existe pas encore en base.\n\nÀ exécuter dans Supabase → SQL Editor :\nalter table clients add column if not exists traite_le timestamptz;"
+            : 'Erreur : ' + error.message
+        );
+        return;
+      }
+      // Clôture la tâche de qualification associée
+      await supabase
+        .from('todos')
+        .update({ statut: 'Terminé' })
+        .eq('lien_type', 'client')
+        .eq('lien_id', client.id)
+        .ilike('titre', 'URGENT — Appeler%')
+        .neq('statut', 'Terminé');
+      onTraite?.();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border-2 border-red-300 bg-red-50 p-4 flex items-center gap-4">
+      <div className="w-11 h-11 rounded-full bg-red-500 text-white flex items-center justify-center text-xl flex-shrink-0">!</div>
+      <div className="flex-1 min-w-0">
+        <div className="font-display text-base font-semibold text-red-800">Contact à traiter</div>
+        <div className="text-sm text-red-700">
+          À qualifier par téléphone : budget, stratégie, critères de recherche.
+        </div>
+      </div>
+      <button
+        onClick={marquerTraite}
+        disabled={saving}
+        className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50 flex-shrink-0"
+      >
+        {saving ? 'Enregistrement…' : 'Marquer comme traité'}
+      </button>
+    </div>
+  );
+}
+
 // ClientTasksSection — Tâches du contact + tâches des mandats dont il est mandant.
 // Les relances « pièce manquante » d'un mandat doivent aussi être visibles ici.
 function ClientTasksSection({ clientId, mandatIds = [], onOpenMandat }) {
@@ -728,6 +784,11 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
       <button onClick={onBack} className="text-sm text-stone-500 hover:text-stone-900 mb-4 flex items-center gap-1">
         <ArrowLeft className="w-4 h-4" /> Retour à la liste
       </button>
+
+      {/* À TRAITER — bandeau d'alerte tant que le contact n'est pas qualifié */}
+      <div className="mb-6">
+        <AtraiterBanner client={client} onTraite={reload} />
+      </div>
 
       {/* HEADER */}
       <div className="flex items-start justify-between mb-6 gap-4">
@@ -1172,7 +1233,8 @@ export default function ClientsTab({ clients, contacts, loadingContacts, loadCon
       'id', 'nom', 'prenom', 'societe', 'email', 'tel', 'typologie', 'sous_typologie',
       'nature', 'marche', 'budget_min', 'budget_max',
       'rendement_min', 'zones', 'typologies_recherchees', 'statut', 'maturite',
-      'origine', 'owner', 'details_recherche', 'created_by', 'updated_by', 'contact_id'
+      'origine', 'owner', 'details_recherche', 'created_by', 'updated_by', 'contact_id',
+      'traite_le'
     ];
     Object.keys(snakeData).forEach(k => {
       if (!COLONNES_CLIENTS.includes(k)) delete snakeData[k];
@@ -1240,6 +1302,27 @@ export default function ClientsTab({ clients, contacts, loadingContacts, loadCon
       snakeData.created_by = user?.id;
       const { data: created } = await supabase.from('clients').insert(snakeData).select().single();
       if (created) { clientId = created.id; contactId = created.contact_id || contactId; }
+
+      // Pilier 2 — Tout nouveau contact est « à traiter » : il doit être qualifié
+      // par téléphone (budget, stratégie). On crée une tâche URGENTE, échéance du
+      // jour, pour qu'il ne dorme jamais dans la base.
+      if (clientId) {
+        try {
+          const nomComplet = [snakeData.prenom, snakeData.nom].filter(Boolean).join(' ') || 'ce contact';
+          await supabase.from('todos').insert({
+            titre: `URGENT — Appeler ${nomComplet} : qualifier le besoin (budget, stratégie)`,
+            priorite: 'Haute',
+            statut: 'À faire',
+            echeance: new Date().toISOString().split('T')[0],
+            assigned_to_user_id: user?.id || null,
+            created_by: user?.id || null,
+            lien_type: 'client',
+            lien_id: clientId,
+          });
+        } catch (e) {
+          console.warn('[handleSave] tâche de qualification non créée:', e.message);
+        }
+      }
     }
 
     if (contactId && categorie !== undefined) {
@@ -1436,8 +1519,13 @@ export default function ClientsTab({ clients, contacts, loadingContacts, loadCon
             {!loadingContacts && filtered.map(c => (
               <tr key={c.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer group" onClick={() => handleContactClick(c)}>
                 <td className="px-3 py-3">
-                  <div className="font-medium text-stone-900 text-sm">
+                  <div className="font-medium text-stone-900 text-sm flex items-center gap-2">
                     {[c.prenom, c.nom].filter(Boolean).join(' ') || <span className="text-stone-400 italic">Sans nom</span>}
+                    {c.a_traiter && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200 flex-shrink-0">
+                        À TRAITER
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td className="px-3 py-3 text-sm text-stone-700">{c.societe || '—'}</td>
