@@ -114,6 +114,42 @@ export async function POST(request) {
           created_by: user.id,
         });
 
+        // Pilier 2 — Relance automatique : vérifier que le prospect a bien pris
+        // connaissance de la plaquette, puis proposer une visite.
+        // Déclenchée uniquement sur cet envoi délibéré (jamais sur un email entrant).
+        if (clientId) {
+          try {
+            const echeance = new Date();
+            echeance.setDate(echeance.getDate() + 3);
+            const titre = `Relancer suite à l'envoi de la plaquette — ${mandatLabel}`;
+
+            // Anti-doublon : une seule relance ouverte par client et par mandat
+            const { data: dejaOuverte } = await supabaseAdmin
+              .from('todos')
+              .select('id')
+              .eq('lien_type', 'client')
+              .eq('lien_id', clientId)
+              .eq('titre', titre)
+              .neq('statut', 'Terminé')
+              .maybeSingle();
+
+            if (!dejaOuverte) {
+              await supabaseAdmin.from('todos').insert({
+                titre,
+                priorite: 'Moyenne',
+                statut: 'À faire',
+                echeance: echeance.toISOString().split('T')[0],
+                assigned_to_user_id: user.id,
+                created_by: user.id,
+                lien_type: 'client',
+                lien_id: clientId,
+              });
+            }
+          } catch (e) {
+            console.warn('[send-batch] relance non créée:', e.message);
+          }
+        }
+
       } catch (e) {
         console.error(`[send-batch] Échec envoi à ${to}:`, e.message);
         results.failed.push({ clientId, to, reason: e.message });
