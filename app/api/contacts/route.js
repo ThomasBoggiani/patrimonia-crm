@@ -68,10 +68,20 @@ export async function GET(request) {
     const ids = (contacts || []).map(c => c.id);
 
     // 2. Charge en parallèle : clients liés + mandat_contacts liés
+    // `traite_le` peut ne pas encore exister en base : on réessaie sans si besoin,
+    // pour ne jamais casser la liste des contacts.
+    const selectClients = async () => {
+      if (ids.length === 0) return { data: [] };
+      const base = 'id, contact_id, typologie, owner, statut, budget_min, budget_max';
+      const res = await supabaseAdmin.from('clients').select(`${base}, traite_le`).in('contact_id', ids);
+      if (res.error && /traite_le/i.test(res.error.message || '')) {
+        return await supabaseAdmin.from('clients').select(base).in('contact_id', ids);
+      }
+      return res;
+    };
+
     const [clientsRes, mandatContactsRes] = await Promise.all([
-      ids.length > 0
-        ? supabaseAdmin.from('clients').select('id, contact_id, typologie, owner, statut, budget_min, budget_max').in('contact_id', ids)
-        : Promise.resolve({ data: [] }),
+      selectClients(),
       ids.length > 0
         ? supabaseAdmin.from('mandat_contacts').select('contact_id, role, mandat_id').in('contact_id', ids)
         : Promise.resolve({ data: [] }),
@@ -112,6 +122,8 @@ export async function GET(request) {
         clients_count: clientsLinked.length,
         client_typologies: [...new Set(clientsLinked.map(x => x.typologie).filter(Boolean))],
         client_owners: [...new Set(clientsLinked.map(x => x.owner).filter(Boolean))], postures,
+        // « À traiter » : au moins une fiche client liée pas encore qualifiée
+        a_traiter: clientsLinked.length > 0 && clientsLinked.some(x => !x.traite_le),
       };
     });
 
