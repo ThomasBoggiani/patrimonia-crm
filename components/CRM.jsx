@@ -1031,16 +1031,56 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
     delete snakeData.created_at;
     delete snakeData.updated_at;
     let mandatId = mandat.id;
+    const isNouveauMandat = !mandat.id;
+
+    // `pieces_presentes` (check-list du dossier) peut ne pas encore exister en base.
+    // On tente avec, et on rejoue sans si la colonne est absente — l'enregistrement
+    // ne doit jamais échouer pour cette raison.
+    const colonneManquante = (err) =>
+      err && /pieces_presentes/i.test(err.message || '') &&
+      /column|colonne|schema cache/i.test(err.message || '');
+
     if (mandat.id) {
       snakeData.updated_by = user?.id;
-      await supabase.from('mandats').update(snakeData).eq('id', mandat.id);
+      let { error } = await supabase.from('mandats').update(snakeData).eq('id', mandat.id);
+      if (colonneManquante(error)) {
+        const { pieces_presentes, ...sansChecklist } = snakeData;
+        ({ error } = await supabase.from('mandats').update(sansChecklist).eq('id', mandat.id));
+      }
+      if (error) { alert('Erreur enregistrement : ' + error.message); return; }
     } else {
       delete snakeData.id;
       snakeData.created_by = user?.id;
-      const { data: created } = await supabase.from('mandats').insert(snakeData).select().single();
+      let { data: created, error } = await supabase.from('mandats').insert(snakeData).select().single();
+      if (colonneManquante(error)) {
+        const { pieces_presentes, ...sansChecklist } = snakeData;
+        ({ data: created, error } = await supabase.from('mandats').insert(sansChecklist).select().single());
+      }
+      if (error) { alert('Erreur création : ' + error.message); return; }
       if (created) mandatId = created.id;
     }
-    
+
+    // Pilier 2 — Nouveau mandat : tâches de démarrage automatiques (actions de
+    // commercialisation). Attribuées à celui qui agit ; réattribuables ensuite.
+    if (isNouveauMandat && mandatId) {
+      const starters = STARTER_MANDAT_TASKS.map(a => {
+        const echeance = new Date();
+        echeance.setDate(echeance.getDate() + (a.echeanceJours || 7));
+        return {
+          titre: a.titre,
+          priorite: a.priorite || 'Moyenne',
+          statut: 'À faire',
+          echeance: echeance.toISOString().split('T')[0],
+          assignee: getCurrentUserName(profile),
+          assigned_to_user_id: user?.id,
+          created_by: user?.id,
+          lien_type: 'mandat',
+          lien_id: mandatId,
+        };
+      });
+      await supabase.from('todos').insert(starters);
+    }
+
     // Créer les tâches liées au mandat pour les actions sélectionnées
     if (actions.length > 0 && mandatId) {
       const todosToInsert = actions.map(a => {
@@ -1685,15 +1725,56 @@ function MandatsKanban({ mandats, onSelectMandat, reload, secondaryDisplay = 'm2
 // Pièces du dossier — toutes CONSEILLÉES (aucune obligatoire). On les dépose une
 // par une (un doc analysé à la fois → pas de souci de quota IA). Quelques docs
 // clés suffisent à créer le mandat, le reste se complète à la main.
-const PIECES_DOSSIER = [
-  { key: 'fiche',        label: 'Fiche / mandat',                category: 'mandat',       emoji: '📄' },
-  { key: 'etat_locatif', label: 'État locatif + descriptif',     category: 'notes',        emoji: '🏢' },
-  { key: 'titre',        label: 'Titre de propriété',            category: 'mandant',      emoji: '📜' },
-  { key: 'dpe',          label: 'DPE',                           category: 'diagnostics',  emoji: '⚡' },
-  { key: 'taxe',         label: 'Taxe foncière',                 category: 'autre',        emoji: '🧾' },
-  { key: 'diagnostics',  label: 'Diagnostics (amiante, plomb…)', category: 'diagnostics',  emoji: '🔬' },
-  { key: 'photos',       label: 'Photos',                        category: 'plans_photos', emoji: '🖼️' },
-  { key: 'plans',        label: 'Plans',                         category: 'plans_photos', emoji: '📐' },
+// Tâches de démarrage créées automatiquement à la création d'un mandat.
+// Distinctes des « pièces manquantes » (qui portent sur les documents) : ici ce sont
+// les ACTIONS de commercialisation. Défauts modifiables — à affiner avec Thomas.
+const STARTER_MANDAT_TASKS = [
+  { titre: 'Réaliser / valider l\'avis de valeur', echeanceJours: 3, priorite: 'Haute' },
+  { titre: 'Organiser la prise de photos du bien', echeanceJours: 5, priorite: 'Moyenne' },
+  { titre: 'Rédiger et diffuser l\'annonce', echeanceJours: 7, priorite: 'Moyenne' },
+  { titre: 'Lancer la recherche d\'acquéreurs (matching)', echeanceJours: 7, priorite: 'Moyenne' },
+];
+
+// ── Pièces du dossier ────────────────────────────────────────────────
+// Liste réelle fournie par Thomas. Le cadastre n'y figure pas : il est récupéré
+// automatiquement. Toutes les pièces sont « conseillées » (rien ne bloque).
+// « optionnel » = pas de tâche de relance créée (ex. factures de travaux).
+const PIECES_B2C = [
+  { key: 'fiche',             label: 'Fiche / mandat',                 category: 'mandat',       emoji: '📄' },
+  { key: 'identite_vendeur',  label: "Pièce d'identité du vendeur",    category: 'mandant',      emoji: '🪪' },
+  { key: 'titre',             label: 'Titre de propriété',             category: 'mandant',      emoji: '📜' },
+  { key: 'taxe',              label: 'Taxe foncière',                  category: 'autre',        emoji: '🧾' },
+  { key: 'appels_charges',    label: 'Appels de charges (3 derniers)', category: 'autre',        emoji: '💶' },
+  { key: 'pv_ag',             label: "PV d'assemblée générale",        category: 'autre',        emoji: '📋' },
+  { key: 'reglement_copro',   label: 'Règlement de copropriété',       category: 'autre',        emoji: '📕' },
+  { key: 'nb_lots',           label: 'Nombre de lots',                 category: 'notes',        emoji: '🔢' },
+  { key: 'dpe',               label: 'DPE',                            category: 'diagnostics',  emoji: '⚡' },
+  { key: 'diagnostics',       label: 'Diagnostics (amiante, plomb…)',  category: 'diagnostics',  emoji: '🔬' },
+  { key: 'photos',            label: 'Photos',                         category: 'plans_photos', emoji: '🖼️' },
+  { key: 'plans',             label: 'Plans',                          category: 'plans_photos', emoji: '📐' },
+  { key: 'loyer',             label: 'Loyer / bien loué ou libre',     category: 'notes',        emoji: '🔑' },
+  { key: 'factures_travaux',  label: 'Factures de travaux',            category: 'autre',        emoji: '🛠️', optionnel: true },
+];
+
+// Le BtoB reprend tout le BtoC et ajoute le volet exploitation.
+const PIECES_B2B_EXTRA = [
+  { key: 'bilan_comptable',        label: 'Bilan comptable',        category: 'autre', emoji: '📊' },
+  { key: 'etat_locatif',           label: 'État locatif',           category: 'notes', emoji: '🏢' },
+  { key: 'etat_locatif_optimise',  label: 'État locatif optimisé',  category: 'notes', emoji: '📈' },
+];
+
+function piecesPourMarche(marche) {
+  return marche === 'b2c' ? PIECES_B2C : [...PIECES_B2C, ...PIECES_B2B_EXTRA];
+}
+
+// ── Champs (données) attendus au dossier ─────────────────────────────
+// Génèrent aussi une tâche quand ils manquent. Le cadastre est automatique.
+const CHAMPS_DOSSIER = [
+  { key: 'prix',              label: 'Renseigner le prix',              test: d => Number(d?.prix) > 0 },
+  { key: 'description',       label: 'Rédiger le pitch du bien',        test: d => !!String(d?.description || '').trim() },
+  // Le rendement optimisé est CALCULÉ (override > lots de l'état locatif > legacy) :
+  // on interroge le calcul partagé, sinon la tâche ne se fermerait jamais.
+  { key: 'rendementOptimise', label: 'Calculer le rendement optimisé',  test: d => Number(computeRendements(d)?.optimise) > 0, b2bSeul: true },
 ];
 
 function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
@@ -2223,31 +2304,71 @@ async function handleFolderImport(event, opts = {}) {
     }
   }
 
-  // Sprint 4 — C1 : crée une tâche pour chaque pièce OBLIGATOIRE manquante (ne bloque pas).
-  async function createMissingPieceTasks(mandatId) {
-    if (!mandatId) return 0;
-    const manquantes = PIECES_DOSSIER.filter(p => p.obligatoire && !piecesPresent.has(p.key));
-    if (manquantes.length === 0) return 0;
+  // Sprint 4 — C1 : synchronise les tâches « pièce manquante » du dossier.
+  // Toutes les pièces sont « conseillées » (plus de notion d'obligatoire) : on relance
+  // sur tout ce qui manque, sans jamais bloquer l'enregistrement.
+  //  - crée une tâche pour chaque pièce absente (sans doublonner une tâche déjà ouverte),
+  //  - clôture automatiquement les tâches des pièces qui sont arrivées depuis.
+  const PIECE_TASK_PREFIX = 'Pièce manquante au dossier : ';
+  const CHAMP_TASK_PREFIX = 'À compléter : ';
+
+  async function syncPieceTasks(mandatId) {
+    if (!mandatId) return { crees: 0, clotures: 0 };
     try {
       const { data: { user } } = await supabase.auth.getUser();
+
+      const { data: ouvertes } = await supabase
+        .from('todos')
+        .select('id, titre')
+        .eq('lien_type', 'mandat')
+        .eq('lien_id', mandatId)
+        .neq('statut', 'Terminé');
+      const dejaOuvertes = new Map((ouvertes || []).map(t => [t.titre, t.id]));
+
+      const estB2B = data.marche !== 'b2c';
+      const pieces = piecesPourMarche(data.marche);
+      // Pièces à relancer (on ne relance jamais sur les pièces optionnelles)
+      const piecesRelancables = pieces.filter(p => !p.optionnel);
+      const champs = CHAMPS_DOSSIER.filter(c => !c.b2bSeul || estB2B);
+
+      // Intitulés attendus : pièces manquantes + champs à compléter
+      const manquants = [
+        ...piecesRelancables.filter(p => !piecesPresent.has(p.key)).map(p => PIECE_TASK_PREFIX + p.label),
+        ...champs.filter(c => !c.test(data)).map(c => CHAMP_TASK_PREFIX + c.label),
+      ];
+      const complets = [
+        ...piecesRelancables.filter(p => piecesPresent.has(p.key)).map(p => PIECE_TASK_PREFIX + p.label),
+        ...champs.filter(c => c.test(data)).map(c => CHAMP_TASK_PREFIX + c.label),
+      ];
+
+      // 1) Clôturer les relances dont l'élément est désormais fourni
+      const aClore = complets.map(t => dejaOuvertes.get(t)).filter(Boolean);
+      if (aClore.length) {
+        await supabase.from('todos').update({ statut: 'Terminé' }).in('id', aClore);
+      }
+
+      // 2) Créer une relance pour chaque élément encore manquant
       const echeance = new Date();
       echeance.setDate(echeance.getDate() + 7);
-      const rows = manquantes.map(p => ({
-        titre: `Pièce manquante au dossier : ${p.label}`,
-        priorite: 'Haute',
-        statut: 'À faire',
-        echeance: echeance.toISOString().split('T')[0],
-        assignee: getCurrentUserName(profile),
-        assigned_to_user_id: user?.id || null,
-        created_by: user?.id || null,
-        lien_type: 'mandat',
-        lien_id: mandatId,
-      }));
-      await supabase.from('todos').insert(rows);
-      return manquantes.length;
+      const rows = manquants
+        .filter(titre => !dejaOuvertes.has(titre))
+        .map(titre => ({
+          titre,
+          priorite: 'Moyenne',
+          statut: 'À faire',
+          echeance: echeance.toISOString().split('T')[0],
+          assignee: getCurrentUserName(profile),
+          assigned_to_user_id: user?.id || null,
+          created_by: user?.id || null,
+          lien_type: 'mandat',
+          lien_id: mandatId,
+        }));
+      if (rows.length) await supabase.from('todos').insert(rows);
+
+      return { crees: rows.length, clotures: aClore.length };
     } catch (e) {
-      console.warn('[pieces] création tâches manquantes:', e.message);
-      return 0;
+      console.warn('[pieces] synchronisation des tâches:', e.message);
+      return { crees: 0, clotures: 0 };
     }
   }
 
@@ -2326,14 +2447,14 @@ async function handleFolderImport(event, opts = {}) {
               </div>
 
               <div className="space-y-2">
-                {PIECES_DOSSIER.map(p => {
+                {piecesPourMarche(data.marche).map(p => {
                   const present = piecesPresent.has(p.key);
                   return (
                     <div key={p.key} className={`flex items-center gap-3 px-3 py-2 rounded-lg border ${present ? 'border-emerald-200 bg-emerald-50/50' : 'border-dashed border-stone-300 bg-white'}`}>
                       <span className="text-lg flex-shrink-0">{p.emoji}</span>
                       <div className="flex-1 min-w-0">
                         <span className="text-sm font-medium text-stone-800">{p.label}</span>
-                        <span className="text-[10px] text-stone-400 ml-1">· conseillé</span>
+                        <span className="text-[10px] text-stone-400 ml-1">· {p.optionnel ? 'si applicable' : 'conseillé'}</span>
                       </div>
                       {present ? (
                         <span className="inline-flex items-center gap-1 text-xs text-emerald-700 flex-shrink-0"><Check className="w-3.5 h-3.5" /> déposé</span>
@@ -2626,7 +2747,7 @@ async function handleFolderImport(event, opts = {}) {
             </div>
           )}
           <button onClick={handleCancel} className="px-4 py-2 text-sm text-stone-700 hover:bg-cream-200 rounded-lg">Annuler</button>
-          <button onClick={async () => { if (!mandat && data.id) await createMissingPieceTasks(data.id); setAutoCreatedId(null); onSave(data, []); }} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Enregistrer</button>
+          <button onClick={async () => { if (data.id) await syncPieceTasks(data.id); setAutoCreatedId(null); onSave({ ...data, piecesPresentes: Array.from(piecesPresent) }, []); }} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Enregistrer</button>
         </div>
 
         {/* Modale de fusion */}
@@ -3133,20 +3254,38 @@ function MandatContactsSection({ mandatContacts, onAdd, onRemove }) {
 }
 // Sprint 4 — Score « qualité du dossier » : ce qui est prêt / manquant pour les documents (plaquette, avis de valeur).
 function DossierScore({ mandat, mandatContacts = [] }) {
+  const estB2B = (mandat.marche || mandat.marche) !== 'b2c';
   const photos = getPhotos(mandat);
+  const medias = Array.isArray(mandat.medias) ? mandat.medias : [];
   const lots = mandat.etatLocatif || mandat.etat_locatif || [];
   const rdt = computeRendements(mandat);
   const hasMandant = (mandatContacts || []).some(mc => mc.role === 'mandant' || mc.role === 'proprietaire') || !!(mandat.mandantClientId || mandat.mandant_client_id);
   const hasCadastre = !!(mandat.cadastreImageUrl || mandat.cadastre_image_url || mandat.parcelleData || mandat.parcelle_data);
+
+  // Check-list cochée à la main / à l'import (persistée sur le mandat)
+  const coche = new Set(mandat.piecesPresentes || mandat.pieces_presentes || []);
+
+  // Pièces dont la présence se DÉDUIT des données (toujours fiables)
+  const deduit = {
+    photos: photos.length > 0,
+    plans: medias.some(m => m && m.type === 'plan'),
+    dpe: parseFloat(mandat.dpeConsommation || mandat.dpe_consommation) > 0,
+    nb_lots: parseInt(mandat.nbLots || mandat.nb_lots) > 0,
+    etat_locatif: Array.isArray(lots) && lots.length > 0,
+    etat_locatif_optimise: rdt.optimise != null && rdt.optimise > 0,
+    loyer: (Array.isArray(lots) && lots.length > 0) || parseFloat(mandat.loyersAnnuels || mandat.loyers_annuels) > 0,
+  };
+
+  // Champs clés + pièces du dossier selon le marché (BtoC / BtoB)
   const items = [
     { label: 'Adresse', ok: !!mandat.adresse },
     { label: 'Prix', ok: parseFloat(mandat.prix) > 0 },
     { label: 'Pitch', ok: !!(mandat.description && mandat.description.trim()) },
-    { label: 'État locatif', ok: Array.isArray(lots) && lots.length > 0 },
-    { label: 'Rdt optimisé', ok: rdt.optimise != null && rdt.optimise > 0 },
     { label: 'Propriétaire', ok: hasMandant },
-    { label: 'Photos', ok: photos.length > 0 },
-    { label: 'DPE', ok: parseFloat(mandat.dpeConsommation) > 0 },
+    ...piecesPourMarche(mandat.marche)
+      .filter(p => !p.optionnel && p.key !== 'fiche')
+      .map(p => ({ label: p.label, ok: p.key in deduit ? deduit[p.key] : coche.has(p.key) })),
+    ...(estB2B ? [{ label: 'Rdt optimisé', ok: rdt.optimise != null && rdt.optimise > 0 }] : []),
     { label: 'Cadastre', ok: hasCadastre, auto: true },
   ];
   const done = items.filter(i => i.ok).length;

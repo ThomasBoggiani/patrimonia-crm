@@ -43,60 +43,52 @@ import { getLineColor, LINE_TEXT_COLORS } from '../../transit-colors';
 // en-têtes discrets. Composants locaux qui remplacent ceux partagés
 // (l'avis de valeur n'est pas impacté). Gère standard + off-market.
 // ═══════════════════════════════════════════════════════════════════
-const SERIF = 'Times-Roman';
-const SERIF_B = 'Times-Bold';
-const SERIF_I = 'Times-Italic';
+// Style « maison » Pilotim : sans-serif nette. On repurpose ces constantes en Helvetica
+// (les anciennes utilisations de « SERIF » deviennent donc sans-serif automatiquement).
+const SERIF = 'Helvetica-Bold';
+const SERIF_B = 'Helvetica-Bold';
+const SERIF_I = 'Helvetica-Oblique';
+// Palette de la charte (extraite du logo + Pilotim). « gold »/« sageD » = sauge #9EA48D.
 const DTOK = {
-  light: { ink: '#26251F', sageD: '#586348', gold: '#AD966B', muted: '#8C8676', hair: '#E1DCCE', bg: '#FAF8F2' },
-  dark:  { ink: '#EDE9DF', sageD: '#C7A969', gold: '#C7A969', muted: '#9A9486', hair: '#3A342C', bg: '#1A1817' },
+  light: { ink: '#2C2C2A', sageD: '#9EA48D', gold: '#9EA48D', sageF: '#8D9882', graybox: '#EFEFED', muted: '#8A8880', hair: '#DDDACF', bg: '#FFFFFF' },
+  dark:  { ink: '#EDE9DF', sageD: '#C7A969', gold: '#C7A969', sageF: '#8A7741', graybox: '#26241F', muted: '#9A9486', hair: '#3A342C', bg: '#161412' },
 };
 function dt(isOff) { return isOff ? DTOK.dark : DTOK.light; }
 
-// En-tête courant : petit logo + nom, filet de séparation
-function RunningHeader({ isOffMarket, label }) {
-  const D = dt(isOffMarket);
-  return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: D.hair, paddingBottom: 8, marginBottom: 15 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Image src={LOGO_IP_BASE64} style={{ width: 22, height: 22, objectFit: 'contain', marginRight: 7 }} />
-        <Text style={{ fontFamily: 'Helvetica', fontSize: 8, color: D.sageD, letterSpacing: 2 }}>IMMEUBLES & PATRIMOINE</Text>
-      </View>
-      {label ? <Text style={{ fontFamily: 'Helvetica', fontSize: 8, color: D.muted, letterSpacing: 2 }}>{String(label).toUpperCase()}</Text> : null}
-    </View>
-  );
-}
-
-// Pied de page : filet doré + coordonnées + numéro
+// Pied de page — bandeau sauge (style Pilotim) : mention + coordonnées + site
 function PlqFooter({ isOffMarket }) {
   const D = dt(isOffMarket);
   return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: D.gold, paddingTop: 9, marginTop: 12 }}>
-      <Text style={{ fontFamily: 'Helvetica', fontSize: 7.5, color: D.muted, letterSpacing: 0.4 }}>Immeubles &amp; Patrimoine · 06 84 40 81 09 · www.immeubles-patrimoine.fr</Text>
-      <Text style={{ fontFamily: 'Helvetica', fontSize: 7.5, color: D.muted }} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
+    <View fixed style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}>
+      <Text style={{ fontFamily: 'Helvetica-Oblique', fontSize: 7.5, color: D.muted, textAlign: 'right', paddingRight: 40, marginBottom: 5 }}>Confidentiel et non contractuel</Text>
+      <View style={{ backgroundColor: D.sageF, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 40 }}>
+        <View>
+          <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 8, color: '#FFFFFF' }}>Immeubles &amp; Patrimoine</Text>
+          <Text style={{ fontFamily: 'Helvetica', fontSize: 7.5, color: '#F1F2EC', marginTop: 1 }}>7 rue de Penthièvre 75008 Paris · 06 84 40 81 09</Text>
+        </View>
+        <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 8, color: '#FFFFFF' }}>www.immeubles-patrimoine.fr</Text>
+      </View>
     </View>
   );
 }
 
-// Page encadrée : cadre doré + en-tête + contenu + pied
+// Page standard — sans cadre : contenu + bandeau sauge en pied (style Pilotim)
 function PlqPage({ isOffMarket, label, children }) {
   const D = dt(isOffMarket);
   return (
-    <Page size="A4" style={{ backgroundColor: D.bg, padding: 16, fontFamily: 'Helvetica' }}>
-      <View style={{ flex: 1, borderWidth: 1, borderColor: D.gold, paddingVertical: 18, paddingHorizontal: 22 }}>
-        <RunningHeader isOffMarket={isOffMarket} label={label} />
-        <View style={{ flex: 1 }}>{children}</View>
-        <PlqFooter isOffMarket={isOffMarket} />
-      </View>
+    <Page size="A4" style={{ backgroundColor: D.bg, paddingTop: 42, paddingBottom: 74, paddingHorizontal: 40, fontFamily: 'Helvetica', color: D.ink }}>
+      {children}
+      <PlqFooter isOffMarket={isOffMarket} />
     </Page>
   );
 }
 
-// Bloc bordé (fond blanc) + photo en passe-partout
+// Encart gris clair (spécs, équipe) ; Mat = image simple sans cadre (style Pilotim)
 function Box({ children, style = {} }) {
-  return <View style={[{ borderWidth: 1, borderColor: DTOK.light.hair, backgroundColor: '#FFFFFF' }, style]}>{children}</View>;
+  return <View style={[{ backgroundColor: dt(false).graybox, borderRadius: 3 }, style]}>{children}</View>;
 }
 function Mat({ children, style = {} }) {
-  return <View style={[{ borderWidth: 1, borderColor: DTOK.light.hair, backgroundColor: '#FFFFFF', padding: 4 }, style]}>{children}</View>;
+  return <View style={style}>{children}</View>;
 }
 
 function PageLogo({ isOffMarket }) {
@@ -114,9 +106,12 @@ function SectionTitle({ title, subtitle, isOffMarket }) {
   const t = String(title || '').replace(/\n/g, ' ');
   return (
     <View style={{ marginBottom: 18 }}>
-      <View style={{ width: 46, height: 1.5, backgroundColor: D.gold, marginBottom: 10 }} />
-      <Text style={{ fontFamily: SERIF, fontSize: 26, color: D.ink }}>{t}</Text>
-      {subtitle ? <Text style={{ fontFamily: 'Helvetica', fontSize: 9, color: D.muted, marginTop: 5, letterSpacing: 2 }}>{String(subtitle).toUpperCase()}</Text> : null}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 19, color: D.sageD }}>{t}</Text>
+        <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 17, color: D.sageD }} render={({ pageNumber }) => String(pageNumber)} />
+      </View>
+      <View style={{ height: 1.5, backgroundColor: D.sageD, marginTop: 6 }} />
+      {subtitle ? <Text style={{ fontFamily: 'Helvetica', fontSize: 9, color: D.muted, marginTop: 6, letterSpacing: 0.5 }}>{subtitle}</Text> : null}
     </View>
   );
 }
@@ -481,53 +476,43 @@ export default function PlaquetteAcheteur({
       author="Immeubles & Patrimoine"
       subject="Plaquette de présentation"
     >
-      {/* ─── PAGE 1 : COUVERTURE (éditoriale) ─── */}
-      <Page size="A4" style={{ backgroundColor: dt(isOffMarket).bg, fontFamily: 'Helvetica' }}>
+      {/* ─── PAGE 1 : COUVERTURE (style Pilotim) ─── */}
+      <Page size="A4" style={{ backgroundColor: '#FFFFFF', fontFamily: 'Helvetica', color: dt(isOffMarket).ink }}>
+        <View style={{ alignItems: 'center', paddingTop: 22, paddingBottom: 14 }}>
+          <Image src={LOGO_IP_BASE64} style={{ width: 150, height: 150, objectFit: 'contain' }} />
+        </View>
         {photos[0] ? (
-          <Image src={photos[0]} style={{ width: '100%', height: 505, objectFit: 'cover' }} />
+          <Image src={photos[0]} style={{ width: '100%', height: 420, objectFit: 'cover' }} />
         ) : (
-          <View style={{ width: '100%', height: 505, backgroundColor: '#D9D4C9', alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ fontSize: 11, color: '#8C8676', fontFamily: SERIF_I }}>Photo principale du bien</Text>
+          <View style={{ width: '100%', height: 420, backgroundColor: '#E7E4DC', alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ fontSize: 11, color: '#9A968C' }}>Photo principale du bien</Text>
           </View>
         )}
-        <View style={{ paddingHorizontal: 46, paddingTop: 30, flexGrow: 1 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <Text style={{ fontFamily: 'Helvetica', fontSize: 8.5, color: dt(isOffMarket).sageD, letterSpacing: 3, marginTop: 8 }}>
-              {safeText(mandat?.ville, '').toUpperCase()}
-            </Text>
-            <Image src={LOGO_IP_BASE64} style={{ width: 42, height: 42, objectFit: 'contain' }} />
-          </View>
-          <Text style={{ fontFamily: SERIF, fontSize: 34, color: dt(isOffMarket).ink, marginTop: 4, lineHeight: 1.05 }}>
+        <View style={{ backgroundColor: dt(isOffMarket).sageD, paddingVertical: 18, paddingHorizontal: 40 }}>
+          <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 17, color: '#FFFFFF', textAlign: 'center' }}>
             {safeText(mandat?.nom, 'Bien à découvrir')}
           </Text>
-          {mandat?.type ? (
-            <Text style={{ fontFamily: SERIF_I, fontSize: 14, color: dt(isOffMarket).muted, marginTop: 6 }}>{mandat.type}</Text>
-          ) : null}
-          <View style={{ width: 46, height: 1.5, backgroundColor: dt(isOffMarket).gold, marginTop: 18, marginBottom: 16 }} />
-          <View style={{ flexDirection: 'row' }}>
-            {mandat?.surface ? (
-              <View style={{ marginRight: 40 }}>
-                <Text style={{ fontFamily: 'Helvetica', fontSize: 8, color: dt(isOffMarket).muted, letterSpacing: 1.4 }}>SURFACE</Text>
-                <Text style={{ fontFamily: SERIF, fontSize: 20, color: dt(isOffMarket).ink, marginTop: 4 }}>{formatSurface(mandat.surface)}</Text>
-              </View>
-            ) : null}
-            {prixNet > 0 ? (
-              <View style={{ marginRight: 40 }}>
-                <Text style={{ fontFamily: 'Helvetica', fontSize: 8, color: dt(isOffMarket).muted, letterSpacing: 1.4 }}>PRIX HAI</Text>
-                <Text style={{ fontFamily: SERIF, fontSize: 20, color: dt(isOffMarket).ink, marginTop: 4 }}>{formatPrix(prixTotal)}</Text>
-              </View>
-            ) : null}
-            {mandat?.rendement && parseFloat(mandat.rendement) > 0 ? (
-              <View>
-                <Text style={{ fontFamily: 'Helvetica', fontSize: 8, color: dt(isOffMarket).muted, letterSpacing: 1.4 }}>RENDEMENT</Text>
-                <Text style={{ fontFamily: SERIF, fontSize: 20, color: dt(isOffMarket).ink, marginTop: 4 }}>{parseFloat(mandat.rendement).toFixed(1).replace('.', ',')} %</Text>
-              </View>
-            ) : null}
+          <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 13, color: '#FFFFFF', textAlign: 'center', marginTop: 6 }}>
+            {[
+              prixNet > 0 ? `Prix ${formatPrix(prixTotal)} FAI` : '',
+              mandat?.surface ? `Surface ${formatSurface(mandat.surface)}` : '',
+            ].filter(Boolean).join('   —   ')}
+          </Text>
+        </View>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 40, marginTop: 42 }}>
+          <View style={{ flex: 1, paddingRight: 20 }}>
+            <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 11, color: dt(isOffMarket).ink, marginBottom: 5 }}>Immeubles &amp; Patrimoine</Text>
+            <Text style={{ fontFamily: 'Helvetica', fontSize: 9.5, color: dt(isOffMarket).ink, lineHeight: 1.6 }}>Agence Immeubles &amp; Patrimoine{'\n'}7 rue de Penthièvre{'\n'}75008 Paris{'\n'}www.immeubles-patrimoine.fr</Text>
+          </View>
+          <View style={{ flex: 1, paddingLeft: 20 }}>
+            <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 11, color: dt(isOffMarket).sageD, marginBottom: 5 }}>Votre conseiller</Text>
+            <Text style={{ fontFamily: 'Helvetica', fontSize: 9.5, color: dt(isOffMarket).ink, lineHeight: 1.6 }}>
+              {[conseiller?.prenom, conseiller?.nom].filter(Boolean).join(' ') || safeText(conseiller?.name, '')}
+              {conseiller?.email ? `\nEmail : ${conseiller.email}` : ''}
+              {conseiller?.telephone || conseiller?.tel || conseiller?.mobile ? `\nTél : ${conseiller.telephone || conseiller.tel || conseiller.mobile}` : ''}
+            </Text>
           </View>
         </View>
-        <Text style={{ fontFamily: 'Helvetica', fontSize: 8, color: dt(isOffMarket).muted, letterSpacing: 1.5, textAlign: 'center', marginBottom: 24 }}>
-          www.immeubles-patrimoine.fr
-        </Text>
       </Page>
 
       {/* ─── PAGE 2 : SOMMAIRE ─── */}
@@ -543,9 +528,9 @@ export default function PlaquetteAcheteur({
         <SectionTitle title="L'immeuble" subtitle="Le bien" isOffMarket={isOffMarket} />
         <View style={{ flexDirection: 'row' }}>
           {!!description && (
-            <Box style={{ flex: 1.4, padding: 14, marginRight: cards.length > 0 ? 12 : 0 }}>
+            <View style={{ flex: 1.4, paddingRight: cards.length > 0 ? 18 : 0 }}>
               <Text style={{ fontFamily: 'Helvetica', fontSize: 10.5, lineHeight: 1.7, color: dt(isOffMarket).ink }}>{description}</Text>
-            </Box>
+            </View>
           )}
           {cards.length > 0 && (
             <Box style={{ flex: 1, padding: 0 }}>
@@ -952,7 +937,7 @@ function ParcelleField({ label, value }) {
   return (
     <View style={{ width: '25%', paddingRight: 6, marginBottom: 4 }}>
       <Text style={{ fontSize: 7.5, color: '#8C8676', letterSpacing: 1 }}>{String(label).toUpperCase()}</Text>
-      <Text style={{ fontSize: 13, fontFamily: 'Times-Roman', color: '#26251F', marginTop: 2 }}>{value}</Text>
+      <Text style={{ fontSize: 13, fontFamily: 'Helvetica-Bold', color: '#2C2C2A', marginTop: 2 }}>{value}</Text>
     </View>
   );
 }
