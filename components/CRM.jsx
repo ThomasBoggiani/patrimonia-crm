@@ -1032,13 +1032,31 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
     delete snakeData.updated_at;
     let mandatId = mandat.id;
     const isNouveauMandat = !mandat.id;
+
+    // `pieces_presentes` (check-list du dossier) peut ne pas encore exister en base.
+    // On tente avec, et on rejoue sans si la colonne est absente — l'enregistrement
+    // ne doit jamais échouer pour cette raison.
+    const colonneManquante = (err) =>
+      err && /pieces_presentes/i.test(err.message || '') &&
+      /column|colonne|schema cache/i.test(err.message || '');
+
     if (mandat.id) {
       snakeData.updated_by = user?.id;
-      await supabase.from('mandats').update(snakeData).eq('id', mandat.id);
+      let { error } = await supabase.from('mandats').update(snakeData).eq('id', mandat.id);
+      if (colonneManquante(error)) {
+        const { pieces_presentes, ...sansChecklist } = snakeData;
+        ({ error } = await supabase.from('mandats').update(sansChecklist).eq('id', mandat.id));
+      }
+      if (error) { alert('Erreur enregistrement : ' + error.message); return; }
     } else {
       delete snakeData.id;
       snakeData.created_by = user?.id;
-      const { data: created } = await supabase.from('mandats').insert(snakeData).select().single();
+      let { data: created, error } = await supabase.from('mandats').insert(snakeData).select().single();
+      if (colonneManquante(error)) {
+        const { pieces_presentes, ...sansChecklist } = snakeData;
+        ({ data: created, error } = await supabase.from('mandats').insert(sansChecklist).select().single());
+      }
+      if (error) { alert('Erreur création : ' + error.message); return; }
       if (created) mandatId = created.id;
     }
 
@@ -2729,7 +2747,7 @@ async function handleFolderImport(event, opts = {}) {
             </div>
           )}
           <button onClick={handleCancel} className="px-4 py-2 text-sm text-stone-700 hover:bg-cream-200 rounded-lg">Annuler</button>
-          <button onClick={async () => { if (data.id) await syncPieceTasks(data.id); setAutoCreatedId(null); onSave(data, []); }} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Enregistrer</button>
+          <button onClick={async () => { if (data.id) await syncPieceTasks(data.id); setAutoCreatedId(null); onSave({ ...data, piecesPresentes: Array.from(piecesPresent) }, []); }} className="px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">Enregistrer</button>
         </div>
 
         {/* Modale de fusion */}
@@ -3236,20 +3254,38 @@ function MandatContactsSection({ mandatContacts, onAdd, onRemove }) {
 }
 // Sprint 4 — Score « qualité du dossier » : ce qui est prêt / manquant pour les documents (plaquette, avis de valeur).
 function DossierScore({ mandat, mandatContacts = [] }) {
+  const estB2B = (mandat.marche || mandat.marche) !== 'b2c';
   const photos = getPhotos(mandat);
+  const medias = Array.isArray(mandat.medias) ? mandat.medias : [];
   const lots = mandat.etatLocatif || mandat.etat_locatif || [];
   const rdt = computeRendements(mandat);
   const hasMandant = (mandatContacts || []).some(mc => mc.role === 'mandant' || mc.role === 'proprietaire') || !!(mandat.mandantClientId || mandat.mandant_client_id);
   const hasCadastre = !!(mandat.cadastreImageUrl || mandat.cadastre_image_url || mandat.parcelleData || mandat.parcelle_data);
+
+  // Check-list cochée à la main / à l'import (persistée sur le mandat)
+  const coche = new Set(mandat.piecesPresentes || mandat.pieces_presentes || []);
+
+  // Pièces dont la présence se DÉDUIT des données (toujours fiables)
+  const deduit = {
+    photos: photos.length > 0,
+    plans: medias.some(m => m && m.type === 'plan'),
+    dpe: parseFloat(mandat.dpeConsommation || mandat.dpe_consommation) > 0,
+    nb_lots: parseInt(mandat.nbLots || mandat.nb_lots) > 0,
+    etat_locatif: Array.isArray(lots) && lots.length > 0,
+    etat_locatif_optimise: rdt.optimise != null && rdt.optimise > 0,
+    loyer: (Array.isArray(lots) && lots.length > 0) || parseFloat(mandat.loyersAnnuels || mandat.loyers_annuels) > 0,
+  };
+
+  // Champs clés + pièces du dossier selon le marché (BtoC / BtoB)
   const items = [
     { label: 'Adresse', ok: !!mandat.adresse },
     { label: 'Prix', ok: parseFloat(mandat.prix) > 0 },
     { label: 'Pitch', ok: !!(mandat.description && mandat.description.trim()) },
-    { label: 'État locatif', ok: Array.isArray(lots) && lots.length > 0 },
-    { label: 'Rdt optimisé', ok: rdt.optimise != null && rdt.optimise > 0 },
     { label: 'Propriétaire', ok: hasMandant },
-    { label: 'Photos', ok: photos.length > 0 },
-    { label: 'DPE', ok: parseFloat(mandat.dpeConsommation) > 0 },
+    ...piecesPourMarche(mandat.marche)
+      .filter(p => !p.optionnel && p.key !== 'fiche')
+      .map(p => ({ label: p.label, ok: p.key in deduit ? deduit[p.key] : coche.has(p.key) })),
+    ...(estB2B ? [{ label: 'Rdt optimisé', ok: rdt.optimise != null && rdt.optimise > 0 }] : []),
     { label: 'Cadastre', ok: hasCadastre, auto: true },
   ];
   const done = items.filter(i => i.ok).length;
