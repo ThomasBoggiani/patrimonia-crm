@@ -399,6 +399,82 @@ function AddRoleModal({ contactId, contactName, mandats, onClose, onSuccess }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// ClientTasksSection — Tâches du contact + tâches des mandats dont il est mandant.
+// Les relances « pièce manquante » d'un mandat doivent aussi être visibles ici.
+function ClientTasksSection({ clientId, mandatIds = [], onOpenMandat }) {
+  const [todos, setTodos] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  async function load() {
+    if (!clientId) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      const filtres = [`and(lien_type.eq.client,lien_id.eq.${clientId})`];
+      if (mandatIds.length) filtres.push(`and(lien_type.eq.mandat,lien_id.in.(${mandatIds.join(',')}))`);
+      const { data } = await supabase
+        .from('todos')
+        .select('*')
+        .or(filtres.join(','))
+        .neq('statut', 'Terminé')
+        .order('echeance', { ascending: true });
+      setTodos(data || []);
+    } catch (e) {
+      console.warn('[ClientTasksSection]', e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [clientId, mandatIds.join(',')]);
+
+  async function terminer(id) {
+    await supabase.from('todos').update({ statut: 'Terminé' }).eq('id', id);
+    setTodos(prev => prev.filter(t => t.id !== id));
+  }
+
+  if (loading) return null;
+  if (!todos.length) return null;
+
+  const aujourdhui = new Date().toISOString().split('T')[0];
+
+  return (
+    <div className="bg-white rounded-xl border border-stone-200 p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-display text-base font-semibold text-stone-900">
+          Tâches en cours <span className="text-stone-400 font-normal">({todos.length})</span>
+        </h3>
+      </div>
+      <div className="space-y-2">
+        {todos.map(t => {
+          const enRetard = t.echeance && t.echeance < aujourdhui;
+          const surMandat = t.lien_type === 'mandat';
+          return (
+            <div key={t.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border ${enRetard ? 'border-red-200 bg-red-50/50' : 'border-stone-200 bg-white'}`}>
+              <button
+                onClick={() => terminer(t.id)}
+                title="Marquer comme terminée"
+                className="w-5 h-5 rounded-full border-2 border-stone-300 hover:border-emerald-500 hover:bg-emerald-50 flex-shrink-0"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-stone-800 truncate">{t.titre}</div>
+                <div className="text-[11px] text-stone-500 flex items-center gap-2">
+                  {t.echeance && <span className={enRetard ? 'text-red-600 font-medium' : ''}>Échéance {t.echeance}</span>}
+                  {surMandat && <span className="px-1.5 py-0.5 rounded bg-sage-50 text-sage-darker">via le mandat</span>}
+                </div>
+              </div>
+              {surMandat && onOpenMandat && (
+                <button onClick={() => onOpenMandat(t.lien_id)} className="text-xs text-sage-darker hover:underline flex-shrink-0">
+                  Voir
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // InteractionsHistorySection — Historique des échanges avec onglets
 // ─────────────────────────────────────────────────────────────────
 
@@ -855,6 +931,13 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
           </div>
         </div>
       )}
+
+      {/* TÂCHES — celles du contact + celles des mandats qu'il porte */}
+      <ClientTasksSection
+        clientId={client.id}
+        mandatIds={mandatsAsMandant.map(mc => mc.mandat?.id).filter(Boolean)}
+        onOpenMandat={onOpenMandat}
+      />
 
       {/* INTERACTIONS — Historique des échanges avec onglets */}
       <InteractionsHistorySection interactions={clientInteractions} />
