@@ -57,9 +57,25 @@ async function geocode(adresse) {
     lon: f.geometry.coordinates[0],
     lat: f.geometry.coordinates[1],
     citycode: f.properties.citycode,
+    numero: parseInt(f.properties.housenumber) || 0,
+    voie: normVoie(f.properties.street || f.properties.name || ''),
     departement: f.properties.context?.split(',')[0]?.trim() || f.properties.citycode?.slice(0, 2),
     label: f.properties.label,
   };
+}
+
+// Normalise un nom de voie pour comparaison. DVF abrège (BD DU PORT) alors que
+// la BAN renvoie « Boulevard du Port » : on retire l'accent, on met en majuscules,
+// et on SUPPRIME le mot-type de voie en tête (BD/BOULEVARD, AV/AVENUE, RUE…) pour
+// ne comparer que le nom propre (« DU PORT »).
+const TYPES_VOIE = new Set(['RUE', 'R', 'BD', 'BLD', 'BOULEVARD', 'AV', 'AVE', 'AVENUE', 'ALL', 'ALLEE', 'ALLEES', 'PL', 'PLACE', 'IMP', 'IMPASSE', 'CHE', 'CHEM', 'CHEMIN', 'RTE', 'ROUTE', 'QUAI', 'QU', 'COURS', 'CRS', 'PASSAGE', 'PASS', 'PAS', 'SQUARE', 'SQ', 'VILLA', 'CITE', 'SENTE', 'SENTIER', 'RES', 'RESIDENCE', 'LOT', 'LOTISSEMENT', 'PROMENADE', 'ESPLANADE', 'FG', 'FAUBOURG']);
+function normVoie(s) {
+  const base = String(s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const toks = base.split(' ');
+  if (toks.length > 1 && TYPES_VOIE.has(toks[0])) toks.shift();
+  return toks.join(' ');
 }
 
 // Télécharge + parse les ventes d'une commune pour une année. Agrège par mutation.
@@ -78,9 +94,10 @@ async function ventesCommuneAnnee(dep, citycode, annee, idx) {
   const iDate = col('date_mutation'), iNature = col('nature_mutation'), iVal = col('valeur_fonciere');
   const iNum = col('adresse_numero'), iVoie = col('adresse_nom_voie'), iType = col('type_local');
   const iSurf = col('surface_reelle_bati'), iPieces = col('nombre_pieces_principales');
+  const iLots = col('nombre_lots');
   const iLon = col('longitude'), iLat = col('latitude'), iId = col('id_mutation');
 
-  // Agrégation par mutation (une vente peut couvrir plusieurs lignes bâti)
+  // Agrégation par mutation (une vente peut couvrir plusieurs lignes bâti / lots)
   const mut = new Map();
   for (let k = 1; k < lines.length; k++) {
     const c = splitCsv(lines[k]);
@@ -97,9 +114,13 @@ async function ventesCommuneAnnee(dep, citycode, annee, idx) {
     if (prev) {
       prev.surface += surf;
       prev.types.add(type);
+      prev.nbLignes += 1;
+      prev.lots = Math.max(prev.lots, parseInt(c[iLots]) || 0);
     } else {
       mut.set(id, {
         id, date: c[iDate], valeur: val, surface: surf, types: new Set([type]),
+        nbLignes: 1, lots: parseInt(c[iLots]) || 0,
+        numero: parseInt(c[iNum]) || 0, voie: normVoie(c[iVoie]),
         adresse: `${c[iNum] || ''} ${c[iVoie] || ''}`.trim(),
         pieces: parseInt(c[iPieces]) || 0, lat, lon,
       });
@@ -108,15 +129,19 @@ async function ventesCommuneAnnee(dep, citycode, annee, idx) {
 
   const out = [];
   for (const m of mut.values()) {
-    // On ne garde que les mutations mono-type (comparables propres)
-    if (m.types.size !== 1) continue;
     const prixM2 = Math.round(m.valeur / m.surface);
     if (prixM2 < 300 || prixM2 > 60000) continue; // garde-fou anti-aberrations
+    const typesArr = [...m.types];
+    // Nb de lots = le plus fiable entre le champ nombre_lots et le nb de lignes bâti
+    const lots = Math.max(m.lots, m.nbLignes);
     out.push({
       id: `${annee}-${idx}-${out.length}`,
       date: m.date,
-      type: [...m.types][0],
+      type: typesArr.length > 1 ? 'Immeuble / mixte' : typesArr[0],
+      monoType: typesArr.length === 1,
+      lots,
       adresse: m.adresse,
+      numero: m.numero, voie: m.voie,
       surface: Math.round(m.surface),
       pieces: m.pieces,
       prix: Math.round(m.valeur),
@@ -134,27 +159,35 @@ export async function POST(request) {
     const user = await verifyToken(token);
     if (!user) return Response.json({ ok: false, error: 'Authentification requise' }, { status: 401 });
 
-    // Paramètres ajustables (avec valeurs par défaut)
-    const rayon = Math.min(Math.max(parseInt(body.rayon) || 500, 50), 3000);      // m
+    // Périmètre : 'immeuble' (même n° + voie), 'voisins' (rayon serré), ou rayon libre.
+    const perimetre = body.perimetre || 'auto';
     const annees = Math.min(Math.max(parseInt(body.annees) || 3, 1), 6);           // nb d'années
     const typeFiltre = body.type || 'auto';    // 'auto' | 'Appartement' | 'Maison' | 'tous'
     const surfaceMin = parseFloat(body.surfaceMin) || 0;
     const surfaceMax = parseFloat(body.surfaceMax) || 0;
 
     let adresse = body.adresse;
-    let mandatSurface = 0, mandatType = '';
+    let mandatSurface = 0, mandatType = '', estB2C = false;
     if (mandatId) {
       const { data: m } = await supabaseAdmin.from('mandats').select('adresse, ville, code_postal, surface, type, marche').eq('id', mandatId).single();
       if (m) {
         adresse = adresse || [m.adresse, m.code_postal, m.ville].filter(Boolean).join(' ');
         mandatSurface = parseFloat(m.surface) || 0;
-        mandatType = m.marche === 'b2c' ? (/[Mm]aison/.test(m.type || '') ? 'Maison' : 'Appartement') : '';
+        estB2C = m.marche === 'b2c';
+        mandatType = estB2C ? (/[Mm]aison/.test(m.type || '') ? 'Maison' : 'Appartement') : '';
       }
     }
     if (!adresse) return Response.json({ ok: false, error: 'Adresse manquante sur le mandat.' }, { status: 400 });
 
     const geo = await geocode(adresse);
     if (!geo) return Response.json({ ok: false, error: `Adresse introuvable : « ${adresse} »` }, { status: 404 });
+
+    // Rayon effectif selon le périmètre (BtoC = serré, BtoB = large par défaut)
+    const perimetreEff = perimetre === 'auto' ? (estB2C ? 'voisins' : '2000') : perimetre;
+    const onlyImmeuble = perimetreEff === 'immeuble';
+    const rayon = onlyImmeuble ? 30      // même immeuble = même parcelle (coords ~identiques)
+      : perimetreEff === 'voisins' ? 80
+      : Math.min(Math.max(parseInt(perimetreEff) || 500, 50), 5000);
 
     // Type retenu : 'auto' = déduit du mandat (sinon tous)
     const typeVoulu = typeFiltre === 'auto' ? mandatType : (typeFiltre === 'tous' ? '' : typeFiltre);
@@ -168,31 +201,30 @@ export async function POST(request) {
     const batches = await Promise.all(anneesList.map((y, i) => ventesCommuneAnnee(dep, geo.citycode, y, i)));
     let ventes = batches.flat();
 
+    // Tag « même immeuble » / « même rue ». Le signal fiable est la DISTANCE
+    // (coords DVF au niveau de la parcelle) ; le n°/voie normalisés confirment.
+    ventes = ventes.map(v => {
+      const distance = distanceM(geo.lat, geo.lon, v.lat, v.lon);
+      const memeRue = !!geo.voie && v.voie === geo.voie;
+      const memeImmeuble = distance <= 25 || (memeRue && geo.numero > 0 && v.numero === geo.numero);
+      return { ...v, distance, memeRue, memeImmeuble };
+    });
+
     // Filtres
     ventes = ventes
-      .map(v => ({ ...v, distance: distanceM(geo.lat, geo.lon, v.lat, v.lon) }))
-      .filter(v => v.distance <= rayon)
+      .filter(v => onlyImmeuble ? v.memeImmeuble : v.distance <= rayon)
       .filter(v => !typeVoulu || v.type === typeVoulu)
       .filter(v => !surfaceMin || v.surface >= surfaceMin)
       .filter(v => !surfaceMax || v.surface <= surfaceMax)
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, 60);
-
-    const prixM2s = ventes.map(v => v.prixM2);
-    const stats = prixM2s.length ? {
-      count: prixM2s.length,
-      prixM2Min: Math.min(...prixM2s),
-      prixM2Max: Math.max(...prixM2s),
-      prixM2Median: mediane(prixM2s),
-    } : { count: 0 };
+      .sort((a, b) => a.distance - b.distance || a.date.localeCompare(b.date))
+      .slice(0, 120);
 
     return Response.json({
       ok: true,
-      geo: { lat: geo.lat, lon: geo.lon, label: geo.label },
-      params: { rayon, annees, type: typeVoulu || 'tous', surfaceMin, surfaceMax, anneesInterrogees: anneesList },
-      mandat: { surface: mandatSurface, typeDeduit: mandatType },
+      geo: { lat: geo.lat, lon: geo.lon, label: geo.label, numero: geo.numero, voie: geo.voie },
+      params: { perimetre: perimetreEff, rayon, annees, type: typeVoulu || 'tous', surfaceMin, surfaceMax, anneesInterrogees: anneesList },
+      mandat: { surface: mandatSurface, typeDeduit: mandatType, estB2C },
       ventes,
-      stats,
     });
   } catch (e) {
     console.error('[avis-valeur/comparables]', e);
