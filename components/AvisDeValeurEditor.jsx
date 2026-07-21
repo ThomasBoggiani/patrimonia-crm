@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import DvfComparables from './DvfComparables';
+import MicButton from './MicButton';
 
 // Schéma vide par défaut
 const EMPTY_AVIS = {
@@ -860,11 +861,14 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
           >
             <div className="space-y-3">
               <div>
-                <label className={labelClass}>Recommandation stratégique</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className={labelClass} style={{ marginBottom: 0 }}>Recommandation stratégique</label>
+                  <MicButton onText={(t) => update('preconisation.recommandation', ((data.preconisation.recommandation || '').trim() + ' ' + t).trim())} />
+                </div>
                 <textarea value={data.preconisation.recommandation}
                   onChange={e => update('preconisation.recommandation', e.target.value)}
                   rows={4} className={fieldClass}
-                  placeholder="Notre recommandation : positionner le bien à... compte tenu de... avec un objectif de signature sous X mois..." />
+                  placeholder="Écris ou dicte : positionner le bien à... compte tenu de... avec un objectif de signature sous X mois..." />
               </div>
 
               <div className="grid grid-cols-3 gap-3">
@@ -928,11 +932,14 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                 })()}
 
                 <div>
-                  <label className={labelClass}>Facteurs de décote (texte)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className={labelClass} style={{ marginBottom: 0 }}>Facteurs de décote (texte)</label>
+                    <MicButton compact onText={(t) => update('preconisation.facteurs_decote', ((data.preconisation.facteurs_decote || '').trim() + ' ' + t).trim())} />
+                  </div>
                   <textarea value={data.preconisation.facteurs_decote || ''}
                     onChange={e => update('preconisation.facteurs_decote', e.target.value)}
                     rows={2} className={fieldClass}
-                    placeholder="Ex : 1er étage sombre · charges 400 €/mois · marché baissier depuis 12 mois · peu d'atouts" />
+                    placeholder="Écris ou dicte : 1er étage sombre · charges 400 €/mois · marché baissier · peu d'atouts" />
                 </div>
                 <div>
                   <label className={labelClass}>Positionnement conseillé</label>
