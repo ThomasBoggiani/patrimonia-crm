@@ -1948,6 +1948,17 @@ function piecesPourMarche(marche) {
   return marche === 'b2c' ? PIECES_B2C : [...PIECES_B2C, ...PIECES_B2B_EXTRA];
 }
 
+// Barème de commission par défaut (sur le prix NET VENDEUR). Dégressif :
+//   < 500 000 → 5% · 500 000–750 000 → 4% · 750 000–1 000 000 → 3% · > 1 000 000 → 2%
+// Reste modifiable à la main sur chaque mandat.
+function commissionTauxDefaut(net) {
+  const n = +net || 0;
+  if (n > 1000000) return 2;
+  if (n >= 750000) return 3;
+  if (n >= 500000) return 4;
+  return 5;
+}
+
 // Déduit l'ensemble des pièces déjà présentes pour un mandat : cases cochées
 // (pieces_presentes) + ce qui se déduit des données réelles (photos, plans, DPE,
 // lots, loyer…). Utilisé pour pré-remplir la check-list en mode édition.
@@ -2039,15 +2050,17 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   const [autoCreatedId, setAutoCreatedId] = useState(null);
   // Suggestion d'estimation IA (n'écrase pas le prix demandé ferme).
   const [estimation, setEstimation] = useState(null);
+  // L'agent a-t-il saisi un taux de commission à la main ? Si oui, on ne réapplique
+  // pas le barème automatique. Vrai par défaut en édition (on respecte l'existant).
+  const [tauxManuel, setTauxManuel] = useState(!!mandat);
 
   const update = (k, v) => setData({ ...data, [k]: v });
 
-  // Commission par défaut si l'agent n'a rien saisi.
-  const COMMISSION_DEFAUT = 5;
   // À partir du prix NET VENDEUR (ferme), recalcule commission € / prix FAI / prix
   // au m². Le net vendeur reste la source de vérité ; le FAI en découle.
+  // Le taux suit le barème dégressif, sauf si l'agent l'a fixé à la main.
   const recalcDepuisNet = (net, d) => {
-    const taux = (+d.honorairesTaux) > 0 ? +d.honorairesTaux : COMMISSION_DEFAUT;
+    const taux = (tauxManuel && +d.honorairesTaux > 0) ? +d.honorairesTaux : commissionTauxDefaut(net);
     const honoraires = Math.round((+net || 0) * taux / 100);
     const fai = (+net || 0) + honoraires;
     const surf = +d.surface || 0;
@@ -2882,16 +2895,17 @@ async function handleFolderImport(event, opts = {}) {
                   const rdt = computeRendements(data);
                   return (
                     <div className="text-[11px] text-stone-600 flex flex-wrap gap-x-3 gap-y-0.5 pt-0.5 border-t border-sage-light/60">
-                      <span>Commission {data.honorairesTaux || COMMISSION_DEFAUT}% : <b className="text-stone-800">{(+data.honorairesMontant || 0).toLocaleString('fr-FR')} €</b></span>
+                      <span>Commission {data.honorairesTaux || commissionTauxDefaut(data.prixNetVendeur)}% : <b className="text-stone-800">{(+data.honorairesMontant || 0).toLocaleString('fr-FR')} €</b></span>
                       <span>Prix FAI : <b className="text-stone-800">{(+data.prix || 0).toLocaleString('fr-FR')} €</b></span>
                       {+data.prixM2 > 0 && <span><b className="text-stone-800">{(+data.prixM2).toLocaleString('fr-FR')} €</b>/m²</span>}
                       {rdt.actuel != null && <span>Rendement présent : <b className="text-emerald-700">{rdt.actuel}%</b></span>}
+                      <span className="w-full text-[10px] text-stone-400">{tauxManuel ? 'Taux fixé à la main.' : 'Barème auto : 5% <500k · 4% <750k · 3% <1M · 2% >1M — modifiable dans « Honoraires ».'}</span>
                     </div>
                   );
                 })()}
               </div>
               <div className="grid grid-cols-3 gap-3">
-                <Field label="Prix frais d'agence inclus (&euro;)"><input type="number" value={data.prix} onChange={e => { const fai = +e.target.value; setData(d => { const taux = (+d.honorairesTaux) > 0 ? +d.honorairesTaux : COMMISSION_DEFAUT; const net = Math.round(fai / (1 + taux / 100)); return { ...d, prix: fai, prixNetVendeur: net, honorairesTaux: taux, honorairesMontant: fai - net, prixM2: (+d.surface) ? Math.round(fai / (+d.surface)) : d.prixM2 }; }); }} className={fieldClass('prix')} placeholder="Calculé auto depuis le net" /></Field>
+                <Field label="Prix frais d'agence inclus (&euro;)"><input type="number" value={data.prix} onChange={e => { const fai = +e.target.value; setData(d => { const taux = (+d.honorairesTaux) > 0 ? +d.honorairesTaux : commissionTauxDefaut(fai); const net = Math.round(fai / (1 + taux / 100)); return { ...d, prix: fai, prixNetVendeur: net, honorairesTaux: taux, honorairesMontant: fai - net, prixM2: (+d.surface) ? Math.round(fai / (+d.surface)) : d.prixM2 }; }); }} className={fieldClass('prix')} placeholder="Calculé auto depuis le net" /></Field>
                 <Field label="Prix/m&sup2; (&euro;)"><input type="number" value={data.prixM2} onChange={e => update('prixM2', +e.target.value)} className={fieldClass('prixM2')} /></Field>
                 <Field label="Loyers/an (&euro;)"><input type="number" value={data.loyersAnnuels} onChange={e => update('loyersAnnuels', +e.target.value)} className={fieldClass('loyersAnnuels')} /></Field>
               </div>
@@ -2917,7 +2931,7 @@ async function handleFolderImport(event, opts = {}) {
                 );
               })()}
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Honoraires (%)"><input type="number" step="0.01" value={data.honorairesTaux || 0} onChange={e => { const taux = +e.target.value; setData(d => { const net = +d.prixNetVendeur || 0; const honoraires = Math.round(net * taux / 100); const fai = net > 0 ? net + honoraires : (+d.prix || 0); return { ...d, honorairesTaux: taux, honorairesMontant: net > 0 ? honoraires : Math.round((+d.prix || 0) * taux / 100), prix: fai, prixM2: (+d.surface && net > 0) ? Math.round(fai / (+d.surface)) : d.prixM2 }; }); }} className={fieldClass('honorairesTaux')} /></Field>
+                <Field label="Honoraires (%)"><input type="number" step="0.01" value={data.honorairesTaux || 0} onChange={e => { const taux = +e.target.value; setTauxManuel(true); setData(d => { const net = +d.prixNetVendeur || 0; const honoraires = Math.round(net * taux / 100); const fai = net > 0 ? net + honoraires : (+d.prix || 0); return { ...d, honorairesTaux: taux, honorairesMontant: net > 0 ? honoraires : Math.round((+d.prix || 0) * taux / 100), prix: fai, prixM2: (+d.surface && net > 0) ? Math.round(fai / (+d.surface)) : d.prixM2 }; }); }} className={fieldClass('honorairesTaux')} /></Field>
                 <Field label="Honoraires (&euro;)"><input type="number" value={data.honorairesMontant || 0} onChange={e => update('honorairesMontant', +e.target.value)} className={fieldClass('honorairesMontant')} /></Field>
               </div>
               <div className="grid grid-cols-2 gap-3">
