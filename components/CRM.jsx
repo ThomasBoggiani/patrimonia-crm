@@ -2533,88 +2533,6 @@ async function handleFolderImport(event, opts = {}) {
           <button onClick={handleCancel} className="text-stone-500 hover:text-stone-900"><X className="w-5 h-5" /></button>
         </div>
 
-       {/* Documents : import + lien + Dropbox (composant unifié avec validation IA) — placé en bas via order-3 */}
-        <div className="order-3 p-6 border-t border-stone-200 bg-gradient-to-br from-sage-50/70 to-cream-50">
-          {mandat ? (
-            <DocumentsInline mandat={data} onUpdate={refreshFormFromMandat} />
-          ) : (
-            <div>
-              {/* Sprint 4 — C1 : check-list des pièces du dossier (création du mandat) */}
-              <input ref={pieceInputRef} type="file" multiple className="hidden" onChange={e => handleFolderImport(e, { pieceKey: pendingPieceRef.current?.key, forcedCategory: pendingPieceRef.current?.category })} />
-              <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderImport} />
-
-              <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-stone-800">Constituez le dossier — l'IA remplit les champs</p>
-                  <p className="text-xs text-stone-500">Déposez les documents dont vous disposez, un par un (tous conseillés). Quelques-uns suffisent — le reste se complète à la main.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => folderInputRef.current?.click()}
-                  disabled={!!importProgress}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-sage-light text-sage-darker rounded-lg text-xs hover:bg-sage-50 disabled:opacity-50 font-medium flex-shrink-0"
-                >
-                  {importProgress ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileUp className="w-3.5 h-3.5" />}
-                  Déposer plusieurs fichiers
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                {piecesPourMarche(data.marche).map(p => {
-                  const present = piecesPresent.has(p.key);
-                  return (
-                    <div key={p.key} className={`flex items-center gap-3 px-3 py-2 rounded-lg border ${present ? 'border-emerald-200 bg-emerald-50/50' : 'border-dashed border-stone-300 bg-white'}`}>
-                      <span className="text-lg flex-shrink-0">{p.emoji}</span>
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm font-medium text-stone-800">{p.label}</span>
-                        <span className="text-[10px] text-stone-400 ml-1">· {p.optionnel ? 'si applicable' : 'conseillé'}</span>
-                      </div>
-                      {present ? (
-                        <span className="inline-flex items-center gap-1 text-xs text-emerald-700 flex-shrink-0"><Check className="w-3.5 h-3.5" /> déposé</span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => { pendingPieceRef.current = p; pieceInputRef.current?.click(); }}
-                          disabled={!!importProgress}
-                          className="px-3 py-1 text-xs text-sage-darker border border-sage-light rounded-lg hover:bg-sage-50 disabled:opacity-50 flex-shrink-0"
-                        >
-                          Déposer
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {importProgress && (
-                <div className="mt-3 text-xs text-stone-600">
-                  {importProgress.current}/{importProgress.total} — {importProgress.fileName}
-                </div>
-              )}
-
-              <div className="mt-2 text-[11px] text-stone-500">
-                {piecesPresent.size > 0
-                  ? `${piecesPresent.size} document(s) déposé(s). Vérifiez les champs, puis Enregistrez.`
-                  : 'Déposez au moins un document (ou remplissez les champs à la main), puis Enregistrez.'}
-              </div>
-            </div>
-          )}
-
-          {importResult && (
-            <div className="mt-3 p-3 bg-white rounded-xl border border-sage-light">
-              <div className="flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 mt-0.5 text-emerald-600 flex-shrink-0" />
-                <div className="flex-1 text-sm">
-                  <div className="font-medium text-stone-900">Import terminé : {importResult.success}/{importResult.total} fichiers</div>
-                  <div className="text-stone-700 mt-0.5">{Object.entries(importResult.categoriesByLabel).map(([label, count]) => label + ' (' + count + ')').join(' · ')}</div>
-                  {importResult.totalFilled > 0 && (<div className="text-emerald-700 font-medium mt-1">✨ {importResult.totalFilled} champ(s) pré-remplis</div>)}
-                  {importResult.errors > 0 && (<div className="text-red-600 mt-0.5">{importResult.errors} fichier(s) en erreur</div>)}
-                </div>
-                <button onClick={() => setImportResult(null)} className="text-stone-400 hover:text-stone-700"><X className="w-4 h-4" /></button>
-              </div>
-            </div>
-          )}
-        </div>
 
         <div className="order-2 p-6">
           {filledFields.size > 0 && (
@@ -2624,9 +2542,9 @@ async function handleFolderImport(event, opts = {}) {
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
-            {/* ══ COLONNE GAUCHE : on raconte d'abord le bien (dictée/pitch), puis le mandant ══ */}
-            <div className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 items-start">
+            {/* ══ COLONNE GAUCHE : on raconte le bien (dictée/pitch), le mandant, puis les pièces ══ */}
+            <div className="space-y-4 lg:col-span-2">
               <div className={sectionClass}>
                 <h3 className={sectionTitleClass}>🗣️ De quoi parlons-nous&nbsp;?</h3>
                 <p className="text-xs text-stone-500 mb-3">Dicte ou écris tout ce que tu sais : le bien, le contexte, s'il s'agit d'une vente ou d'une estimation, l'échéance, les points forts. L'IA rédige le pitch ; les champs à droite se complètent au fur et à mesure.</p>
@@ -2648,10 +2566,69 @@ async function handleFolderImport(event, opts = {}) {
                   />
                 )}
               </div>
+
+              {/* PIÈCES À AJOUTER — colonne gauche, sous le propriétaire */}
+              <div className={sectionClass}>
+                <h3 className={sectionTitleClass}>📁 Pièces à ajouter</h3>
+                {mandat ? (
+                  <DocumentsInline mandat={data} onUpdate={refreshFormFromMandat} />
+                ) : (
+                  <div>
+                    <input ref={pieceInputRef} type="file" multiple className="hidden" onChange={e => handleFolderImport(e, { pieceKey: pendingPieceRef.current?.key, forcedCategory: pendingPieceRef.current?.category })} />
+                    <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderImport} />
+                    <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+                      <p className="text-xs text-stone-500 min-w-0">Dépose les documents dont tu disposes (tous conseillés). L'IA remplit les champs à droite.</p>
+                      <button type="button" onClick={() => folderInputRef.current?.click()} disabled={!!importProgress} className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-sage-light text-sage-darker rounded-lg text-xs hover:bg-sage-50 disabled:opacity-50 font-medium flex-shrink-0">
+                        {importProgress ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileUp className="w-3.5 h-3.5" />}
+                        Déposer plusieurs
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      {piecesPourMarche(data.marche).map(p => {
+                        const present = piecesPresent.has(p.key);
+                        return (
+                          <div key={p.key} className={`flex items-center gap-3 px-3 py-2 rounded-lg border ${present ? 'border-emerald-200 bg-emerald-50/50' : 'border-dashed border-stone-300 bg-white'}`}>
+                            <span className="text-lg flex-shrink-0">{p.emoji}</span>
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm font-medium text-stone-800">{p.label}</span>
+                              <span className="text-[10px] text-stone-400 ml-1">· {p.optionnel ? 'si applicable' : 'conseillé'}</span>
+                            </div>
+                            {present ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-emerald-700 flex-shrink-0"><Check className="w-3.5 h-3.5" /> déposé</span>
+                            ) : (
+                              <button type="button" onClick={() => { pendingPieceRef.current = p; pieceInputRef.current?.click(); }} disabled={!!importProgress} className="px-3 py-1 text-xs text-sage-darker border border-sage-light rounded-lg hover:bg-sage-50 disabled:opacity-50 flex-shrink-0">Déposer</button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {importProgress && (
+                      <div className="mt-3 text-xs text-stone-600">{importProgress.current}/{importProgress.total} — {importProgress.fileName}</div>
+                    )}
+                    <div className="mt-2 text-[11px] text-stone-500">
+                      {piecesPresent.size > 0 ? `${piecesPresent.size} document(s) déposé(s).` : 'Dépose au moins un document, ou remplis les champs à la main.'}
+                    </div>
+                  </div>
+                )}
+                {importResult && (
+                  <div className="mt-3 p-3 bg-white rounded-xl border border-sage-light">
+                    <div className="flex items-start gap-2">
+                      <CheckCircle2 className="w-4 h-4 mt-0.5 text-emerald-600 flex-shrink-0" />
+                      <div className="flex-1 text-sm">
+                        <div className="font-medium text-stone-900">Import terminé : {importResult.success}/{importResult.total} fichiers</div>
+                        <div className="text-stone-700 mt-0.5">{Object.entries(importResult.categoriesByLabel).map(([label, count]) => label + ' (' + count + ')').join(' · ')}</div>
+                        {importResult.totalFilled > 0 && (<div className="text-emerald-700 font-medium mt-1">✨ {importResult.totalFilled} champ(s) pré-remplis</div>)}
+                        {importResult.errors > 0 && (<div className="text-red-600 mt-0.5">{importResult.errors} fichier(s) en erreur</div>)}
+                      </div>
+                      <button onClick={() => setImportResult(null)} className="text-stone-400 hover:text-stone-700"><X className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* ══ COLONNE DROITE : toutes les informations du bien à compléter ══ */}
-            <div className="space-y-4">
+            {/* ══ COLONNE DROITE : toutes les informations du bien à compléter (plus large) ══ */}
+            <div className="space-y-4 lg:col-span-3">
 
           {/* SECTION 1 : IDENTITÉ */}
           <div className={sectionClass}>
