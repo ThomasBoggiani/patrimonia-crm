@@ -8,7 +8,7 @@ import {
   LayoutGrid, List, QrCode, Clock, AlertCircle,
   ChevronRight, Home, Send, Upload, Download,
   Circle, CheckCircle2, Eye, EyeOff, Copy, Sparkles,
-  FileUp, Loader2, AlertTriangle, Info, Wand2, Mic,
+  FileUp, Loader2, AlertTriangle, Info, Wand2, Mic, Square,
   User as UserIcon, LogOut, Shield, Menu,
   Image as ImageIcon, Camera, Plug, FolderOpen, Trophy, TrendingUp, Inbox, Video,
   Bed, Trees, ParkingSquare, Store
@@ -1236,7 +1236,7 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
       {view === 'references' ? (
         <ReferencesView />
       ) : view === 'kanban' ? (
-        <MandatsKanban mandats={filtered} onSelectMandat={setSelectedMandat} reload={reload} secondaryDisplay={secondaryDisplay} />
+        <MandatsKanban mandats={filtered} onSelectMandat={setSelectedMandat} reload={reload} updateMandatLocal={updateMandatLocal} secondaryDisplay={secondaryDisplay} />
       ) : (
         <div className="bg-white rounded-xl shadow-luxe border border-stone-200 overflow-x-auto">
         <table className="w-full min-w-[1000px]">
@@ -1572,6 +1572,73 @@ function ClientSelector({ clients, mandats, value, onChange, onCreateNew }) {
   );
 }
 
+// Aide à la description : dicter au micro (Whisper) + rédiger le pitch (IA).
+function DescriptionAssist({ value, onChange, mandat }) {
+  const [recording, setRecording] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const mrRef = useRef(null);
+  const chunksRef = useRef([]);
+
+  async function startRec() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      chunksRef.current = [];
+      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = () => { stream.getTracks().forEach(t => t.stop()); transcrire(); };
+      mrRef.current = mr; mr.start(); setRecording(true);
+    } catch (e) { alert('Micro indisponible : ' + e.message); }
+  }
+  function stopRec() { if (mrRef.current && mrRef.current.state !== 'inactive') mrRef.current.stop(); setRecording(false); }
+
+  async function transcrire() {
+    setBusy(true);
+    try {
+      const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+      if (blob.size < 800) return;
+      const fd = new FormData(); fd.append('audio', blob, 'desc.webm');
+      const r = await fetch('/api/transcribe', { method: 'POST', body: fd });
+      const j = await r.json();
+      if (j.ok && j.text) onChange((value ? value.trim() + ' ' : '') + j.text.trim());
+      else alert("La transcription n'a rien renvoyé.");
+    } catch (e) { alert('Erreur transcription : ' + e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function generer() {
+    setBusy(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch('/api/mandats/generate-pitch', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: session?.access_token, mandat, notes: value || '' }),
+      });
+      const j = await r.json();
+      if (j.ok && j.description) onChange(j.description);
+      else alert(j.error || 'Génération échouée.');
+    } catch (e) { alert('Erreur : ' + e.message); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+      {recording ? (
+        <button type="button" onClick={stopRec} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-red-600 text-white hover:bg-red-700">
+          <Square className="w-3 h-3 fill-current" /> Arrêter
+        </button>
+      ) : (
+        <button type="button" onClick={startRec} disabled={busy} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-white border border-sage-light text-sage-darker hover:bg-sage-50 disabled:opacity-50">
+          <Mic className="w-3 h-3" /> Dicter
+        </button>
+      )}
+      <button type="button" onClick={generer} disabled={busy || recording} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-gradient-to-br from-sage-100 to-sage-200 text-sage-darker border border-sage-light hover:from-sage-200 hover:to-sage-300 disabled:opacity-50">
+        {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Rédiger le pitch (IA)
+      </button>
+      <span className="text-[11px] text-stone-400">Dicte, ou laisse l'IA rédiger à partir des infos et de tes notes.</span>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // MandatForm v2 — 4 sections empilées + ClientSelector
 // ═══════════════════════════════════════════════════════════════════
@@ -1580,7 +1647,7 @@ function ClientSelector({ clients, mandats, value, onChange, onCreateNew }) {
 // À ajouter dans components/CRM.jsx (avant la fonction MandatForm)
 // ═══════════════════════════════════════════════════════════════════
 
-function MandatsKanban({ mandats, onSelectMandat, reload, secondaryDisplay = 'm2' }) {
+function MandatsKanban({ mandats, onSelectMandat, reload, updateMandatLocal, secondaryDisplay = 'm2' }) {
   const [draggingId, setDraggingId] = useState(null);
   const [dragOverCol, setDragOverCol] = useState(null);
   const [updating, setUpdating] = useState(false);
@@ -1640,8 +1707,12 @@ function MandatsKanban({ mandats, onSelectMandat, reload, secondaryDisplay = 'm2
       const { error } = await supabase.from('mandats').update({ statut: newStatut }).eq('id', mandatId);
       if (error) {
         alert('Erreur changement statut : ' + error.message);
-      } else {
-        if (reload) reload();
+      } else if (updateMandatLocal) {
+        // Mise à jour locale : on reste sur le Kanban (un reload() global démonterait
+        // l'onglet via l'écran de chargement et repasserait en vue liste).
+        await updateMandatLocal(mandatId);
+      } else if (reload) {
+        reload();
       }
     } catch (e) {
       alert('Erreur : ' + e.message);
@@ -2709,7 +2780,8 @@ async function handleFolderImport(event, opts = {}) {
 
           {/* DESCRIPTION en bas */}
           <Field label="Description du bien">
-            <textarea value={data.description || ''} onChange={e => update('description', e.target.value)} rows={4} className={fieldClass('description')} placeholder="Descriptif marketing, points forts..." />
+            <DescriptionAssist value={data.description || ''} onChange={v => update('description', v)} mandat={data} />
+            <textarea value={data.description || ''} onChange={e => update('description', e.target.value)} rows={4} className={fieldClass('description')} placeholder="Descriptif marketing, points forts... (ou dicte / génère avec l'IA ci-dessus)" />
           </Field>
 
           {missingFields.length > 0 && (
