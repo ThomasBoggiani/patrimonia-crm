@@ -1926,11 +1926,11 @@ const PIECES_B2C = [
   { key: 'dpe',               label: 'DPE',                            category: 'diagnostics',  emoji: '⚡', phase: 1 },
   { key: 'nb_lots',           label: 'Nombre de lots',                 category: 'notes',        emoji: '🔢', phase: 1 },
   { key: 'loyer',             label: 'Loyer / bien loué ou libre',     category: 'notes',        emoji: '🔑', phase: 1 },
+  { key: 'taxe',              label: 'Taxe foncière',                  category: 'autre',        emoji: '🧾', phase: 1 },
+  { key: 'appels_charges',    label: 'Appels de charges (3 derniers)', category: 'autre',        emoji: '💶', phase: 1 },
+  { key: 'pv_ag',             label: "PV d'assemblée générale",        category: 'autre',        emoji: '📋', phase: 1 },
   { key: 'identite_vendeur',  label: "Pièce d'identité du vendeur",    category: 'mandant',      emoji: '🪪', phase: 2 },
   { key: 'titre',             label: 'Titre de propriété',             category: 'mandant',      emoji: '📜', phase: 2 },
-  { key: 'taxe',              label: 'Taxe foncière',                  category: 'autre',        emoji: '🧾', phase: 2 },
-  { key: 'appels_charges',    label: 'Appels de charges (3 derniers)', category: 'autre',        emoji: '💶', phase: 2 },
-  { key: 'pv_ag',             label: "PV d'assemblée générale",        category: 'autre',        emoji: '📋', phase: 2 },
   { key: 'reglement_copro',   label: 'Règlement de copropriété',       category: 'autre',        emoji: '📕', phase: 2 },
   { key: 'diagnostics',       label: 'Diagnostics (amiante, plomb…)',  category: 'diagnostics',  emoji: '🔬', phase: 2 },
   { key: 'factures_travaux',  label: 'Factures de travaux',            category: 'autre',        emoji: '🛠️', phase: 2, optionnel: true },
@@ -3693,14 +3693,12 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           <p className="text-stone-500 flex items-center gap-2 text-sm">
             <MapPin className="w-4 h-4" />{mandat.adresse}
           </p>
-          {/* Type de mandat + responsable commercial (remontés dans l'en-tête — Sprint 4 A3) */}
+          {/* Statut de commercialisation, sous le titre */}
           <div className="flex items-center gap-2 flex-wrap mt-2">
             <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-xs font-medium ${commColor}`}>
               <div className={`w-1.5 h-1.5 rounded-full ${isPublished ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400'}`} title={isPublished ? 'Publié' : 'Non publié'} />
               <span>{mandat.commercialisation}</span>
             </div>
-            <span className="text-[10px] uppercase tracking-wider text-stone-400 font-semibold">Resp.</span>
-            <OwnerSelector mandat={mandat} reload={reload} />
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -3711,6 +3709,8 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
             <Edit2 className="w-4 h-4" /> Modifier
           </button>
+          {/* Responsable : discret, tout à droite */}
+          <div className="scale-90 origin-right pl-1 border-l border-cream-dark ml-1"><OwnerSelector mandat={mandat} reload={reload} /></div>
         </div>
       </div>
 
