@@ -3849,11 +3849,8 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] uppercase tracking-wider text-sage-dark font-semibold pr-2 border-r border-cream-dark mr-1">📤 Générer</span>
           {/* Ordre = étapes du mandat : 1) Avis de valeur (prioritaire) 2) Plaquette 3) Rapport mandant */}
-          <a href={`/avis/${mandat.id}`} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded-full text-xs font-semibold bg-sage-dark text-white border border-sage-dark hover:bg-sage-darker transition-colors flex items-center gap-1.5" title="Avis de valeur (charte 66 Turenne) — page imprimable → PDF">
+          <button onClick={() => setShowAvisValeur(true)} className="px-3 py-1.5 rounded-full text-xs font-semibold bg-sage-dark text-white border border-sage-dark hover:bg-sage-darker transition-colors flex items-center gap-1.5" title="Avis de valeur — remplir puis générer le PDF">
             <span className="opacity-70">1 ·</span> 📊 Avis de valeur
-          </a>
-          <button onClick={() => setShowAvisValeur(true)} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Éditeur de l'avis (données)">
-            ✎ Données avis
           </button>
           <span className="text-[10px] text-stone-400 font-medium">2 ·</span>
           <PdfExportButtons mandatId={mandat.id} mandatNom={mandat.nom} isOffMarket={mandat.isOffMarket} plaquetteCachedAt={mandat.plaquetteCachedAt} />
