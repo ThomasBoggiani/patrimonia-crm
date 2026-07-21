@@ -20,7 +20,7 @@ export default function DvfComparables({ mandat, onApply }) {
 
   const [params, setParams] = useState({
     perimetre: estB2C ? 'voisins' : '2000',
-    annees: estB2C ? 3 : 5,
+    annees: 5,
     type: estB2C ? 'auto' : 'tous',
     surfaceMin: '', surfaceMax: '',
   });

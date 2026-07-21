@@ -10,7 +10,7 @@ import {
   X, Save, ChevronDown, ChevronRight, Plus, Trash2, Loader2,
   TrendingUp, Sparkles, AlertTriangle, Cloud,
   Building2, BarChart3, Target, Lightbulb, Tag, MessageCircle,
-  MapPin, Key, Repeat, Calculator, FileDown
+  MapPin, Key, Repeat, Calculator, FileDown, Image as ImageIcon
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import DvfComparables from './DvfComparables';
@@ -81,6 +81,9 @@ const EMPTY_AVIS = {
     consultant_email: '',
     consultant_tel: '',
     honoraires_pct: 5,
+    // Ajustement à la baisse justifié (discret) : facteurs de décote + note
+    facteurs_decote: '', // ex : 1er étage sombre · charges 400 €/mois · marché baissier
+    positionnement: '',  // ex : à positionner en fourchette basse
   },
   // Méta
   date_estimation: new Date().toISOString().split('T')[0],
@@ -180,18 +183,45 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
     }
   }
 
-  // 4 dépliées par défaut : SWOT, méthodes, reconversion, préconisation
-  // 4 repliées : localisation, locatif, caractéristiques, comparables
+  // Tout déplié par défaut (Thomas veut être sûr de tout remplir).
   const [openSections, setOpenSections] = useState({
-    localisation: false,
-    locatif: false,
-    caracteristiques: false,
-    comparables: false,
+    localisation: true,
+    locatif: true,
+    caracteristiques: true,
+    comparables: true,
     swot: true,
     methodes: true,
     reconversion: true,
     preconisation: true,
   });
+
+  const [validating, setValidating] = useState(-1);
+  async function validerBienLien(i) {
+    const arr = [...(data.comparables.biens_similaires || [])];
+    const bs = arr[i] || {};
+    if (!bs.lien) { alert('Colle d\'abord le lien de l\'annonce.'); return; }
+    setValidating(i);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/link-preview', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: session?.access_token || '', url: bs.lien }),
+      });
+      const j = await res.json();
+      if (!j.ok) { alert(j.error || 'Aperçu indisponible.'); setValidating(-1); return; }
+      while (arr.length < 3) arr.push({});
+      arr[i] = {
+        ...bs,
+        photo: j.image || bs.photo || '',
+        adresse: bs.adresse || j.title || '',
+        prix: bs.prix || j.prix || 0,
+        surface: bs.surface || j.surface || 0,
+      };
+      update('comparables.biens_similaires', arr);
+      if (!j.image && !j.prix && !j.surface) alert('Lien ouvert mais aucune info trouvée (site protégé). Remplis à la main.');
+    } catch (e) { alert('Erreur : ' + e.message); }
+    setValidating(-1);
+  }
 
   const toggle = (k) => setOpenSections(s => ({ ...s, [k]: !s[k] }));
   const update = (path, value) => {
@@ -580,11 +610,20 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                     update('comparables.biens_similaires', arr);
                   };
                   return (
-                    <div key={i} className="grid grid-cols-12 gap-1.5 mb-1.5">
-                      <input value={bs.adresse || ''} onChange={e => setBs('adresse', e.target.value)} placeholder={`Bien ${i + 1} — adresse / titre`} className="col-span-4 px-2 py-1.5 text-xs border border-stone-200 rounded" />
-                      <input value={bs.lien || ''} onChange={e => setBs('lien', e.target.value)} placeholder="Lien de l'annonce" className="col-span-4 px-2 py-1.5 text-xs border border-stone-200 rounded" />
-                      <input type="number" value={bs.surface || ''} onChange={e => setBs('surface', +e.target.value)} placeholder="m²" className="col-span-1 px-2 py-1.5 text-xs border border-stone-200 rounded" />
-                      <input type="number" value={bs.prix || ''} onChange={e => setBs('prix', +e.target.value)} placeholder="Prix €" className="col-span-3 px-2 py-1.5 text-xs border border-stone-200 rounded" />
+                    <div key={i} className="flex gap-2 mb-2 items-start">
+                      <div className="w-14 h-14 flex-shrink-0 rounded border border-stone-200 bg-stone-50 overflow-hidden flex items-center justify-center">
+                        {bs.photo ? <img src={bs.photo} alt="" className="w-full h-full object-cover" /> : <ImageIcon className="w-4 h-4 text-stone-300" />}
+                      </div>
+                      <div className="flex-1 grid grid-cols-12 gap-1.5">
+                        <input value={bs.adresse || ''} onChange={e => setBs('adresse', e.target.value)} placeholder={`Bien ${i + 1} — adresse / titre`} className="col-span-5 px-2 py-1.5 text-xs border border-stone-200 rounded" />
+                        <input type="number" value={bs.surface || ''} onChange={e => setBs('surface', +e.target.value)} placeholder="m²" className="col-span-2 px-2 py-1.5 text-xs border border-stone-200 rounded" />
+                        <input type="number" value={bs.prix || ''} onChange={e => setBs('prix', +e.target.value)} placeholder="Prix €" className="col-span-5 px-2 py-1.5 text-xs border border-stone-200 rounded" />
+                        <input value={bs.lien || ''} onChange={e => setBs('lien', e.target.value)} placeholder="Colle le lien de l'annonce…" className="col-span-9 px-2 py-1.5 text-xs border border-stone-200 rounded" />
+                        <button type="button" onClick={() => validerBienLien(i)} disabled={validating === i}
+                          className="col-span-3 px-2 py-1.5 text-xs rounded bg-sage-dark text-white hover:bg-sage-darker disabled:opacity-50 inline-flex items-center justify-center gap-1">
+                          {validating === i ? <Loader2 className="w-3 h-3 animate-spin" /> : '⤵'} Valider
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -817,6 +856,26 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                 />
               </div>
 
+              {/* Ajustement à la baisse justifié — pour positionner en fourchette basse */}
+              <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 space-y-2">
+                <div className="text-[11px] font-semibold text-amber-800 uppercase tracking-wide">Ajustement / décote (discret)</div>
+                <div>
+                  <label className={labelClass}>Facteurs de décote</label>
+                  <textarea value={data.preconisation.facteurs_decote || ''}
+                    onChange={e => update('preconisation.facteurs_decote', e.target.value)}
+                    rows={2} className={fieldClass}
+                    placeholder="Ex : 1er étage sombre · charges 400 €/mois · marché baissier depuis 12 mois · peu d'atouts" />
+                </div>
+                <div>
+                  <label className={labelClass}>Positionnement conseillé</label>
+                  <input type="text" value={data.preconisation.positionnement || ''}
+                    onChange={e => update('preconisation.positionnement', e.target.value)}
+                    className={fieldClass}
+                    placeholder="Ex : à positionner en fourchette basse, sous le prix de marché" />
+                </div>
+                <p className="text-[10px] text-stone-500 italic">Fixe librement les 3 prix ci-dessus (fourchette basse si besoin) ; cette note apparaît discrètement sous la préconisation.</p>
+              </div>
+
               <div>
                 <label className={labelClass}>Avis client (témoignage à inclure)</label>
                 <textarea value={data.preconisation.avis_client}
@@ -886,12 +945,19 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               {saving ? 'Sauvegarde...' : 'Enregistrer'}
             </button>
-            <button onClick={handleGenerate} disabled={saving || generating}
+            <button onClick={async () => {
+              setGenerating(true);
+              try {
+                await supabase.from('mandats').update({ avis_valeur: data }).eq('id', mandat.id);
+                window.open(`/avis/${mandat.id}`, '_blank', 'noopener');
+              } catch (e) { alert('Erreur : ' + e.message); }
+              setGenerating(false);
+            }} disabled={saving || generating}
               className="flex items-center gap-2 px-4 py-2 bg-sage-dark text-white rounded-lg text-sm hover:bg-sage-darker disabled:opacity-50"
-              title="Sauvegarde + generation du PDF"
+              title="Enregistre puis ouvre l'avis (charte) — Imprimer → PDF"
             >
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
-              {generating ? 'Generation...' : 'Generer PDF'}
+              {generating ? 'Ouverture…' : 'Aperçu / PDF'}
             </button>
           </div>
         </div>
