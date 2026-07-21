@@ -3848,12 +3848,14 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
       <div className="sticky top-[42px] z-20 bg-cream-50/95 backdrop-blur-sm border-b border-cream-dark -mx-8 px-8 py-2.5 mb-4">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] uppercase tracking-wider text-sage-dark font-semibold pr-2 border-r border-cream-dark mr-1">📤 Générer</span>
-          <PdfExportButtons mandatId={mandat.id} mandatNom={mandat.nom} isOffMarket={mandat.isOffMarket} plaquetteCachedAt={mandat.plaquetteCachedAt} />
-          <button onClick={() => setShowAvisValeur(true)} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Avis de valeur PPTX">
-            📊 Avis de valeur
+          {/* Ordre = étapes du mandat : 1) Avis de valeur (prioritaire) 2) Plaquette 3) Rapport mandant */}
+          <button onClick={() => setShowAvisValeur(true)} className="px-3 py-1.5 rounded-full text-xs font-semibold bg-sage-dark text-white border border-sage-dark hover:bg-sage-darker transition-colors flex items-center gap-1.5" title="Avis de valeur — 1re étape">
+            <span className="opacity-70">1 ·</span> 📊 Avis de valeur
           </button>
-          <button onClick={() => setShowRapportMandant(true)} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Rapport d'activité mandant">
-            📈 Rapport mandant
+          <span className="text-[10px] text-stone-400 font-medium">2 ·</span>
+          <PdfExportButtons mandatId={mandat.id} mandatNom={mandat.nom} isOffMarket={mandat.isOffMarket} plaquetteCachedAt={mandat.plaquetteCachedAt} />
+          <button onClick={() => setShowRapportMandant(true)} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Rapport d'activité — 3e étape">
+            <span className="opacity-50">3 ·</span> 📈 Rapport mandant
           </button>
           <button onClick={() => onOpenEmailDrafts?.(mandat.id)} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Préparer mails personnalisés aux acquéreurs">
             📧 Préparer mails clients
