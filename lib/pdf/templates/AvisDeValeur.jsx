@@ -92,11 +92,12 @@ function Header({ eyebrow, title }) {
   );
 }
 
-function Content({ adresse, date, eyebrow, title, children }) {
+function Content({ adresse, date, eyebrow, title, children, center = true }) {
   return (
-    <Page size={[960, 540]} style={{ paddingTop: 38, paddingHorizontal: 44, paddingBottom: 44, backgroundColor: WHITE, color: INK, fontFamily: 'Helvetica' }}>
+    <Page size={[960, 540]} style={{ paddingTop: 40, paddingHorizontal: 46, paddingBottom: 46, backgroundColor: WHITE, color: INK, fontFamily: 'Helvetica' }}>
       <Header eyebrow={eyebrow} title={title} />
-      <View style={{ flex: 1 }}>{children}</View>
+      {/* Remplit la hauteur : le contenu se répartit dans l'espace restant */}
+      <View style={{ flex: 1, justifyContent: center ? 'center' : 'flex-start' }}>{children}</View>
       <Footer adresse={adresse} date={date} />
     </Page>
   );
@@ -174,6 +175,8 @@ export default function AvisDeValeur({ mandat, avisData = {}, conseiller }) {
   const haut = num(preco.prix_coup_de_coeur) || num(m2.valeur_haute?.valeur_totale);
   const central = num(preco.prix_marche) || num(m2.valeur_centrale?.valeur_totale);
   const fourchette = (bas && haut) ? `${fmtEUR(bas)} — ${fmtEUR(haut)}` : '';
+  // Prix de repli depuis le mandat (si l'avis n'a pas encore de préconisation)
+  const mandatNet = num(mandat?.prix_net_vendeur) || num(mandat?.prix);
 
   const consultantNom = safe(preco.consultant_nom) || safe(conseiller?.nom) || 'Immeubles & Patrimoine';
 
@@ -213,9 +216,15 @@ export default function AvisDeValeur({ mandat, avisData = {}, conseiller }) {
               <StatRow figure={num(mandat?.nb_lots) ? `${fmtNum(mandat?.nb_lots)} lots` : '—'} text={num(mandat?.loyers_annuels) ? `${fmtEUR(mandat?.loyers_annuels)} de revenus/an` : 'Immeuble de rapport'} />
             )}
             {fourchette ? (
-              <View style={{ backgroundColor: GREEN, borderRadius: 6, paddingVertical: 12, paddingHorizontal: 16, marginTop: 6 }}>
+              <View style={{ backgroundColor: GREEN, borderRadius: 6, paddingVertical: 14, paddingHorizontal: 18, marginTop: 6 }}>
                 <Text style={{ fontSize: 11, color: WHITE }}>
-                  Fourchette de valorisation proposée : <Text style={{ fontFamily: 'Times-Bold', fontSize: 13 }}>{fourchette}</Text>
+                  Fourchette de valorisation proposée : <Text style={{ fontFamily: 'Times-Bold', fontSize: 14 }}>{fourchette}</Text>
+                </Text>
+              </View>
+            ) : mandatNet ? (
+              <View style={{ backgroundColor: GREEN, borderRadius: 6, paddingVertical: 14, paddingHorizontal: 18, marginTop: 6 }}>
+                <Text style={{ fontSize: 11, color: WHITE }}>
+                  Prix demandé (net vendeur) : <Text style={{ fontFamily: 'Times-Bold', fontSize: 14 }}>{fmtEUR(mandatNet)}</Text>
                 </Text>
               </View>
             ) : null}
@@ -261,18 +270,18 @@ export default function AvisDeValeur({ mandat, avisData = {}, conseiller }) {
         </View>
       </Content>
 
-      {/* ─── AGENCE : NOTRE STRATÉGIE ─── */}
+      {/* ─── AGENCE : NOTRE STRATÉGIE (4 grandes cartes) ─── */}
       <Content adresse={adresse} date={date} eyebrow="Méthode" title="Notre stratégie de valorisation">
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
           {AGENCE.strategie.map((s, i) => (
-            <View key={i} style={{ width: '48.5%', flexDirection: 'row', marginBottom: 16 }}>
-              <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: GOLD, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                <Text style={{ fontSize: 12, fontFamily: 'Times-Bold', color: WHITE }}>{i + 1}</Text>
+            <View key={i} style={{ width: '48.5%', backgroundColor: CARD, borderRadius: 8, padding: 20, marginBottom: 16, minHeight: 130 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: GOLD, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                  <Text style={{ fontSize: 14, fontFamily: 'Times-Bold', color: WHITE }}>{i + 1}</Text>
+                </View>
+                <Text style={{ fontSize: 14, fontFamily: 'Times-Bold', color: GREEN }}>{s.t}</Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 12, fontFamily: 'Helvetica-Bold', color: GREEN, marginBottom: 3 }}>{s.t}</Text>
-                <Text style={{ fontSize: 10, color: INK, lineHeight: 1.45 }}>{s.d}</Text>
-              </View>
+              <Text style={{ fontSize: 10.5, color: INK, lineHeight: 1.5 }}>{s.d}</Text>
             </View>
           ))}
         </View>
@@ -280,13 +289,18 @@ export default function AvisDeValeur({ mandat, avisData = {}, conseiller }) {
 
       {/* ─── AGENCE : COMMUNICATION & DIFFUSION ─── */}
       <Content adresse={adresse} date={date} eyebrow="Commercialisation" title="Une diffusion ciblée & maîtrisée">
-        <View style={{ flexDirection: 'row', gap: 22 }}>
-          <View style={{ flex: 1 }}>
-            {AGENCE.diffusion.map((d, i) => <Bullet key={i}>{d}</Bullet>)}
+        <View style={{ flexDirection: 'row', gap: 24, alignItems: 'stretch' }}>
+          <View style={{ flex: 1, justifyContent: 'space-between', paddingVertical: 4 }}>
+            {AGENCE.diffusion.map((d, i) => (
+              <View key={i} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: CARD, borderRadius: 6, paddingVertical: 12, paddingHorizontal: 16, marginBottom: 8 }}>
+                <Text style={{ fontSize: 12, color: GOLD, marginRight: 10 }}>•</Text>
+                <Text style={{ flex: 1, fontSize: 11.5, color: INK }}>{d}</Text>
+              </View>
+            ))}
           </View>
-          <View style={{ width: '40%', backgroundColor: GREEN, borderRadius: 8, padding: 20, justifyContent: 'center' }}>
-            <Text style={{ fontSize: 10, letterSpacing: 2, color: GOLD, fontFamily: 'Helvetica-Bold', marginBottom: 10 }}>OFF-MARKET</Text>
-            <Text style={{ fontSize: 12, color: WHITE, lineHeight: 1.5 }}>
+          <View style={{ width: '38%', backgroundColor: GREEN, borderRadius: 10, padding: 24, justifyContent: 'center' }}>
+            <Text style={{ fontSize: 11, letterSpacing: 3, color: GOLD, fontFamily: 'Helvetica-Bold', marginBottom: 14 }}>OFF-MARKET</Text>
+            <Text style={{ fontSize: 14, color: WHITE, lineHeight: 1.6 }}>
               Pour les biens d'exception, une approche confidentielle auprès d'un cercle restreint d'acquéreurs qualifiés, sans exposition publique.
             </Text>
           </View>
@@ -339,7 +353,8 @@ export default function AvisDeValeur({ mandat, avisData = {}, conseiller }) {
         </Content>
       ) : null}
 
-      {/* ─── 5. ANALYSE DE MARCHÉ (comparables) ─── */}
+      {/* ─── 5. ANALYSE DE MARCHÉ (comparables) — seulement si données ─── */}
+      {(num(comp.prix_zone_min) || num(comp.prix_zone_max) || comp.transactions_recentes || comp.commentaire) ? (
       <Content adresse={adresse} date={date} eyebrow="Analyse de marché" title={estB2C ? 'Le prix au m² du secteur' : 'Le marché du secteur'}>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
           <StatCard figure={comp.prix_zone_min || comp.prix_zone_max ? `${fmtNum(comp.prix_zone_min)} – ${fmtNum(comp.prix_zone_max)} €/m²` : '—'} text="Fourchette de prix au m² observée sur le secteur (ventes réelles DVF)." />
@@ -357,6 +372,7 @@ export default function AvisDeValeur({ mandat, avisData = {}, conseiller }) {
           </View>
         ) : null}
       </Content>
+      ) : null}
 
       {/* ─── 6. VALORISATION — 3 PRIX ─── */}
       {(bas || central || haut) ? (
