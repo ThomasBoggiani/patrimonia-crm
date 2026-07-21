@@ -32,6 +32,7 @@ import {
   TypeInteractionBadge,
 } from '@/components/crm/SharedComponents';
 import AIAssistantChat from './AIAssistantChat';
+import VoiceNote from './VoiceNote';
 import ClientMatches from './ClientMatches';
 import ContactsImportModal from './ContactsImportModal';
 import CascadeSelectMulti from './CascadeSelectMulti';
@@ -539,7 +540,7 @@ const INTERACTION_TYPE_GROUPS = {
   email:  { label: 'Emails',  types: ['email_entrant', 'email_sortant', 'Email'] },
   call:   { label: 'Appels',  types: ['Appel', 'appel', 'call'] },
   rdv:    { label: 'RDV',     types: ['RDV', 'rdv', 'Visite', 'visite', 'Rendez-vous'] },
-  note:   { label: 'Notes',   types: ['Note', 'note'] }
+  note:   { label: 'Notes',   types: ['Note', 'note', 'note_vocale'] }
 };
 
 function InteractionsHistorySection({ interactions }) {
@@ -819,6 +820,7 @@ export function ClientDetail({ client, onBack, onEdit, mandats, deals, interacti
           >
             <Plus className="w-4 h-4" /> Ajouter un rôle
           </button>
+          <VoiceNote entityType="client" entity={client} onSaved={reload} />
           <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 bg-ink-deep text-white rounded-lg text-sm hover:bg-ink">
             <Edit2 className="w-4 h-4" /> Modifier
           </button>

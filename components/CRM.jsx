@@ -22,6 +22,7 @@ import { matchMandatsForClient } from '@/lib/matching';
 import { computeRendements, computeRendementsAuto, totalLoyerMensuel, totalLoyerMensuelOptimise, totalSurface, comptageStatuts } from '@/lib/rendements';
 import { getPriceTTC, getPriceNV, isNVEstimated, getCommission, isCommissionEstimated } from '@/lib/priceDisplay';
 import AIAssistantChat from './AIAssistantChat';
+import VoiceNote from './VoiceNote';
 import MarkAsSoldModal from './MarkAsSoldModal';
 import CascadeSelectMulti from './CascadeSelectMulti';
 import AgendaTab from './AgendaTab';
@@ -3426,6 +3427,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          <VoiceNote entityType="mandat" entity={mandat} onSaved={reload} />
           <button onClick={() => setAiAnalyzeOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-gradient-to-br from-sage-100 to-sage-200 text-sage-darker rounded-lg text-sm hover:from-sage-200 hover:to-sage-300 font-medium border border-sage-light" title="Analyser tous les documents du mandat avec l'IA">
             <Sparkles className="w-4 h-4" /> Analyser IA
           </button>
