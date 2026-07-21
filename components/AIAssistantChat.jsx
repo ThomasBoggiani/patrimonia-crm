@@ -830,8 +830,30 @@ export default function AIAssistantChat({
   }
 
   // Envoie soit un message texte, soit une quick action
-  const sendToAssistant = async ({ text, action }) => {
+  // Injection externe (ex. note vocale depuis une fiche) : ouvre l'assistant,
+  // fixe le contexte et envoie le message. Ref pour éviter toute fermeture périmée.
+  const ingestRef = useRef(null);
+  ingestRef.current = (detail = {}) => {
+    setOpen(true);
+    if (detail.context) setContextOverride(detail.context);
+    if (detail.text) {
+      sendToAssistant({
+        text: detail.text,
+        scopeOverride: detail.context?.type,
+        entityIdOverride: detail.context?.data?.id ?? null,
+      });
+    }
+  };
+  useEffect(() => {
+    const handler = (e) => ingestRef.current?.(e.detail || {});
+    window.addEventListener('assistant:ingest', handler);
+    return () => window.removeEventListener('assistant:ingest', handler);
+  }, []);
+
+  const sendToAssistant = async ({ text, action, scopeOverride, entityIdOverride }) => {
     if (loading) return;
+    const effScope = scopeOverride || scope;
+    const effEntityId = entityIdOverride !== undefined ? entityIdOverride : entityId;
 
     // Message user affiché
     const userLabel = action
@@ -856,7 +878,7 @@ export default function AIAssistantChat({
 
     try {
       const token = await getToken();
-      const payload = { token, scope, entity_id: entityId };
+      const payload = { token, scope: effScope, entity_id: effEntityId };
       if (action) payload.action = action;
       else payload.message = text;
       if (currentAttachments.length > 0) {
