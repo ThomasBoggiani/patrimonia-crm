@@ -37,6 +37,37 @@ const fmtEUR = (n) => { const x = num(n); return x ? fmtNum(x) + ' €' : '—';
 const fmtM2 = (prix, surf) => { const p = num(prix), s = num(surf); return (p && s) ? fmtNum(Math.round(p / s)) + ' €/m²' : ''; };
 const lines = (t) => safe(t).split('\n').filter(x => x.trim());
 
+// ─── CONTENU AGENCE (statique — identique sur chaque avis) ──────────
+// Repris de la plaquette I&P. Facile à ajuster ici.
+const AGENCE = {
+  intro: "Expert immobilier indépendant spécialisé dans la vente d'actifs depuis 2010 en Île-de-France. Reconnue pour son expertise et son approche stratégique de valorisation, notre agence maximise la valeur de chaque bien et intervient à chaque étape : analyse de faisabilité, conception, pilotage des travaux, structuration juridique et financière, jusqu'à la commercialisation.",
+  expertises: [
+    { t: 'Promotion immobilière', d: "Opérations fondées sur la qualité du sourcing et l'étude approfondie de la faisabilité architecturale. Recherche de terrains et d'immeubles, structuration des opérations." },
+    { t: 'Immeubles & hôtels', d: "Commercialisation en bloc ou par lot d'immeubles résidentiels, de bureaux ou d'hôtels, auprès d'un réseau d'investisseurs qualifiés." },
+    { t: 'Habitation & patrimoine', d: "Vente de biens d'exception et accompagnement patrimonial sur-mesure, avec une lecture fine du marché et des acquéreurs." },
+  ],
+  valeurs: ['Discrétion', 'Exigence', 'Transparence', 'Performance'],
+  strategie: [
+    { t: 'Étude de faisabilité', d: "Analyse approfondie de l'actif : caractéristiques techniques, juridiques, urbaines et économiques." },
+    { t: 'Évaluation', d: "Scénarios de valorisation comparés, lecture fine du marché, identification des leviers d'optimisation." },
+    { t: 'Mise en valeur', d: "Préparation du bien et du dossier de vente : récit, photos, plans, sécurisation juridique." },
+    { t: 'Communication', d: "Diffusion ciblée auprès d'un réseau d'acquéreurs qualifiés, en off-market ou en marché ouvert." },
+  ],
+  diffusion: [
+    'Site internet & meilleurs portails immobiliers',
+    'Mailing direct sur notre base de données qualifiée',
+    'Brochure personnalisée & présentation dédiée',
+    'Publicités digitales ciblées',
+    'Réseau de marchands de biens & foncières',
+    'CGP, fonds d\'investissement, family offices, familles fortunées',
+  ],
+};
+// Équipe — à ajuster (constante). Bios volontairement courtes.
+const EQUIPE = [
+  { nom: 'Thomas Boggiani', role: 'Dirigeant', bio: "Fondateur d'Immeubles & Patrimoine. Pilote la stratégie de valorisation et l'accompagnement des mandants sur l'ensemble du projet de vente." },
+  { nom: 'Philippe Korchia', role: 'Directeur commercial — Vente en bloc', bio: "Plus de vingt ans en immobilier d'entreprise (capital markets). Commercialise immeubles, hôtels et locaux auprès d'un portefeuille d'investisseurs fidèles." },
+];
+
 // ─── PRIMITIVES ────────────────────────────────────────────────────
 function Footer({ adresse, date }) {
   return (
@@ -190,6 +221,86 @@ export default function AvisDeValeur({ mandat, avisData = {}, conseiller }) {
           <View style={{ width: '38%' }}>
             <Photo src={photos[1] || photos[0]} style={{ width: '100%', height: 330, borderRadius: 6 }} />
           </View>
+        </View>
+      </Content>
+
+      {/* ─── AGENCE : AVANT-PROPOS ─── */}
+      <Content adresse={adresse} date={date} eyebrow="Avant-propos" title="Un mot avant tout">
+        <View style={{ flexDirection: 'row', gap: 22 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 11, color: INK, lineHeight: 1.7 }}>
+              Cher mandant,{'\n\n'}
+              Nous vous remercions de la confiance que vous nous accordez pour la valorisation de votre bien
+              {adresse ? ` situé ${adresse}` : ''}.{'\n\n'}
+              Le présent avis de valeur a pour objectif de vous éclairer sur la valeur de marché de cet actif, à l'appui de nos analyses, de comparables récents et de méthodes d'évaluation reconnues.{'\n\n'}
+              Nous restons à votre entière disposition pour échanger sur les éléments de ce document.
+            </Text>
+            <Text style={{ fontSize: 11, fontFamily: 'Times-Italic', color: GREEN, marginTop: 18 }}>L'équipe Immeubles &amp; Patrimoine</Text>
+          </View>
+          <Photo src={photos[1] || photos[0]} style={{ width: '40%', height: 320, borderRadius: 6 }} />
+        </View>
+      </Content>
+
+      {/* ─── AGENCE : QUI SOMMES-NOUS ─── */}
+      <Content adresse={adresse} date={date} eyebrow="L'agence" title="Qui sommes-nous">
+        <Text style={{ fontSize: 12, color: INK, lineHeight: 1.7, marginBottom: 20 }}>{AGENCE.intro}</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          {AGENCE.expertises.map((e, i) => (
+            <View key={i} style={{ width: '31.5%', backgroundColor: CARD, borderRadius: 8, padding: 16 }}>
+              <Text style={{ fontSize: 12.5, fontFamily: 'Times-Bold', color: GREEN, marginBottom: 8 }}>{e.t}</Text>
+              <Text style={{ fontSize: 9.5, color: INK, lineHeight: 1.45 }}>{e.d}</Text>
+            </View>
+          ))}
+        </View>
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 20 }}>
+          {AGENCE.valeurs.map((v, i) => (
+            <Text key={i} style={{ fontSize: 9, letterSpacing: 2, fontFamily: 'Helvetica-Bold', color: GOLD, backgroundColor: '#F6F1E8', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 4 }}>{v.toUpperCase()}</Text>
+          ))}
+        </View>
+      </Content>
+
+      {/* ─── AGENCE : NOTRE STRATÉGIE ─── */}
+      <Content adresse={adresse} date={date} eyebrow="Méthode" title="Notre stratégie de valorisation">
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+          {AGENCE.strategie.map((s, i) => (
+            <View key={i} style={{ width: '48.5%', flexDirection: 'row', marginBottom: 16 }}>
+              <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: GOLD, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                <Text style={{ fontSize: 12, fontFamily: 'Times-Bold', color: WHITE }}>{i + 1}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 12, fontFamily: 'Helvetica-Bold', color: GREEN, marginBottom: 3 }}>{s.t}</Text>
+                <Text style={{ fontSize: 10, color: INK, lineHeight: 1.45 }}>{s.d}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      </Content>
+
+      {/* ─── AGENCE : COMMUNICATION & DIFFUSION ─── */}
+      <Content adresse={adresse} date={date} eyebrow="Commercialisation" title="Une diffusion ciblée & maîtrisée">
+        <View style={{ flexDirection: 'row', gap: 22 }}>
+          <View style={{ flex: 1 }}>
+            {AGENCE.diffusion.map((d, i) => <Bullet key={i}>{d}</Bullet>)}
+          </View>
+          <View style={{ width: '40%', backgroundColor: GREEN, borderRadius: 8, padding: 20, justifyContent: 'center' }}>
+            <Text style={{ fontSize: 10, letterSpacing: 2, color: GOLD, fontFamily: 'Helvetica-Bold', marginBottom: 10 }}>OFF-MARKET</Text>
+            <Text style={{ fontSize: 12, color: WHITE, lineHeight: 1.5 }}>
+              Pour les biens d'exception, une approche confidentielle auprès d'un cercle restreint d'acquéreurs qualifiés, sans exposition publique.
+            </Text>
+          </View>
+        </View>
+      </Content>
+
+      {/* ─── AGENCE : NOTRE ÉQUIPE ─── */}
+      <Content adresse={adresse} date={date} eyebrow="L'agence" title="Vos interlocuteurs">
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
+          {EQUIPE.map((m, i) => (
+            <View key={i} style={{ width: '48.5%', backgroundColor: CARD, borderRadius: 8, padding: 20 }}>
+              <Text style={{ fontSize: 15, fontFamily: 'Times-Bold', color: GREEN }}>{m.nom}</Text>
+              <Text style={{ fontSize: 9, letterSpacing: 1.5, color: GOLD, fontFamily: 'Helvetica-Bold', marginTop: 3, marginBottom: 10 }}>{m.role.toUpperCase()}</Text>
+              <Text style={{ fontSize: 10, color: INK, lineHeight: 1.5 }}>{m.bio}</Text>
+            </View>
+          ))}
         </View>
       </Content>
 
