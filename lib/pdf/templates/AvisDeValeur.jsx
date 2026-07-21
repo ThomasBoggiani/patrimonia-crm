@@ -12,12 +12,12 @@ import React from 'react';
 import { Document, Page, View, Text, Image } from '@react-pdf/renderer';
 import { normalizePhotos } from '../helpers';
 
-// ─── PALETTE ───────────────────────────────────────────────────────
-const GREEN = '#3D4C3A';        // panneaux, barres, titres
-const GOLD = '#A6864E';         // filets / eyebrows / chiffres d'accent
+// ─── PALETTE (échantillonnée au pixel sur l'avis Turenne v2) ────────
+const GREEN = '#3D4D3D';        // panneaux, barres, titres
+const GOLD = '#B08D57';         // filets / eyebrows / chiffres d'accent
 const INK = '#2C2C2A';
 const MUTED = '#6A6A66';
-const CARD = '#F1F1EC';
+const CARD = '#EFF2EF';         // cartes gris-vert clair
 const CARD_ON_GREEN = '#E9EEE6';
 const WHITE = '#FFFFFF';
 
