@@ -1613,11 +1613,14 @@ function DescriptionAssist({ value, onChange, mandat, onExtractFields }) {
     try {
       const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
       if (blob.size < 800) return;
-      const fd = new FormData(); fd.append('audio', blob, 'desc.webm');
+      const { data: { session } } = await supabase.auth.getSession();
+      const fd = new FormData();
+      fd.append('audio', blob, 'desc.webm');
+      fd.append('token', session?.access_token || '');
       const r = await fetch('/api/transcribe', { method: 'POST', body: fd });
       const j = await r.json();
       if (j.ok && j.text) onChange((value ? value.trim() + ' ' : '') + j.text.trim());
-      else alert("La transcription n'a rien renvoyé.");
+      else alert(j.error || "La transcription n'a rien renvoyé.");
     } catch (e) { alert('Erreur transcription : ' + e.message); }
     finally { setBusy(false); }
   }
