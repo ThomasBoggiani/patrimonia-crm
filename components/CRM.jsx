@@ -2575,13 +2575,42 @@ async function handleFolderImport(event, opts = {}) {
           )}
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-6">
           {filledFields.size > 0 && (
-            <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
+            <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 flex items-center gap-1.5 mb-4">
               <Info className="w-3.5 h-3.5" />
               Les champs en <span className="font-semibold">vert</span> ont été remplis automatiquement par l'IA.
             </div>
           )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+            {/* ══ COLONNE GAUCHE : on raconte d'abord le bien (dictée/pitch), puis le mandant ══ */}
+            <div className="space-y-4">
+              <div className={sectionClass}>
+                <h3 className={sectionTitleClass}>🗣️ De quoi parlons-nous&nbsp;?</h3>
+                <p className="text-xs text-stone-500 mb-3">Dicte ou écris tout ce que tu sais : le bien, le contexte, s'il s'agit d'une vente ou d'une estimation, l'échéance, les points forts. L'IA rédige le pitch ; les champs à droite se complètent au fur et à mesure.</p>
+                <DescriptionAssist value={data.description || ''} onChange={v => update('description', v)} mandat={data} />
+                <textarea value={data.description || ''} onChange={e => update('description', e.target.value)} rows={8} className={fieldClass('description')} placeholder="Décris le bien, le contexte, les points forts…" />
+              </div>
+
+              <div className={sectionClass}>
+                <h3 className={sectionTitleClass}>📞 Contact propriétaire (mandant)</h3>
+                {showNewClient ? (
+                  <NewClientMiniForm prefillName={newClientPrefill} onSave={saveNewClient} onCancel={() => setShowNewClient(false)} />
+                ) : (
+                  <ClientSelector
+                    clients={clients}
+                    mandats={mandats}
+                    value={data.mandantClientId}
+                    onChange={(id) => update('mandantClientId', id)}
+                    onCreateNew={handleCreateClient}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* ══ COLONNE DROITE : toutes les informations du bien à compléter ══ */}
+            <div className="space-y-4">
 
           {/* SECTION 1 : IDENTITÉ */}
           <div className={sectionClass}>
@@ -2762,28 +2791,6 @@ async function handleFolderImport(event, opts = {}) {
             </div>
           </div>
 
-          {/* SECTION 4 : CONTACT PROPRIÉTAIRE */}
-          <div className={sectionClass}>
-            <h3 className={sectionTitleClass}>📞 Contact propriétaire</h3>
-            {showNewClient ? (
-              <NewClientMiniForm prefillName={newClientPrefill} onSave={saveNewClient} onCancel={() => setShowNewClient(false)} />
-            ) : (
-              <ClientSelector
-                clients={clients}
-                mandats={mandats}
-                value={data.mandantClientId}
-                onChange={(id) => update('mandantClientId', id)}
-                onCreateNew={handleCreateClient}
-              />
-            )}
-          </div>
-
-          {/* DESCRIPTION en bas */}
-          <Field label="Description du bien">
-            <DescriptionAssist value={data.description || ''} onChange={v => update('description', v)} mandat={data} />
-            <textarea value={data.description || ''} onChange={e => update('description', e.target.value)} rows={4} className={fieldClass('description')} placeholder="Descriptif marketing, points forts... (ou dicte / génère avec l'IA ci-dessus)" />
-          </Field>
-
           {missingFields.length > 0 && (
             <div className="p-3 rounded-lg bg-stone-100 border border-cream-dark">
               <div className="text-xs font-semibold uppercase tracking-wide text-stone-700 mb-2 flex items-center gap-1.5">
@@ -2796,6 +2803,8 @@ async function handleFolderImport(event, opts = {}) {
               </div>
             </div>
           )}
+            </div>{/* fin colonne droite */}
+          </div>{/* fin grille 2 colonnes */}
         </div>
 
         <div className="flex gap-2 items-center p-6 border-t border-stone-200 bg-stone-50 sticky bottom-0">
