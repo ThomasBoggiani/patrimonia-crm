@@ -5,7 +5,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X, Save, ChevronDown, ChevronRight, Plus, Trash2, Loader2,
   TrendingUp, Sparkles, AlertTriangle, Cloud,
@@ -77,6 +77,7 @@ const EMPTY_AVIS = {
     prix_marche: 0,
     prix_plancher: 0,
     avis_client: '',
+    consultant_id: '',
     consultant_nom: '',
     consultant_email: '',
     consultant_tel: '',
@@ -84,6 +85,7 @@ const EMPTY_AVIS = {
     // Ajustement à la baisse justifié (discret) : facteurs de décote + note
     facteurs_decote: '', // ex : 1er étage sombre · charges 400 €/mois · marché baissier
     positionnement: '',  // ex : à positionner en fourchette basse
+    ajustements: [],     // [{label, pct}] curseurs ± % sur le prix au m²
   },
   // Méta
   date_estimation: new Date().toISOString().split('T')[0],
@@ -194,6 +196,36 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
     reconversion: true,
     preconisation: true,
   });
+
+  // Consultants (équipe) — pour le choix déroulant + email/tél automatiques
+  const [profiles, setProfiles] = useState([]);
+  useEffect(() => {
+    (async () => {
+      const { data: profs } = await supabase.from('profiles').select('id, prenom, nom, email, tel, fonction').eq('actif', true);
+      setProfiles(profs || []);
+      const { data: { user } } = await supabase.auth.getUser();
+      // Par défaut : le consultant = celui qui crée l'avis (si non déjà choisi)
+      if (!data.preconisation.consultant_id && user) {
+        const meProf = (profs || []).find(p => p.id === user.id);
+        if (meProf) setConsultant(meProf);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Barème d'honoraires par défaut selon le prix (net vendeur / marché)
+  function honorairesBareme(prix) {
+    const p = +prix || 0;
+    if (p > 1000000) return 2; if (p >= 750000) return 3; if (p >= 500000) return 4; return 5;
+  }
+  function setConsultant(p) {
+    if (!p) return;
+    setData(prev => ({ ...prev, preconisation: { ...prev.preconisation,
+      consultant_id: p.id,
+      consultant_nom: `${p.prenom || ''} ${p.nom || ''}`.trim() + (p.fonction ? ` — ${p.fonction}` : ''),
+      consultant_email: p.email || '', consultant_tel: p.tel || '',
+    } }));
+  }
 
   const [validating, setValidating] = useState(-1);
   async function validerBienLien(i) {
@@ -859,8 +891,44 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
               {/* Ajustement à la baisse justifié — pour positionner en fourchette basse */}
               <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 space-y-2">
                 <div className="text-[11px] font-semibold text-amber-800 uppercase tracking-wide">Ajustement / décote (discret)</div>
+
+                {/* Curseurs ± % sur le prix au m² */}
+                {(() => {
+                  const aj = data.preconisation.ajustements || [];
+                  const setAj = (arr) => update('preconisation.ajustements', arr);
+                  const upd = (i, k, v) => { const a = [...aj]; a[i] = { ...a[i], [k]: v }; setAj(a); };
+                  const total = aj.reduce((s, a) => s + (+a.pct || 0), 0);
+                  const surf = +mandat?.surface || 0;
+                  const baseM2 = surf && +data.preconisation.prix_marche ? Math.round(+data.preconisation.prix_marche / surf) : (+mandat?.prix_m2 || 0);
+                  const adjM2 = baseM2 ? Math.round(baseM2 * (1 + total / 100)) : 0;
+                  const adjPrix = adjM2 && surf ? Math.round(adjM2 * surf) : 0;
+                  return (
+                    <div>
+                      <label className={labelClass}>Facteurs ± % (curseur)</label>
+                      {aj.map((a, i) => (
+                        <div key={i} className="flex items-center gap-2 mb-1.5">
+                          <input value={a.label || ''} onChange={e => upd(i, 'label', e.target.value)} placeholder="Ex : 1er étage sombre" className="w-44 px-2 py-1 text-xs border border-stone-200 rounded" />
+                          <input type="range" min="-25" max="15" step="1" value={a.pct || 0} onChange={e => upd(i, 'pct', +e.target.value)} className="flex-1 accent-sage-dark" />
+                          <span className={`w-14 text-right text-sm font-semibold tabular-nums ${(+a.pct || 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{(+a.pct || 0) > 0 ? '+' : ''}{a.pct || 0} %</span>
+                          <button type="button" onClick={() => setAj(aj.filter((_, x) => x !== i))} className="text-stone-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => setAj([...aj, { label: '', pct: -5 }])} className="text-xs text-sage-darker border border-sage-light rounded px-2 py-1 hover:bg-sage-50">+ Ajouter un facteur</button>
+                      {baseM2 > 0 && (
+                        <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm bg-white rounded-lg border border-stone-200 p-2">
+                          <span className="text-stone-500">{baseM2.toLocaleString('fr-FR')} €/m²</span>
+                          <span className={total < 0 ? 'text-red-600 font-semibold' : 'text-emerald-700 font-semibold'}>{total > 0 ? '+' : ''}{total} %</span>
+                          <span>→ <b className="text-sage-darker">{adjM2.toLocaleString('fr-FR')} €/m²</b></span>
+                          <span>soit <b className="text-sage-darker">{adjPrix.toLocaleString('fr-FR')} €</b></span>
+                          <button type="button" onClick={() => update('preconisation.prix_marche', adjPrix)} className="text-[11px] text-sage-darker underline">appliquer au prix de marché</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 <div>
-                  <label className={labelClass}>Facteurs de décote</label>
+                  <label className={labelClass}>Facteurs de décote (texte)</label>
                   <textarea value={data.preconisation.facteurs_decote || ''}
                     onChange={e => update('preconisation.facteurs_decote', e.target.value)}
                     rows={2} className={fieldClass}
@@ -886,31 +954,34 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className={labelClass}>Consultant nom</label>
-                  <input type="text" value={data.preconisation.consultant_nom}
-                    onChange={e => update('preconisation.consultant_nom', e.target.value)}
-                    placeholder="ex: Thomas Boggiani" className={fieldClass} />
+                  <label className={labelClass}>Consultant</label>
+                  <select value={data.preconisation.consultant_id || ''}
+                    onChange={e => setConsultant(profiles.find(p => p.id === e.target.value))}
+                    className={fieldClass}>
+                    <option value="">— Choisir —</option>
+                    {profiles.map(p => <option key={p.id} value={p.id}>{`${p.prenom || ''} ${p.nom || ''}`.trim()}</option>)}
+                  </select>
                 </div>
-                <div>
-                  <label className={labelClass}>Email</label>
-                  <input type="email" value={data.preconisation.consultant_email}
-                    onChange={e => update('preconisation.consultant_email', e.target.value)}
-                    className={fieldClass} />
-                </div>
-                <div>
-                  <label className={labelClass}>Téléphone</label>
-                  <input type="text" value={data.preconisation.consultant_tel}
-                    onChange={e => update('preconisation.consultant_tel', e.target.value)}
-                    className={fieldClass} />
+                <div className="col-span-2 flex items-end">
+                  <p className="text-xs text-stone-500">
+                    {data.preconisation.consultant_email || data.preconisation.consultant_tel
+                      ? <>📧 {data.preconisation.consultant_email || '—'} · 📞 {data.preconisation.consultant_tel || '—'} <span className="text-stone-400">(auto)</span></>
+                      : 'Email & téléphone récupérés automatiquement depuis la fiche du consultant.'}
+                  </p>
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className={labelClass}>Honoraires (%)</label>
-                  <input type="number" step="0.1" value={data.preconisation.honoraires_pct || ''}
-                    onChange={e => update('preconisation.honoraires_pct', +e.target.value)}
-                    className={fieldClass} />
+                  <div className="flex items-center gap-1.5">
+                    <input type="number" step="0.1" value={data.preconisation.honoraires_pct || ''}
+                      onChange={e => update('preconisation.honoraires_pct', +e.target.value)}
+                      className={fieldClass} />
+                    <button type="button" title="Barème auto selon le prix"
+                      onClick={() => update('preconisation.honoraires_pct', honorairesBareme(data.preconisation.prix_marche || mandat?.prix_net_vendeur || mandat?.prix))}
+                      className="text-[11px] whitespace-nowrap text-sage-darker border border-sage-light rounded px-2 py-2 hover:bg-sage-50">Auto</button>
+                  </div>
                 </div>
                 <div>
                   <label className={labelClass}>Date estimation</label>
