@@ -1574,12 +1574,14 @@ function ClientSelector({ clients, mandats, value, onChange, onCreateNew }) {
 
 // Aide à la description : dicter au micro (Whisper) + rédiger le pitch (IA).
 // Estimation IA d'un prix net vendeur à partir des champs du bien.
-function EstimerBien({ data, onEstimate }) {
+// N'ÉCRASE JAMAIS le prix demandé (ferme, saisi par l'agent) : renvoie le
+// résultat au parent, qui l'affiche comme suggestion à appliquer si besoin.
+function EstimerBien({ data, onResult }) {
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState('');
+  const [error, setError] = useState('');
 
   async function estimer() {
-    setBusy(true); setNote('');
+    setBusy(true); setError(''); onResult?.(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/api/mandats/estimate', {
@@ -1588,11 +1590,10 @@ function EstimerBien({ data, onEstimate }) {
         body: JSON.stringify({ token: session?.access_token || '', mandat: data }),
       });
       const j = await res.json();
-      if (!j.ok) { setNote(j.error || "L'estimation n'a rien renvoyé."); setBusy(false); return; }
-      if (j.prixNetVendeur) onEstimate(j.prixNetVendeur);
-      setNote(j.commentaire || '');
+      if (!j.ok) { setError(j.error || "L'estimation n'a rien renvoyé."); setBusy(false); return; }
+      onResult?.(j);
     } catch (e) {
-      setNote('Erreur : ' + e.message);
+      setError('Erreur : ' + e.message);
     } finally {
       setBusy(false);
     }
@@ -1604,7 +1605,7 @@ function EstimerBien({ data, onEstimate }) {
         className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs whitespace-nowrap bg-gradient-to-br from-sage-100 to-sage-200 text-sage-darker border border-sage-light hover:from-sage-200 hover:to-sage-300 disabled:opacity-50">
         {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Estimer (IA)
       </button>
-      {note && <span className="text-[11px] text-stone-500 mt-1 max-w-[220px]">{note}</span>}
+      {error && <span className="text-[11px] text-red-500 mt-1 max-w-[220px]">{error}</span>}
     </div>
   );
 }
@@ -2036,8 +2037,30 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   const [dropboxUrl, setDropboxUrl] = useState('');
   // Mandat créé automatiquement par un import (brouillon) : supprimé si l'utilisateur annule.
   const [autoCreatedId, setAutoCreatedId] = useState(null);
+  // Suggestion d'estimation IA (n'écrase pas le prix demandé ferme).
+  const [estimation, setEstimation] = useState(null);
 
   const update = (k, v) => setData({ ...data, [k]: v });
+
+  // Commission par défaut si l'agent n'a rien saisi.
+  const COMMISSION_DEFAUT = 5;
+  // À partir du prix NET VENDEUR (ferme), recalcule commission € / prix FAI / prix
+  // au m². Le net vendeur reste la source de vérité ; le FAI en découle.
+  const recalcDepuisNet = (net, d) => {
+    const taux = (+d.honorairesTaux) > 0 ? +d.honorairesTaux : COMMISSION_DEFAUT;
+    const honoraires = Math.round((+net || 0) * taux / 100);
+    const fai = (+net || 0) + honoraires;
+    const surf = +d.surface || 0;
+    return {
+      prixNetVendeur: +net || 0,
+      honorairesTaux: taux,
+      honorairesMontant: honoraires,
+      prix: fai,
+      prixM2: surf ? Math.round(fai / surf) : d.prixM2,
+    };
+  };
+  const setPrixNet = (net) => setData(d => ({ ...d, ...recalcDepuisNet(net, d) }));
+  const appliquerEstimation = () => { if (estimation?.prixNetVendeur) setPrixNet(estimation.prixNetVendeur); };
 
   // Remplit les champs VIDES du formulaire à partir d'une extraction IA (dictée / notes).
   // N'écrase jamais une valeur déjà saisie ; recalcule prix/m² ; surligne en vert.
@@ -2831,17 +2854,44 @@ async function handleFolderImport(event, opts = {}) {
                 </Field>
                 <Field label="&Eacute;ch&eacute;ance"><input type="date" value={data.mandatDateEcheance || ''} onChange={e => update('mandatDateEcheance', e.target.value)} className={fieldClass('mandatDateEcheance')} /></Field>
               </div>
-              <div className="rounded-lg border border-sage-light bg-sage-50/50 p-3">
+              <div className="rounded-lg border border-sage-light bg-sage-50/50 p-3 space-y-2">
                 <div className="flex items-end gap-3">
                   <Field label="Prix demandé — net vendeur (&euro;)" className="flex-1">
-                    <input type="number" value={data.prixNetVendeur || ''} onChange={e => update('prixNetVendeur', +e.target.value)} className={fieldClass('prixNetVendeur')} placeholder="Souhait du vendeur / estimation" />
+                    <input type="number" value={data.prixNetVendeur || ''} onChange={e => setPrixNet(+e.target.value)} className={fieldClass('prixNetVendeur')} placeholder="Prix ferme du vendeur" />
                   </Field>
-                  <EstimerBien data={data} onEstimate={(v) => update('prixNetVendeur', v)} />
+                  <EstimerBien data={data} onResult={setEstimation} />
                 </div>
-                <p className="text-[11px] text-stone-500 mt-1.5">Prix hors honoraires, utile pour une estimation. Le prix affiché reste le prix FAI ci-dessous.</p>
+                {/* Suggestion d'estimation IA — n'écrase pas le prix demandé */}
+                {estimation && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-2">
+                    <div className="text-xs text-stone-800">
+                      💡 Estimation IA : <b>{(estimation.prixNetVendeur || 0).toLocaleString('fr-FR')} €</b> net vendeur
+                      {estimation.fourchetteBasse > 0 && estimation.fourchetteHaute > 0 && (
+                        <span className="text-stone-500"> · fourchette {estimation.fourchetteBasse.toLocaleString('fr-FR')} – {estimation.fourchetteHaute.toLocaleString('fr-FR')} €</span>
+                      )}
+                    </div>
+                    {estimation.commentaire && <div className="text-[11px] text-stone-500 italic mt-0.5">{estimation.commentaire}</div>}
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <button type="button" onClick={appliquerEstimation} className="px-2.5 py-1 text-[11px] rounded-md bg-white border border-amber-300 text-amber-800 hover:bg-amber-100">Utiliser comme prix demandé</button>
+                      <button type="button" onClick={() => setEstimation(null)} className="text-[11px] text-stone-400 hover:text-stone-600">Ignorer</button>
+                    </div>
+                  </div>
+                )}
+                {/* Calculs automatiques à partir du net vendeur */}
+                {(+data.prixNetVendeur > 0 || +data.prix > 0) && (() => {
+                  const rdt = computeRendements(data);
+                  return (
+                    <div className="text-[11px] text-stone-600 flex flex-wrap gap-x-3 gap-y-0.5 pt-0.5 border-t border-sage-light/60">
+                      <span>Commission {data.honorairesTaux || COMMISSION_DEFAUT}% : <b className="text-stone-800">{(+data.honorairesMontant || 0).toLocaleString('fr-FR')} €</b></span>
+                      <span>Prix FAI : <b className="text-stone-800">{(+data.prix || 0).toLocaleString('fr-FR')} €</b></span>
+                      {+data.prixM2 > 0 && <span><b className="text-stone-800">{(+data.prixM2).toLocaleString('fr-FR')} €</b>/m²</span>}
+                      {rdt.actuel != null && <span>Rendement présent : <b className="text-emerald-700">{rdt.actuel}%</b></span>}
+                    </div>
+                  );
+                })()}
               </div>
               <div className="grid grid-cols-3 gap-3">
-                <Field label="Prix frais d'agence inclus (&euro;)"><input type="number" value={data.prix} onChange={e => { const prix = +e.target.value; setData(d => ({ ...d, prix, prixM2: (+d.surface) ? Math.round(prix / (+d.surface)) : d.prixM2, honorairesMontant: (+d.honorairesTaux) ? Math.round(prix * (+d.honorairesTaux) / 100) : d.honorairesMontant })); }} className={fieldClass('prix')} placeholder="Honoraires inclus" /></Field>
+                <Field label="Prix frais d'agence inclus (&euro;)"><input type="number" value={data.prix} onChange={e => { const fai = +e.target.value; setData(d => { const taux = (+d.honorairesTaux) > 0 ? +d.honorairesTaux : COMMISSION_DEFAUT; const net = Math.round(fai / (1 + taux / 100)); return { ...d, prix: fai, prixNetVendeur: net, honorairesTaux: taux, honorairesMontant: fai - net, prixM2: (+d.surface) ? Math.round(fai / (+d.surface)) : d.prixM2 }; }); }} className={fieldClass('prix')} placeholder="Calculé auto depuis le net" /></Field>
                 <Field label="Prix/m&sup2; (&euro;)"><input type="number" value={data.prixM2} onChange={e => update('prixM2', +e.target.value)} className={fieldClass('prixM2')} /></Field>
                 <Field label="Loyers/an (&euro;)"><input type="number" value={data.loyersAnnuels} onChange={e => update('loyersAnnuels', +e.target.value)} className={fieldClass('loyersAnnuels')} /></Field>
               </div>
@@ -2867,7 +2917,7 @@ async function handleFolderImport(event, opts = {}) {
                 );
               })()}
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Honoraires (%)"><input type="number" step="0.01" value={data.honorairesTaux || 0} onChange={e => { const taux = +e.target.value; setData(d => ({ ...d, honorairesTaux: taux, honorairesMontant: Math.round((+d.prix || 0) * taux / 100) })); }} className={fieldClass('honorairesTaux')} /></Field>
+                <Field label="Honoraires (%)"><input type="number" step="0.01" value={data.honorairesTaux || 0} onChange={e => { const taux = +e.target.value; setData(d => { const net = +d.prixNetVendeur || 0; const honoraires = Math.round(net * taux / 100); const fai = net > 0 ? net + honoraires : (+d.prix || 0); return { ...d, honorairesTaux: taux, honorairesMontant: net > 0 ? honoraires : Math.round((+d.prix || 0) * taux / 100), prix: fai, prixM2: (+d.surface && net > 0) ? Math.round(fai / (+d.surface)) : d.prixM2 }; }); }} className={fieldClass('honorairesTaux')} /></Field>
                 <Field label="Honoraires (&euro;)"><input type="number" value={data.honorairesMontant || 0} onChange={e => update('honorairesMontant', +e.target.value)} className={fieldClass('honorairesMontant')} /></Field>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -2878,11 +2928,14 @@ async function handleFolderImport(event, opts = {}) {
                     <option>Mandat simple</option>
                   </select>
                 </Field>
-                <Field label="Statut pipeline">
-                  <select value={data.statut} onChange={e => update('statut', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
-                    {STATUTS_MANDAT.map(s => <option key={s}>{s}</option>)}
-                  </select>
-                </Field>
+                {/* Statut pipeline : réservé à l'édition (à la création, c'est forcément le statut de départ) */}
+                {mandat && (
+                  <Field label="Statut pipeline">
+                    <select value={data.statut} onChange={e => update('statut', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900">
+                      {STATUTS_MANDAT.map(s => <option key={s}>{s}</option>)}
+                    </select>
+                  </Field>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="🤝 Pourvoyeur (apporteur du mandat)">
@@ -2891,12 +2944,15 @@ async function handleFolderImport(event, opts = {}) {
                     {allProfiles.map(p => <option key={p.id} value={p.id}>{p.prenom} {p.nom}</option>)}
                   </select>
                 </Field>
-                <Field label="🎯 Vendeur (closer de la vente)">
-                  <select value={data.vendeurId || ''} onChange={e => update('vendeurId', e.target.value || null)} className={fieldClass('vendeurId')}>
-                    <option value="">&mdash;</option>
-                    {allProfiles.map(p => <option key={p.id} value={p.id}>{p.prenom} {p.nom}</option>)}
-                  </select>
-                </Field>
+                {/* Vendeur (closer) : réservé à l'édition (pas d'actualité à la création) */}
+                {mandat && (
+                  <Field label="🎯 Vendeur (closer de la vente)">
+                    <select value={data.vendeurId || ''} onChange={e => update('vendeurId', e.target.value || null)} className={fieldClass('vendeurId')}>
+                      <option value="">&mdash;</option>
+                      {allProfiles.map(p => <option key={p.id} value={p.id}>{p.prenom} {p.nom}</option>)}
+                    </select>
+                  </Field>
+                )}
               </div>
             </div>
           </div>
