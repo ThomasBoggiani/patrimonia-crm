@@ -1573,11 +1573,28 @@ function ClientSelector({ clients, mandats, value, onChange, onCreateNew }) {
 }
 
 // Aide à la description : dicter au micro (Whisper) + rédiger le pitch (IA).
-function DescriptionAssist({ value, onChange, mandat }) {
+function DescriptionAssist({ value, onChange, mandat, onExtractFields }) {
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
   const mrRef = useRef(null);
   const chunksRef = useRef([]);
+
+  async function remplirChamps() {
+    if (!value || value.trim().length < 10) { alert('Écris ou dicte quelques informations d\'abord.'); return; }
+    setBusy(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch('/api/mandats/extract-fields', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: session?.access_token, texte: value }),
+      });
+      const j = await r.json();
+      if (!j.ok) { alert(j.error || 'Extraction échouée.'); return; }
+      const n = onExtractFields?.(j.champs || {}) || 0;
+      if (n === 0) alert('Rien de nouveau à remplir (les champs concernés sont déjà saisis).');
+    } catch (e) { alert('Erreur : ' + e.message); }
+    finally { setBusy(false); }
+  }
 
   async function startRec() {
     try {
@@ -1634,7 +1651,12 @@ function DescriptionAssist({ value, onChange, mandat }) {
       <button type="button" onClick={generer} disabled={busy || recording} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-gradient-to-br from-sage-100 to-sage-200 text-sage-darker border border-sage-light hover:from-sage-200 hover:to-sage-300 disabled:opacity-50">
         {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Rédiger le pitch (IA)
       </button>
-      <span className="text-[11px] text-stone-400">Dicte, ou laisse l'IA rédiger à partir des infos et de tes notes.</span>
+      {onExtractFields && (
+        <button type="button" onClick={remplirChamps} disabled={busy || recording} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-white border border-sage-light text-sage-darker hover:bg-sage-50 disabled:opacity-50">
+          {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />} Remplir les champs (IA)
+        </button>
+      )}
+      <span className="text-[11px] text-stone-400">Dicte, puis remplis les champs à droite ou laisse l'IA rédiger le pitch.</span>
     </div>
   );
 }
@@ -1905,6 +1927,25 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   const [autoCreatedId, setAutoCreatedId] = useState(null);
 
   const update = (k, v) => setData({ ...data, [k]: v });
+
+  // Remplit les champs VIDES du formulaire à partir d'une extraction IA (dictée / notes).
+  // N'écrase jamais une valeur déjà saisie ; recalcule prix/m² ; surligne en vert.
+  function applyExtractedFields(champs = {}) {
+    const remplis = [];
+    setData(prev => {
+      const next = { ...prev };
+      for (const [k, v] of Object.entries(champs)) {
+        const vide = (typeof next[k] === 'number') ? !next[k] : !String(next[k] ?? '').trim();
+        const apporte = (typeof v === 'number') ? v > 0 : !!String(v ?? '').trim();
+        if (vide && apporte) { next[k] = v; remplis.push(k); }
+      }
+      const s = parseFloat(next.surface) || 0, p = parseFloat(next.prix) || 0;
+      if (s > 0 && p > 0 && !next.prixM2) next.prixM2 = Math.round(p / s);
+      return next;
+    });
+    if (remplis.length) setFilledFields(prev => { const s = new Set(prev); remplis.forEach(k => s.add(k)); return s; });
+    return remplis.length;
+  }
 
   // Auto-refresh : après ajout/analyse d'un document, on recharge les champs du
   // mandat depuis la base (ne touche que les champs vides pour ne pas écraser tes saisies).
@@ -2589,7 +2630,7 @@ async function handleFolderImport(event, opts = {}) {
               <div className={sectionClass}>
                 <h3 className={sectionTitleClass}>🗣️ De quoi parlons-nous&nbsp;?</h3>
                 <p className="text-xs text-stone-500 mb-3">Dicte ou écris tout ce que tu sais : le bien, le contexte, s'il s'agit d'une vente ou d'une estimation, l'échéance, les points forts. L'IA rédige le pitch ; les champs à droite se complètent au fur et à mesure.</p>
-                <DescriptionAssist value={data.description || ''} onChange={v => update('description', v)} mandat={data} />
+                <DescriptionAssist value={data.description || ''} onChange={v => update('description', v)} mandat={data} onExtractFields={applyExtractedFields} />
                 <textarea value={data.description || ''} onChange={e => update('description', e.target.value)} rows={8} className={fieldClass('description')} placeholder="Décris le bien, le contexte, les points forts…" />
               </div>
 
