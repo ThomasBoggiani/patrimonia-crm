@@ -1308,8 +1308,8 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
                         else mMarche = 'b2b';
                       }
 
-                      // Affichage : on n'affiche QUE le sous-type. Si pas de sous-type → tiret.
-                        const typeLabel = cleanSousType || '—';
+                      // Affichage : sous-type si dispo, sinon on retombe sur le type (jamais "—" si un type existe).
+                        const typeLabel = cleanSousType || cleanType || '—';
                         const tooltipFullPath = cleanSousType ? `${cleanType} \u2192 ${cleanSousType}` : (cleanType || 'Type non d\u00e9fini');
                         const filterValue = cleanSousType || cleanType;
                       const badgeClass = mMarche === 'b2c'
@@ -1947,6 +1947,24 @@ function piecesPourMarche(marche) {
   return marche === 'b2c' ? PIECES_B2C : [...PIECES_B2C, ...PIECES_B2B_EXTRA];
 }
 
+// Déduit l'ensemble des pièces déjà présentes pour un mandat : cases cochées
+// (pieces_presentes) + ce qui se déduit des données réelles (photos, plans, DPE,
+// lots, loyer…). Utilisé pour pré-remplir la check-list en mode édition.
+function deducePiecesPresentes(mandat) {
+  const s = new Set(mandat?.piecesPresentes || mandat?.pieces_presentes || []);
+  if (!mandat) return s;
+  const photos = getPhotos(mandat);
+  const medias = Array.isArray(mandat.medias) ? mandat.medias : [];
+  const lots = mandat.etatLocatif || mandat.etat_locatif || [];
+  if (photos.length > 0) s.add('photos');
+  if (medias.some(m => m && m.type === 'plan')) s.add('plans');
+  if (parseFloat(mandat.dpeConsommation || mandat.dpe_consommation) > 0) s.add('dpe');
+  if (parseInt(mandat.nbLots || mandat.nb_lots) > 0) s.add('nb_lots');
+  if (Array.isArray(lots) && lots.length > 0) { s.add('etat_locatif'); s.add('loyer'); }
+  if (parseFloat(mandat.loyersAnnuels || mandat.loyers_annuels) > 0) s.add('loyer');
+  return s;
+}
+
 // ── Champs (données) attendus au dossier ─────────────────────────────
 // Génèrent aussi une tâche quand ils manquent. Le cadastre est automatique.
 // « phase » comme pour les pièces.
@@ -2007,7 +2025,11 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   const [merging, setMerging] = useState(false);
   const folderInputRef = React.useRef(null);
   // Sprint 4 — C1 : check-list des pièces du dossier
-  const [piecesPresent, setPiecesPresent] = useState(new Set());
+  const [piecesPresent, setPiecesPresent] = useState(() => mandat ? deducePiecesPresentes(mandat) : new Set());
+  // Recharge la check-list si on ouvre / change de mandat existant.
+  useEffect(() => {
+    if (mandat) setPiecesPresent(deducePiecesPresentes(mandat));
+  }, [mandat?.id]);
   const pieceInputRef = React.useRef(null);
   const pendingPieceRef = React.useRef(null);
   // Sprint 4 — import Dropbox par lien
@@ -2663,9 +2685,8 @@ async function handleFolderImport(event, opts = {}) {
               {/* PIÈCES À AJOUTER — colonne gauche, sous le propriétaire */}
               <div className={sectionClass}>
                 <h3 className={sectionTitleClass}>📁 Pièces à ajouter</h3>
-                {mandat ? (
-                  <DocumentsInline mandat={data} onUpdate={refreshFormFromMandat} />
-                ) : (
+                {/* Check-list phasée : toujours visible (création ET édition) */}
+                {(
                   <div>
                     <input ref={pieceInputRef} type="file" multiple className="hidden" onChange={e => handleFolderImport(e, { pieceKey: pendingPieceRef.current?.key, forcedCategory: pendingPieceRef.current?.category })} />
                     <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderImport} />
@@ -2714,8 +2735,15 @@ async function handleFolderImport(event, opts = {}) {
                       <div className="mt-3 text-xs text-stone-600">{importProgress.current}/{importProgress.total} — {importProgress.fileName}</div>
                     )}
                     <div className="mt-2 text-[11px] text-stone-500">
-                      {piecesPresent.size > 0 ? `${piecesPresent.size} document(s) déposé(s).` : 'Dépose au moins un document, ou remplis les champs à la main.'}
+                      {piecesPresent.size > 0 ? `${piecesPresent.size} élément(s) au dossier.` : 'Dépose au moins un document, ou remplis les champs à la main.'}
                     </div>
+                  </div>
+                )}
+                {/* En édition : gestionnaire des documents déjà déposés + analyse IA */}
+                {mandat && (
+                  <div className="mt-4 pt-4 border-t border-stone-200">
+                    <p className="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-2">📎 Documents déposés & analyse IA</p>
+                    <DocumentsInline mandat={data} onUpdate={refreshFormFromMandat} />
                   </div>
                 )}
                 {importResult && (
