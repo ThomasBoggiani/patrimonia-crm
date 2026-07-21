@@ -42,6 +42,9 @@ const EMPTY_AVIS = {
     rendement_zone_max: 0,
     transactions_recentes: '', // texte libre tableau
     commentaire: '',
+    ventes: [],         // DVF structuré [{date,adresse,type,surface,prix,prixM2,lots,memeImmeuble}]
+    par_annee: [],      // [{annee,count,m2Median}]
+    biens_similaires: [], // 3 biens dispo saisis à la main [{lien,adresse,prix,surface}]
   },
   // 5. SWOT (déplié)
   swot: {
@@ -519,6 +522,8 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                   update('comparables.prix_zone_min', r.prix_zone_min);
                   update('comparables.prix_zone_max', r.prix_zone_max);
                   update('comparables.transactions_recentes', r.transactions_recentes);
+                  update('comparables.ventes', r.ventes || []);
+                  update('comparables.par_annee', r.parAnnee || []);
                   if (r.mediane) update('comparables.commentaire',
                     `Médiane observée : ${r.mediane.toLocaleString('fr-FR')} €/m² sur ${r.count} vente(s) DVF retenue(s).`);
                 }}
@@ -561,6 +566,29 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                 <textarea value={data.comparables.commentaire}
                   onChange={e => update('comparables.commentaire', e.target.value)}
                   rows={2} className={fieldClass} />
+              </div>
+
+              {/* Biens similaires DISPONIBLES (saisis à la main, avec lien) */}
+              <div className="pt-2 border-t border-stone-100">
+                <label className={labelClass}>Biens similaires disponibles (3 max) — colle les liens des annonces</label>
+                {[0, 1, 2].map(i => {
+                  const bs = (data.comparables.biens_similaires || [])[i] || {};
+                  const setBs = (k, v) => {
+                    const arr = [...(data.comparables.biens_similaires || [])];
+                    while (arr.length < 3) arr.push({});
+                    arr[i] = { ...arr[i], [k]: v };
+                    update('comparables.biens_similaires', arr);
+                  };
+                  return (
+                    <div key={i} className="grid grid-cols-12 gap-1.5 mb-1.5">
+                      <input value={bs.adresse || ''} onChange={e => setBs('adresse', e.target.value)} placeholder={`Bien ${i + 1} — adresse / titre`} className="col-span-4 px-2 py-1.5 text-xs border border-stone-200 rounded" />
+                      <input value={bs.lien || ''} onChange={e => setBs('lien', e.target.value)} placeholder="Lien de l'annonce" className="col-span-4 px-2 py-1.5 text-xs border border-stone-200 rounded" />
+                      <input type="number" value={bs.surface || ''} onChange={e => setBs('surface', +e.target.value)} placeholder="m²" className="col-span-1 px-2 py-1.5 text-xs border border-stone-200 rounded" />
+                      <input type="number" value={bs.prix || ''} onChange={e => setBs('prix', +e.target.value)} placeholder="Prix €" className="col-span-3 px-2 py-1.5 text-xs border border-stone-200 rounded" />
+                    </div>
+                  );
+                })}
+                <p className="text-[10px] text-stone-400 mt-1 italic">Ces 3 biens apparaîtront sur une page dédiée « Biens similaires disponibles » de l'avis.</p>
               </div>
             </div>
           </Section>

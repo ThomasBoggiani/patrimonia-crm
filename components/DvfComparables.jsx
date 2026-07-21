@@ -98,6 +98,9 @@ export default function DvfComparables({ mandat, onApply }) {
       transactions_recentes: `Prix au m² par année (DVF) :\n${evolution}\n\nVentes retenues :\n${lignes}`,
       mediane: globalMedian,
       count: selVentes.length,
+      // Liste structurée pour l'avis (tableau) + évolution par année
+      ventes: selVentes.map(v => ({ date: v.date, adresse: v.adresse, type: v.type, surface: v.surface, prix: v.prix, prixM2: v.prixM2, lots: v.lots, memeImmeuble: !!v.memeImmeuble })),
+      parAnnee: parAnnee.map(a => ({ annee: a.annee, count: a.count, m2Median: a.m2Median })),
     });
   }
 
