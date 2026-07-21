@@ -2523,9 +2523,9 @@ async function handleFolderImport(event, opts = {}) {
 
   return (
     <div className="fixed inset-0 z-50 bg-cream-50 overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-luxe max-w-4xl w-full mx-auto my-4 md:my-6 min-h-[calc(100vh-2rem)]">
+      <div className="bg-white rounded-xl shadow-luxe max-w-4xl w-full mx-auto my-4 md:my-6 min-h-[calc(100vh-2rem)] flex flex-col">
 
-        <div className="flex items-center justify-between p-6 border-b border-stone-200 sticky top-0 bg-white z-10">
+        <div className="order-1 flex items-center justify-between p-6 border-b border-stone-200 sticky top-0 bg-white z-10">
           <div>
             <h2 className="font-display text-2xl font-semibold text-stone-900">{mandat ? 'Modifier' : 'Nouveau'} mandat</h2>
             <p className="text-xs text-stone-500 mt-0.5">Importe un dossier — l'IA pré-remplit automatiquement</p>
@@ -2533,8 +2533,8 @@ async function handleFolderImport(event, opts = {}) {
           <button onClick={handleCancel} className="text-stone-500 hover:text-stone-900"><X className="w-5 h-5" /></button>
         </div>
 
-       {/* Documents : import + lien + Dropbox (composant unifié avec validation IA) */}
-        <div className="p-6 border-b border-stone-200 bg-gradient-to-br from-sage-50/70 to-cream-50">
+       {/* Documents : import + lien + Dropbox (composant unifié avec validation IA) — placé en bas via order-3 */}
+        <div className="order-3 p-6 border-t border-stone-200 bg-gradient-to-br from-sage-50/70 to-cream-50">
           {mandat ? (
             <DocumentsInline mandat={data} onUpdate={refreshFormFromMandat} />
           ) : (
@@ -2616,7 +2616,7 @@ async function handleFolderImport(event, opts = {}) {
           )}
         </div>
 
-        <div className="p-6">
+        <div className="order-2 p-6">
           {filledFields.size > 0 && (
             <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 flex items-center gap-1.5 mb-4">
               <Info className="w-3.5 h-3.5" />
@@ -2848,7 +2848,7 @@ async function handleFolderImport(event, opts = {}) {
           </div>{/* fin grille 2 colonnes */}
         </div>
 
-        <div className="flex gap-2 items-center p-6 border-t border-stone-200 bg-stone-50 sticky bottom-0">
+        <div className="order-4 flex gap-2 items-center p-6 border-t border-stone-200 bg-stone-50 sticky bottom-0">
           {/* Actions destructives à gauche (uniquement en édition) */}
           {mandat?.id && (
             <div className="flex gap-2 mr-auto">
