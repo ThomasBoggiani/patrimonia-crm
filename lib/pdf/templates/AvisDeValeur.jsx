@@ -62,10 +62,12 @@ const AGENCE = {
     'CGP, fonds d\'investissement, family offices, familles fortunées',
   ],
 };
-// Équipe — à ajuster (constante). Bios volontairement courtes.
+// Équipe (4 personnes) — bios reprises de la plaquette B2B I&P.
 const EQUIPE = [
-  { nom: 'Thomas Boggiani', role: 'Dirigeant', bio: "Fondateur d'Immeubles & Patrimoine. Pilote la stratégie de valorisation et l'accompagnement des mandants sur l'ensemble du projet de vente." },
-  { nom: 'Philippe Korchia', role: 'Directeur commercial — Vente en bloc', bio: "Plus de vingt ans en immobilier d'entreprise (capital markets). Commercialise immeubles, hôtels et locaux auprès d'un portefeuille d'investisseurs fidèles." },
+  { nom: 'Thomas Ezquerra', role: 'Dirigeant', bio: "Fondateur et dirigeant d'Immeubles & Patrimoine, Paris Stone Immobilier et Green Lady. Il accompagne investisseurs, propriétaires et entreprises dans l'optimisation et la création de valeur de leurs actifs." },
+  { nom: 'Philippe Korchia', role: 'Directeur commercial — Vente en bloc', bio: "Plus de vingt ans en immobilier d'entreprise, spécialisé en capital markets. Il commercialise immeubles, hôtels et locaux auprès d'un portefeuille de clients fidèles et qualifiés." },
+  { nom: 'Lucas Hindelang', role: 'Directeur du développement foncier — Promotion', bio: "Après avoir débuté dans la transaction d'immeubles en bloc et de fonciers, il accompagne investisseurs et promoteurs dans la structuration et le développement de leurs projets." },
+  { nom: 'Thomas Boggiani', role: 'Développement — Résidentiel & patrimoine', bio: "Accompagne les mandants dans l'estimation, la valorisation et la commercialisation de leur bien, à chaque étape du projet de vente." },
 ];
 
 // ─── PRIMITIVES ────────────────────────────────────────────────────
@@ -291,14 +293,14 @@ export default function AvisDeValeur({ mandat, avisData = {}, conseiller }) {
         </View>
       </Content>
 
-      {/* ─── AGENCE : NOTRE ÉQUIPE ─── */}
+      {/* ─── AGENCE : NOTRE ÉQUIPE (4 personnes, grille 2×2) ─── */}
       <Content adresse={adresse} date={date} eyebrow="L'agence" title="Vos interlocuteurs">
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
           {EQUIPE.map((m, i) => (
-            <View key={i} style={{ width: '48.5%', backgroundColor: CARD, borderRadius: 8, padding: 20 }}>
-              <Text style={{ fontSize: 15, fontFamily: 'Times-Bold', color: GREEN }}>{m.nom}</Text>
-              <Text style={{ fontSize: 9, letterSpacing: 1.5, color: GOLD, fontFamily: 'Helvetica-Bold', marginTop: 3, marginBottom: 10 }}>{m.role.toUpperCase()}</Text>
-              <Text style={{ fontSize: 10, color: INK, lineHeight: 1.5 }}>{m.bio}</Text>
+            <View key={i} style={{ width: '48.5%', backgroundColor: CARD, borderRadius: 8, padding: 16, marginBottom: 12 }}>
+              <Text style={{ fontSize: 14, fontFamily: 'Times-Bold', color: GREEN }}>{m.nom}</Text>
+              <Text style={{ fontSize: 8.5, letterSpacing: 1.2, color: GOLD, fontFamily: 'Helvetica-Bold', marginTop: 3, marginBottom: 8 }}>{m.role.toUpperCase()}</Text>
+              <Text style={{ fontSize: 9.5, color: INK, lineHeight: 1.45 }}>{m.bio}</Text>
             </View>
           ))}
         </View>
