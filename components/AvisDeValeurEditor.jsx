@@ -229,6 +229,40 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
   }
 
   const [validating, setValidating] = useState(-1);
+  const [assistBusy, setAssistBusy] = useState(false);
+  const [assistNote, setAssistNote] = useState('');
+
+  // Assistant de l'avis : un ordre oral → ajustements ± % + positionnement + reco.
+  async function handleAssistantCommand(transcript) {
+    if (!transcript) return;
+    setAssistBusy(true); setAssistNote('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/avis-valeur/assistant', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: session?.access_token || '', transcript,
+          context: {
+            type: mandat?.type, surface: mandat?.surface,
+            prixMarche: data.preconisation.prix_marche || mandat?.prix_net_vendeur || mandat?.prix,
+            prixM2: mandat?.prix_m2,
+            ajustementsActuels: data.preconisation.ajustements || [],
+          },
+        }),
+      });
+      const j = await res.json();
+      if (!j.ok) { setAssistNote('⚠️ ' + (j.error || 'Assistant indisponible.')); setAssistBusy(false); return; }
+      setData(prev => {
+        const p = { ...prev.preconisation };
+        p.ajustements = [...(p.ajustements || []), ...(j.ajustements || [])];
+        if (j.positionnement) p.positionnement = j.positionnement;
+        if (j.recommandation) p.recommandation = ((p.recommandation || '').trim() + ' ' + j.recommandation).trim();
+        return { ...prev, preconisation: p };
+      });
+      setAssistNote('✓ ' + (j.resume || `${(j.ajustements || []).length} ajustement(s) ajouté(s).`) + ` — « ${transcript.slice(0, 80)} »`);
+    } catch (e) { setAssistNote('⚠️ ' + e.message); }
+    finally { setAssistBusy(false); }
+  }
   async function validerBienLien(i) {
     const arr = [...(data.comparables.biens_similaires || [])];
     const bs = arr[i] || {};
@@ -385,6 +419,12 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Assistant de l'avis : dicte un ordre → ajustements auto */}
+            <span title="Dicte un ordre à l'assistant : ex. « exposition mauvaise et bruyant → on se positionne en dessous » ou « rénové par un architecte renommé → surcote »">
+              {assistBusy
+                ? <span className="inline-flex items-center gap-1.5 px-2.5 py-2 text-sm text-sage-darker"><Loader2 className="w-4 h-4 animate-spin" /> Analyse…</span>
+                : <MicButton onText={handleAssistantCommand} title="Assistant de l'avis" />}
+            </span>
             <button onClick={handlePrefill} disabled={prefilling || saving || generating}
               className="flex items-center gap-2 px-3 py-2 bg-gradient-to-br from-sage-100 to-sage-200 text-sage-darker rounded-lg text-sm hover:from-sage-200 hover:to-sage-300 font-medium border border-sage-light disabled:opacity-50"
               title="Générer un premier jet de l'avis à partir de la fiche mandat (ne remplace pas ce qui est déjà saisi)">
@@ -396,6 +436,9 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
             </button>
           </div>
         </div>
+        {assistNote && (
+          <div className="px-6 py-2 text-xs bg-sage-50 border-b border-sage-light text-sage-darker">{assistNote}</div>
+        )}
 
         {/* BODY */}
         <div className="flex-1 overflow-y-auto scrollbar-thin p-6 space-y-3 bg-cream-50/30">
