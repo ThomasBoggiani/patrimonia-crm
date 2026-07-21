@@ -13,6 +13,7 @@ import {
   MapPin, Key, Repeat, Calculator, FileDown
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import DvfComparables from './DvfComparables';
 
 // Schéma vide par défaut
 const EMPTY_AVIS = {
@@ -507,10 +508,21 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
           <Section
             open={openSections.comparables} onToggle={() => toggle('comparables')}
             title="Comparables & données marché" icon={<BarChart3 className="w-4 h-4" />}
-            subtitle="Saisie libre (en attendant la BDD marché)"
+            subtitle="Ventes réelles DVF + saisie libre"
             count={data.comparables.transactions_recentes ? 1 : 0}
           >
             <div className="space-y-3">
+              {/* Comparables réels DVF (paramétrable, triable, sélectionnable) */}
+              <DvfComparables
+                mandat={mandat}
+                onApply={(r) => {
+                  update('comparables.prix_zone_min', r.prix_zone_min);
+                  update('comparables.prix_zone_max', r.prix_zone_max);
+                  update('comparables.transactions_recentes', r.transactions_recentes);
+                  if (r.mediane) update('comparables.commentaire',
+                    `Médiane observée : ${r.mediane.toLocaleString('fr-FR')} €/m² sur ${r.count} vente(s) DVF retenue(s).`);
+                }}
+              />
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Prix zone MIN (€/m²)</label>
