@@ -7,7 +7,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Sparkles, X, Send, Mic, Loader2, Square, Paperclip, FileText, Image as ImageIcon, Check, ExternalLink, AlertTriangle, Calendar, Trash2 } from 'lucide-react';
+import { Sparkles, X, Send, Mic, Loader2, Square, Paperclip, FileText, Image as ImageIcon, Check, ExternalLink, AlertTriangle, Calendar, Trash2, ChevronDown } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import {
   TYPOLOGIES_CLIENT_TREE,
@@ -622,7 +622,39 @@ export default function AIAssistantChat({
     loadFromUrl();
     return () => { cancelled = true; };
   }, [open]);
-  const activeContext = liveContext || context;
+  // Contexte choisi manuellement : undefined = auto (déduit de la page),
+  // null = « Général » forcé, objet = mandat/client choisi explicitement.
+  const [contextOverride, setContextOverride] = useState(undefined);
+  // En naviguant vers un autre mandat/client, on réattache automatiquement.
+  const liveKey = liveContext ? `${liveContext.type}:${liveContext.data?.id}` : 'none';
+  useEffect(() => { setContextOverride(undefined); }, [liveKey]);
+
+  const activeContext = contextOverride !== undefined ? contextOverride : (liveContext || context);
+
+  // Sélecteur de contexte (recherche mandat/client)
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerQuery, setPickerQuery] = useState('');
+  const [pickerResults, setPickerResults] = useState([]);
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const q = pickerQuery.trim();
+    if (q.length < 2) { setPickerResults([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const [m, c] = await Promise.all([
+          supabase.from('mandats').select('id, nom, adresse, ville').or(`nom.ilike.%${q}%,adresse.ilike.%${q}%,ville.ilike.%${q}%`).limit(5),
+          supabase.from('clients').select('id, prenom, nom, societe').or(`nom.ilike.%${q}%,societe.ilike.%${q}%`).limit(5),
+        ]);
+        if (cancelled) return;
+        setPickerResults([
+          ...(m.data || []).map(d => ({ type: 'mandat', data: d, label: d.nom || d.adresse || 'Mandat' })),
+          ...(c.data || []).map(d => ({ type: 'client', data: d, label: [d.prenom, d.nom].filter(Boolean).join(' ') || d.societe || 'Client' })),
+        ]);
+      } catch (e) { console.warn('[AIAssistantChat] recherche contexte:', e.message); }
+    })();
+    return () => { cancelled = true; };
+  }, [pickerOpen, pickerQuery]);
 
   // ─── Scope + entity_id déduits du contexte actif ────────────────────
   const scope = activeContext?.type === 'mandat' ? 'mandat'
@@ -1145,11 +1177,25 @@ export default function AIAssistantChat({
               </div>
               <div className="min-w-0">
                 <div className="text-sm font-semibold text-stone-900">{assistantTitle}</div>
-                {contextLabel ? (
-                  <div className="text-xs text-stone-500 truncate" title={contextLabel}>{contextLabel}</div>
-                ) : (
-                  <div className="text-xs text-stone-500">Cherche, propose, agit dans le CRM</div>
-                )}
+                <div className="flex items-center gap-1 mt-0.5">
+                  <button
+                    onClick={() => setPickerOpen(o => !o)}
+                    title="Changer le contexte de l'assistant"
+                    className="text-xs text-stone-600 hover:text-stone-900 inline-flex items-center gap-1 max-w-[170px]"
+                  >
+                    <span className="truncate">{contextLabel || 'Général'}</span>
+                    <ChevronDown className="w-3 h-3 flex-shrink-0 opacity-60" />
+                  </button>
+                  {activeContext && (
+                    <button
+                      onClick={() => setContextOverride(null)}
+                      title="Détacher — repasser en général"
+                      className="p-0.5 hover:bg-stone-200 rounded"
+                    >
+                      <X className="w-3 h-3 text-stone-500" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
@@ -1172,6 +1218,42 @@ export default function AIAssistantChat({
               </button>
             </div>
           </div>
+
+          {/* Sélecteur de contexte : Général / mandat / client */}
+          {pickerOpen && (
+            <div className="px-3 py-2 border-b border-stone-100 bg-white flex-shrink-0">
+              <input
+                value={pickerQuery}
+                onChange={e => setPickerQuery(e.target.value)}
+                autoFocus
+                placeholder="Chercher un mandat ou un client…"
+                className="w-full px-2.5 py-1.5 border border-stone-200 rounded-lg text-sm mb-1 focus:outline-none focus:border-stone-900"
+              />
+              <div className="max-h-52 overflow-y-auto">
+                <button
+                  onClick={() => { setContextOverride(null); setPickerOpen(false); setPickerQuery(''); }}
+                  className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-stone-100 text-stone-700"
+                >
+                  🌐 Général — tout le CRM
+                </button>
+                {pickerResults.map((r, i) => (
+                  <button
+                    key={`${r.type}-${r.data.id}-${i}`}
+                    onClick={() => { setContextOverride({ type: r.type, data: r.data }); setPickerOpen(false); setPickerQuery(''); }}
+                    className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-stone-100 flex items-center gap-1.5"
+                  >
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${r.type === 'mandat' ? 'bg-sage-50 text-sage-darker' : 'bg-blue-50 text-blue-700'}`}>
+                      {r.type === 'mandat' ? 'Mandat' : 'Client'}
+                    </span>
+                    <span className="truncate">{r.label}</span>
+                  </button>
+                ))}
+                {pickerQuery.trim().length >= 2 && pickerResults.length === 0 && (
+                  <div className="text-xs text-stone-400 px-2 py-1.5">Aucun résultat.</div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Quick actions (selon le scope) */}
           {quickActions.length > 0 && (
