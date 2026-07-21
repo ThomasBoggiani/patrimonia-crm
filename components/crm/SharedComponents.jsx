@@ -9,9 +9,9 @@ import { supabase } from '@/lib/supabase';
 // ─────────────────────────────────────────────────────────
 // Field : label + enfant pour les formulaires
 // ─────────────────────────────────────────────────────────
-export function Field({ label, children }) {
+export function Field({ label, children, className = '' }) {
   return (
-    <div>
+    <div className={className}>
       <label className="block text-xs font-medium text-stone-600 uppercase tracking-wide mb-1.5">{label}</label>
       {children}
     </div>

@@ -1308,8 +1308,8 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
                         else mMarche = 'b2b';
                       }
 
-                      // Affichage : on n'affiche QUE le sous-type. Si pas de sous-type → tiret.
-                        const typeLabel = cleanSousType || '—';
+                      // Affichage : sous-type si dispo, sinon on retombe sur le type (jamais "—" si un type existe).
+                        const typeLabel = cleanSousType || cleanType || '—';
                         const tooltipFullPath = cleanSousType ? `${cleanType} \u2192 ${cleanSousType}` : (cleanType || 'Type non d\u00e9fini');
                         const filterValue = cleanSousType || cleanType;
                       const badgeClass = mMarche === 'b2c'
@@ -1573,11 +1573,49 @@ function ClientSelector({ clients, mandats, value, onChange, onCreateNew }) {
 }
 
 // Aide à la description : dicter au micro (Whisper) + rédiger le pitch (IA).
+// Estimation IA d'un prix net vendeur à partir des champs du bien.
+function EstimerBien({ data, onEstimate }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+
+  async function estimer() {
+    setBusy(true); setNote('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/mandats/estimate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: session?.access_token || '', mandat: data }),
+      });
+      const j = await res.json();
+      if (!j.ok) { setNote(j.error || "L'estimation n'a rien renvoyé."); setBusy(false); return; }
+      if (j.prixNetVendeur) onEstimate(j.prixNetVendeur);
+      setNote(j.commentaire || '');
+    } catch (e) {
+      setNote('Erreur : ' + e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-stretch">
+      <button type="button" onClick={estimer} disabled={busy}
+        className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs whitespace-nowrap bg-gradient-to-br from-sage-100 to-sage-200 text-sage-darker border border-sage-light hover:from-sage-200 hover:to-sage-300 disabled:opacity-50">
+        {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Estimer (IA)
+      </button>
+      {note && <span className="text-[11px] text-stone-500 mt-1 max-w-[220px]">{note}</span>}
+    </div>
+  );
+}
+
 function DescriptionAssist({ value, onChange, mandat, onExtractFields }) {
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [liveText, setLiveText] = useState('');
   const mrRef = useRef(null);
   const chunksRef = useRef([]);
+  const recognitionRef = useRef(null);
 
   async function remplirChamps() {
     if (!value || value.trim().length < 10) { alert('Écris ou dicte quelques informations d\'abord.'); return; }
@@ -1603,10 +1641,29 @@ function DescriptionAssist({ value, onChange, mandat, onExtractFields }) {
       chunksRef.current = [];
       mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = () => { stream.getTracks().forEach(t => t.stop()); transcrire(); };
-      mrRef.current = mr; mr.start(); setRecording(true);
+      mrRef.current = mr; mr.start(); setRecording(true); setLiveText('');
+      // Retour en direct : transcription provisoire du navigateur pendant qu'on parle.
+      const SR = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+      if (SR) {
+        try {
+          const rec = new SR();
+          rec.lang = 'fr-FR'; rec.continuous = true; rec.interimResults = true;
+          rec.onresult = (ev) => {
+            let interim = '';
+            for (let i = ev.resultIndex; i < ev.results.length; i++) interim += ev.results[i][0].transcript;
+            setLiveText(interim);
+          };
+          rec.onerror = () => {};
+          recognitionRef.current = rec; rec.start();
+        } catch { /* pas de reconnaissance live : la transcription finale (Whisper) reste */ }
+      }
     } catch (e) { alert('Micro indisponible : ' + e.message); }
   }
-  function stopRec() { if (mrRef.current && mrRef.current.state !== 'inactive') mrRef.current.stop(); setRecording(false); }
+  function stopRec() {
+    if (mrRef.current && mrRef.current.state !== 'inactive') mrRef.current.stop();
+    if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch {} recognitionRef.current = null; }
+    setRecording(false); setLiveText('');
+  }
 
   async function transcrire() {
     setBusy(true);
@@ -1641,25 +1698,36 @@ function DescriptionAssist({ value, onChange, mandat, onExtractFields }) {
   }
 
   return (
-    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-      {recording ? (
-        <button type="button" onClick={stopRec} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-red-600 text-white hover:bg-red-700">
-          <Square className="w-3 h-3 fill-current" /> Arrêter
+    <div className="mb-1.5">
+      <div className="flex items-center gap-2 flex-wrap">
+        {recording ? (
+          <button type="button" onClick={stopRec} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-red-600 text-white hover:bg-red-700">
+            <span className="w-2 h-2 rounded-full bg-white animate-pulse" /> Arrêter
+          </button>
+        ) : (
+          <button type="button" onClick={startRec} disabled={busy} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-white border border-sage-light text-sage-darker hover:bg-sage-50 disabled:opacity-50">
+            <Mic className="w-3 h-3" /> Dicter
+          </button>
+        )}
+        <button type="button" onClick={generer} disabled={busy || recording} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-gradient-to-br from-sage-100 to-sage-200 text-sage-darker border border-sage-light hover:from-sage-200 hover:to-sage-300 disabled:opacity-50">
+          {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Rédiger le pitch (IA)
         </button>
-      ) : (
-        <button type="button" onClick={startRec} disabled={busy} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-white border border-sage-light text-sage-darker hover:bg-sage-50 disabled:opacity-50">
-          <Mic className="w-3 h-3" /> Dicter
-        </button>
+        {onExtractFields && (
+          <button type="button" onClick={remplirChamps} disabled={busy || recording} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-white border border-sage-light text-sage-darker hover:bg-sage-50 disabled:opacity-50">
+            {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />} Remplir les champs (IA)
+          </button>
+        )}
+        {!recording && <span className="text-[11px] text-stone-400">Dicte, puis remplis les champs à droite ou laisse l'IA rédiger le pitch.</span>}
+      </div>
+      {recording && (
+        <div className="mt-2 p-2.5 rounded-lg border border-red-200 bg-red-50 flex items-start gap-2">
+          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse mt-1.5 flex-shrink-0" />
+          <div className="min-w-0">
+            <div className="text-[11px] font-medium text-red-700 mb-0.5">Enregistrement en cours — parle, puis clique « Arrêter »</div>
+            <div className="text-sm text-stone-700 italic">{liveText || 'À l\'écoute…'}</div>
+          </div>
+        </div>
       )}
-      <button type="button" onClick={generer} disabled={busy || recording} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-gradient-to-br from-sage-100 to-sage-200 text-sage-darker border border-sage-light hover:from-sage-200 hover:to-sage-300 disabled:opacity-50">
-        {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Rédiger le pitch (IA)
-      </button>
-      {onExtractFields && (
-        <button type="button" onClick={remplirChamps} disabled={busy || recording} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-white border border-sage-light text-sage-darker hover:bg-sage-50 disabled:opacity-50">
-          {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />} Remplir les champs (IA)
-        </button>
-      )}
-      <span className="text-[11px] text-stone-400">Dicte, puis remplis les champs à droite ou laisse l'IA rédiger le pitch.</span>
     </div>
   );
 }
@@ -1832,46 +1900,82 @@ const STARTER_MANDAT_TASKS = [
   { titre: 'Lancer la recherche d\'acquéreurs (matching)', echeanceJours: 7, priorite: 'Moyenne' },
 ];
 
+// ── Phases du dossier ────────────────────────────────────────────────
+// Une seule vérité, utilisée PARTOUT (formulaire de création, score « Qualité
+// du dossier », tâches de relance). On avance commercial d'abord, juridique
+// ensuite. Chaque pièce et chaque champ porte un numéro de phase :
+//   0 = Estimer (le minimum pour créer le dossier + sortir un avis de valeur)
+//   1 = Commercialiser (annonce, photos, visites)
+//   2 = Sécuriser juridiquement (avant offre / promesse / acte)
+const PHASES = [
+  { id: 0, key: 'estimer',        label: 'Prêt à estimer',        emoji: '📍', priorite: 'Haute',   hint: "Le minimum pour créer le dossier et sortir un avis de valeur." },
+  { id: 1, key: 'commercialiser', label: 'Prêt à commercialiser', emoji: '📣', priorite: 'Moyenne', hint: "De quoi diffuser l'annonce et faire visiter." },
+  { id: 2, key: 'signer',         label: 'Prêt à signer',         emoji: '⚖️', priorite: 'Basse',   hint: "Les pièces juridiques, à réunir avant une offre." },
+];
+const PHASE_BY_ID = Object.fromEntries(PHASES.map(p => [p.id, p]));
+
 // ── Pièces du dossier ────────────────────────────────────────────────
 // Liste réelle fournie par Thomas. Le cadastre n'y figure pas : il est récupéré
 // automatiquement. Toutes les pièces sont « conseillées » (rien ne bloque).
 // « optionnel » = pas de tâche de relance créée (ex. factures de travaux).
+// « phase » : 0 estimer · 1 commercialiser · 2 sécuriser (juridique).
 const PIECES_B2C = [
-  { key: 'fiche',             label: 'Fiche / mandat',                 category: 'mandat',       emoji: '📄' },
-  { key: 'identite_vendeur',  label: "Pièce d'identité du vendeur",    category: 'mandant',      emoji: '🪪' },
-  { key: 'titre',             label: 'Titre de propriété',             category: 'mandant',      emoji: '📜' },
-  { key: 'taxe',              label: 'Taxe foncière',                  category: 'autre',        emoji: '🧾' },
-  { key: 'appels_charges',    label: 'Appels de charges (3 derniers)', category: 'autre',        emoji: '💶' },
-  { key: 'pv_ag',             label: "PV d'assemblée générale",        category: 'autre',        emoji: '📋' },
-  { key: 'reglement_copro',   label: 'Règlement de copropriété',       category: 'autre',        emoji: '📕' },
-  { key: 'nb_lots',           label: 'Nombre de lots',                 category: 'notes',        emoji: '🔢' },
-  { key: 'dpe',               label: 'DPE',                            category: 'diagnostics',  emoji: '⚡' },
-  { key: 'diagnostics',       label: 'Diagnostics (amiante, plomb…)',  category: 'diagnostics',  emoji: '🔬' },
-  { key: 'photos',            label: 'Photos',                         category: 'plans_photos', emoji: '🖼️' },
-  { key: 'plans',             label: 'Plans',                          category: 'plans_photos', emoji: '📐' },
-  { key: 'loyer',             label: 'Loyer / bien loué ou libre',     category: 'notes',        emoji: '🔑' },
-  { key: 'factures_travaux',  label: 'Factures de travaux',            category: 'autre',        emoji: '🛠️', optionnel: true },
+  { key: 'fiche',             label: 'Fiche / mandat signé',           category: 'mandat',       emoji: '📄', phase: 1 },
+  { key: 'photos',            label: 'Photos',                         category: 'plans_photos', emoji: '🖼️', phase: 1 },
+  { key: 'plans',             label: 'Plans',                          category: 'plans_photos', emoji: '📐', phase: 1 },
+  { key: 'dpe',               label: 'DPE',                            category: 'diagnostics',  emoji: '⚡', phase: 1 },
+  { key: 'nb_lots',           label: 'Nombre de lots',                 category: 'notes',        emoji: '🔢', phase: 1 },
+  { key: 'loyer',             label: 'Loyer / bien loué ou libre',     category: 'notes',        emoji: '🔑', phase: 1 },
+  { key: 'identite_vendeur',  label: "Pièce d'identité du vendeur",    category: 'mandant',      emoji: '🪪', phase: 2 },
+  { key: 'titre',             label: 'Titre de propriété',             category: 'mandant',      emoji: '📜', phase: 2 },
+  { key: 'taxe',              label: 'Taxe foncière',                  category: 'autre',        emoji: '🧾', phase: 2 },
+  { key: 'appels_charges',    label: 'Appels de charges (3 derniers)', category: 'autre',        emoji: '💶', phase: 2 },
+  { key: 'pv_ag',             label: "PV d'assemblée générale",        category: 'autre',        emoji: '📋', phase: 2 },
+  { key: 'reglement_copro',   label: 'Règlement de copropriété',       category: 'autre',        emoji: '📕', phase: 2 },
+  { key: 'diagnostics',       label: 'Diagnostics (amiante, plomb…)',  category: 'diagnostics',  emoji: '🔬', phase: 2 },
+  { key: 'factures_travaux',  label: 'Factures de travaux',            category: 'autre',        emoji: '🛠️', phase: 2, optionnel: true },
 ];
 
 // Le BtoB reprend tout le BtoC et ajoute le volet exploitation.
 const PIECES_B2B_EXTRA = [
-  { key: 'bilan_comptable',        label: 'Bilan comptable',        category: 'autre', emoji: '📊' },
-  { key: 'etat_locatif',           label: 'État locatif',           category: 'notes', emoji: '🏢' },
-  { key: 'etat_locatif_optimise',  label: 'État locatif optimisé',  category: 'notes', emoji: '📈' },
+  { key: 'etat_locatif',           label: 'État locatif',           category: 'notes', emoji: '🏢', phase: 1 },
+  { key: 'etat_locatif_optimise',  label: 'État locatif optimisé',  category: 'notes', emoji: '📈', phase: 1 },
+  { key: 'bilan_comptable',        label: 'Bilan comptable',        category: 'autre', emoji: '📊', phase: 2 },
 ];
 
 function piecesPourMarche(marche) {
   return marche === 'b2c' ? PIECES_B2C : [...PIECES_B2C, ...PIECES_B2B_EXTRA];
 }
 
+// Déduit l'ensemble des pièces déjà présentes pour un mandat : cases cochées
+// (pieces_presentes) + ce qui se déduit des données réelles (photos, plans, DPE,
+// lots, loyer…). Utilisé pour pré-remplir la check-list en mode édition.
+function deducePiecesPresentes(mandat) {
+  const s = new Set(mandat?.piecesPresentes || mandat?.pieces_presentes || []);
+  if (!mandat) return s;
+  const photos = getPhotos(mandat);
+  const medias = Array.isArray(mandat.medias) ? mandat.medias : [];
+  const lots = mandat.etatLocatif || mandat.etat_locatif || [];
+  if (photos.length > 0) s.add('photos');
+  if (medias.some(m => m && m.type === 'plan')) s.add('plans');
+  if (parseFloat(mandat.dpeConsommation || mandat.dpe_consommation) > 0) s.add('dpe');
+  if (parseInt(mandat.nbLots || mandat.nb_lots) > 0) s.add('nb_lots');
+  if (Array.isArray(lots) && lots.length > 0) { s.add('etat_locatif'); s.add('loyer'); }
+  if (parseFloat(mandat.loyersAnnuels || mandat.loyers_annuels) > 0) s.add('loyer');
+  return s;
+}
+
 // ── Champs (données) attendus au dossier ─────────────────────────────
 // Génèrent aussi une tâche quand ils manquent. Le cadastre est automatique.
+// « phase » comme pour les pièces.
 const CHAMPS_DOSSIER = [
-  { key: 'prix',              label: 'Renseigner le prix',              test: d => Number(d?.prix) > 0 },
-  { key: 'description',       label: 'Rédiger le pitch du bien',        test: d => !!String(d?.description || '').trim() },
+  { key: 'adresse',           label: "Renseigner l'adresse",            test: d => !!String(d?.adresse || '').trim(), phase: 0 },
+  { key: 'surface',           label: 'Renseigner la surface',           test: d => Number(d?.surface) > 0, phase: 0 },
+  { key: 'prix',              label: 'Renseigner le prix',              test: d => Number(d?.prix) > 0 || Number(d?.prixNetVendeur) > 0, phase: 0 },
+  { key: 'description',       label: 'Rédiger le pitch du bien',        test: d => !!String(d?.description || '').trim(), phase: 1 },
   // Le rendement optimisé est CALCULÉ (override > lots de l'état locatif > legacy) :
   // on interroge le calcul partagé, sinon la tâche ne se fermerait jamais.
-  { key: 'rendementOptimise', label: 'Calculer le rendement optimisé',  test: d => Number(computeRendements(d)?.optimise) > 0, b2bSeul: true },
+  { key: 'rendementOptimise', label: 'Calculer le rendement optimisé',  test: d => Number(computeRendements(d)?.optimise) > 0, b2bSeul: true, phase: 1 },
 ];
 
 function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
@@ -1883,7 +1987,7 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
     sousType: mandat.sousType || '',
     marche: mandat.marche || (['Appartement', 'Maison', 'Hôtel particulier'].includes(mandat.type) ? 'b2c' : 'b2b'),
   }) || {
-    nom: '', adresse: '', ville: '', marche: 'b2b', type: '', sousType: '', prix: 0, prixM2: 0,
+    nom: '', adresse: '', ville: '', marche: 'b2b', type: '', sousType: '', prix: 0, prixNetVendeur: 0, prixM2: 0,
     surface: 0, loyersAnnuels: 0, rendement: 0, nbLots: 1,
     commercialisation: 'Off-market', dateSignature: null,
     statut: 'Sourcing', owner: userInitials, description: '',
@@ -1921,7 +2025,11 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   const [merging, setMerging] = useState(false);
   const folderInputRef = React.useRef(null);
   // Sprint 4 — C1 : check-list des pièces du dossier
-  const [piecesPresent, setPiecesPresent] = useState(new Set());
+  const [piecesPresent, setPiecesPresent] = useState(() => mandat ? deducePiecesPresentes(mandat) : new Set());
+  // Recharge la check-list si on ouvre / change de mandat existant.
+  useEffect(() => {
+    if (mandat) setPiecesPresent(deducePiecesPresentes(mandat));
+  }, [mandat?.id]);
   const pieceInputRef = React.useRef(null);
   const pendingPieceRef = React.useRef(null);
   // Sprint 4 — import Dropbox par lien
@@ -2081,7 +2189,7 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
     sous_type: 'sousType', surface: 'surface',
     nb_pieces: 'nbPieces', nb_chambres: 'nbChambres', etage: 'etage',
     annee_construction: 'anneeConstruction',
-    prix: 'prix', prix_net_vendeur: 'prix', prix_m2: 'prixM2',
+    prix: 'prix', prix_net_vendeur: 'prixNetVendeur', prix_m2: 'prixM2',
     honoraires_charge: 'honorairesCharge', honoraires_taux: 'honorairesTaux', honoraires_montant: 'honorairesMontant',     pourvoyeur_id: 'pourvoyeurId', vendeur_id: 'vendeurId',
     loyers_annuels: 'loyersAnnuels', rendement: 'rendement', rendement_optimise: 'rendementOptimise',
     charges_annuelles: 'chargesAnnuelles', taxe_fonciere: 'taxeFonciere',
@@ -2447,10 +2555,14 @@ async function handleFolderImport(event, opts = {}) {
       const piecesRelancables = pieces.filter(p => !p.optionnel);
       const champs = CHAMPS_DOSSIER.filter(c => !c.b2bSeul || estB2B);
 
-      // Intitulés attendus : pièces manquantes + champs à compléter
+      // Priorité de la relance = celle de la phase (0 estimer → Haute, 1 commercial
+      // → Moyenne, 2 juridique → Basse). On commercialise avant de sécuriser.
+      const prioPourPhase = (ph) => (PHASE_BY_ID[ph]?.priorite || 'Moyenne');
+
+      // Intitulés attendus : pièces manquantes + champs à compléter (avec priorité)
       const manquants = [
-        ...piecesRelancables.filter(p => !piecesPresent.has(p.key)).map(p => PIECE_TASK_PREFIX + p.label),
-        ...champs.filter(c => !c.test(data)).map(c => CHAMP_TASK_PREFIX + c.label),
+        ...piecesRelancables.filter(p => !piecesPresent.has(p.key)).map(p => ({ titre: PIECE_TASK_PREFIX + p.label, priorite: prioPourPhase(p.phase) })),
+        ...champs.filter(c => !c.test(data)).map(c => ({ titre: CHAMP_TASK_PREFIX + c.label, priorite: prioPourPhase(c.phase) })),
       ];
       const complets = [
         ...piecesRelancables.filter(p => piecesPresent.has(p.key)).map(p => PIECE_TASK_PREFIX + p.label),
@@ -2467,10 +2579,10 @@ async function handleFolderImport(event, opts = {}) {
       const echeance = new Date();
       echeance.setDate(echeance.getDate() + 7);
       const rows = manquants
-        .filter(titre => !dejaOuvertes.has(titre))
-        .map(titre => ({
-          titre,
-          priorite: 'Moyenne',
+        .filter(m => !dejaOuvertes.has(m.titre))
+        .map(m => ({
+          titre: m.titre,
+          priorite: m.priorite,
           statut: 'À faire',
           echeance: echeance.toISOString().split('T')[0],
           assignee: getCurrentUserName(profile),
@@ -2573,34 +2685,48 @@ async function handleFolderImport(event, opts = {}) {
               {/* PIÈCES À AJOUTER — colonne gauche, sous le propriétaire */}
               <div className={sectionClass}>
                 <h3 className={sectionTitleClass}>📁 Pièces à ajouter</h3>
-                {mandat ? (
-                  <DocumentsInline mandat={data} onUpdate={refreshFormFromMandat} />
-                ) : (
+                {/* Check-list phasée : toujours visible (création ET édition) */}
+                {(
                   <div>
                     <input ref={pieceInputRef} type="file" multiple className="hidden" onChange={e => handleFolderImport(e, { pieceKey: pendingPieceRef.current?.key, forcedCategory: pendingPieceRef.current?.category })} />
                     <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderImport} />
                     <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
-                      <p className="text-xs text-stone-500 min-w-0">Dépose les documents dont tu disposes (tous conseillés). L'IA remplit les champs à droite.</p>
+                      <p className="text-xs text-stone-500 min-w-0">Rangées par étape : commence par l'essentiel, le juridique se complète ensuite. L'IA remplit les champs à droite.</p>
                       <button type="button" onClick={() => folderInputRef.current?.click()} disabled={!!importProgress} className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-sage-light text-sage-darker rounded-lg text-xs hover:bg-sage-50 disabled:opacity-50 font-medium flex-shrink-0">
                         {importProgress ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileUp className="w-3.5 h-3.5" />}
                         Déposer plusieurs
                       </button>
                     </div>
-                    <div className="space-y-2">
-                      {piecesPourMarche(data.marche).map(p => {
-                        const present = piecesPresent.has(p.key);
+                    <div className="space-y-4">
+                      {PHASES.filter(ph => ph.id > 0).map(ph => {
+                        const piecesPhase = piecesPourMarche(data.marche).filter(p => p.phase === ph.id);
+                        if (!piecesPhase.length) return null;
+                        const deposees = piecesPhase.filter(p => piecesPresent.has(p.key)).length;
                         return (
-                          <div key={p.key} className={`flex items-center gap-3 px-3 py-2 rounded-lg border ${present ? 'border-emerald-200 bg-emerald-50/50' : 'border-dashed border-stone-300 bg-white'}`}>
-                            <span className="text-lg flex-shrink-0">{p.emoji}</span>
-                            <div className="flex-1 min-w-0">
-                              <span className="text-sm font-medium text-stone-800">{p.label}</span>
-                              <span className="text-[10px] text-stone-400 ml-1">· {p.optionnel ? 'si applicable' : 'conseillé'}</span>
+                          <div key={ph.id}>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-xs font-semibold text-stone-700 uppercase tracking-wide">{ph.emoji} {ph.label}</span>
+                              <span className="text-[10px] text-stone-400">{deposees}/{piecesPhase.length}</span>
                             </div>
-                            {present ? (
-                              <span className="inline-flex items-center gap-1 text-xs text-emerald-700 flex-shrink-0"><Check className="w-3.5 h-3.5" /> déposé</span>
-                            ) : (
-                              <button type="button" onClick={() => { pendingPieceRef.current = p; pieceInputRef.current?.click(); }} disabled={!!importProgress} className="px-3 py-1 text-xs text-sage-darker border border-sage-light rounded-lg hover:bg-sage-50 disabled:opacity-50 flex-shrink-0">Déposer</button>
-                            )}
+                            <div className="space-y-2">
+                              {piecesPhase.map(p => {
+                                const present = piecesPresent.has(p.key);
+                                return (
+                                  <div key={p.key} className={`flex items-center gap-3 px-3 py-2 rounded-lg border ${present ? 'border-emerald-200 bg-emerald-50/50' : 'border-dashed border-stone-300 bg-white'}`}>
+                                    <span className="text-lg flex-shrink-0">{p.emoji}</span>
+                                    <div className="flex-1 min-w-0">
+                                      <span className="text-sm font-medium text-stone-800">{p.label}</span>
+                                      <span className="text-[10px] text-stone-400 ml-1">· {p.optionnel ? 'si applicable' : 'conseillé'}</span>
+                                    </div>
+                                    {present ? (
+                                      <span className="inline-flex items-center gap-1 text-xs text-emerald-700 flex-shrink-0"><Check className="w-3.5 h-3.5" /> déposé</span>
+                                    ) : (
+                                      <button type="button" onClick={() => { pendingPieceRef.current = p; pieceInputRef.current?.click(); }} disabled={!!importProgress} className="px-3 py-1 text-xs text-sage-darker border border-sage-light rounded-lg hover:bg-sage-50 disabled:opacity-50 flex-shrink-0">Déposer</button>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
                         );
                       })}
@@ -2609,8 +2735,15 @@ async function handleFolderImport(event, opts = {}) {
                       <div className="mt-3 text-xs text-stone-600">{importProgress.current}/{importProgress.total} — {importProgress.fileName}</div>
                     )}
                     <div className="mt-2 text-[11px] text-stone-500">
-                      {piecesPresent.size > 0 ? `${piecesPresent.size} document(s) déposé(s).` : 'Dépose au moins un document, ou remplis les champs à la main.'}
+                      {piecesPresent.size > 0 ? `${piecesPresent.size} élément(s) au dossier.` : 'Dépose au moins un document, ou remplis les champs à la main.'}
                     </div>
+                  </div>
+                )}
+                {/* En édition : gestionnaire des documents déjà déposés + analyse IA */}
+                {mandat && (
+                  <div className="mt-4 pt-4 border-t border-stone-200">
+                    <p className="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-2">📎 Documents déposés & analyse IA</p>
+                    <DocumentsInline mandat={data} onUpdate={refreshFormFromMandat} />
                   </div>
                 )}
                 {importResult && (
@@ -2697,6 +2830,15 @@ async function handleFolderImport(event, opts = {}) {
                   </select>
                 </Field>
                 <Field label="&Eacute;ch&eacute;ance"><input type="date" value={data.mandatDateEcheance || ''} onChange={e => update('mandatDateEcheance', e.target.value)} className={fieldClass('mandatDateEcheance')} /></Field>
+              </div>
+              <div className="rounded-lg border border-sage-light bg-sage-50/50 p-3">
+                <div className="flex items-end gap-3">
+                  <Field label="Prix demandé — net vendeur (&euro;)" className="flex-1">
+                    <input type="number" value={data.prixNetVendeur || ''} onChange={e => update('prixNetVendeur', +e.target.value)} className={fieldClass('prixNetVendeur')} placeholder="Souhait du vendeur / estimation" />
+                  </Field>
+                  <EstimerBien data={data} onEstimate={(v) => update('prixNetVendeur', v)} />
+                </div>
+                <p className="text-[11px] text-stone-500 mt-1.5">Prix hors honoraires, utile pour une estimation. Le prix affiché reste le prix FAI ci-dessous.</p>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <Field label="Prix frais d'agence inclus (&euro;)"><input type="number" value={data.prix} onChange={e => { const prix = +e.target.value; setData(d => ({ ...d, prix, prixM2: (+d.surface) ? Math.round(prix / (+d.surface)) : d.prixM2, honorairesMontant: (+d.honorairesTaux) ? Math.round(prix * (+d.honorairesTaux) / 100) : d.honorairesMontant })); }} className={fieldClass('prix')} placeholder="Honoraires inclus" /></Field>
@@ -3379,39 +3521,72 @@ function DossierScore({ mandat, mandatContacts = [] }) {
     loyer: (Array.isArray(lots) && lots.length > 0) || parseFloat(mandat.loyersAnnuels || mandat.loyers_annuels) > 0,
   };
 
-  // Champs clés + pièces du dossier selon le marché (BtoC / BtoB)
+  // Champs clés + pièces du dossier, chacun rangé dans sa PHASE (0/1/2).
   const items = [
-    { label: 'Adresse', ok: !!mandat.adresse },
-    { label: 'Prix', ok: parseFloat(mandat.prix) > 0 },
-    { label: 'Pitch', ok: !!(mandat.description && mandat.description.trim()) },
-    { label: 'Propriétaire', ok: hasMandant },
+    { label: 'Adresse',      ok: !!mandat.adresse, phase: 0 },
+    { label: 'Surface',      ok: parseFloat(mandat.surface) > 0, phase: 0 },
+    { label: 'Prix',         ok: parseFloat(mandat.prix) > 0 || parseFloat(mandat.prixNetVendeur || mandat.prix_net_vendeur) > 0, phase: 0 },
+    { label: 'Propriétaire', ok: hasMandant, phase: 0 },
+    { label: 'Cadastre',     ok: hasCadastre, phase: 0, auto: true },
+    { label: 'Pitch',        ok: !!(mandat.description && mandat.description.trim()), phase: 1 },
     ...piecesPourMarche(mandat.marche)
-      .filter(p => !p.optionnel && p.key !== 'fiche')
-      .map(p => ({ label: p.label, ok: p.key in deduit ? deduit[p.key] : coche.has(p.key) })),
-    ...(estB2B ? [{ label: 'Rdt optimisé', ok: rdt.optimise != null && rdt.optimise > 0 }] : []),
-    { label: 'Cadastre', ok: hasCadastre, auto: true },
+      .filter(p => !p.optionnel)
+      .map(p => ({ label: p.label, ok: p.key in deduit ? deduit[p.key] : coche.has(p.key), phase: p.phase })),
+    ...(estB2B ? [{ label: 'Rdt optimisé', ok: rdt.optimise != null && rdt.optimise > 0, phase: 1 }] : []),
   ];
   const done = items.filter(i => i.ok).length;
   const pct = Math.round((done / items.length) * 100);
+
+  // Où en est-on ? La phase « en cours » = première phase non terminée.
+  const parPhase = PHASES.map(ph => {
+    const its = items.filter(i => i.phase === ph.id);
+    const d = its.filter(i => i.ok).length;
+    return { ...ph, its, d, total: its.length, pct: its.length ? Math.round((d / its.length) * 100) : 100 };
+  });
+  const phaseEnCours = parPhase.find(p => p.pct < 100) || parPhase[parPhase.length - 1];
+
   return (
     <div id="score" className={`rounded-xl p-5 border scroll-mt-32 ${pct >= 80 ? 'bg-emerald-50/50 border-emerald-200' : 'bg-cream-50/60 border-cream-dark'}`}>
-      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <span className="text-lg">📊</span>
-          <span className="font-display text-base font-semibold text-stone-900">Qualité du dossier — {pct}%</span>
+          <span className="font-display text-base font-semibold text-stone-900">Qualité du dossier</span>
         </div>
-        <span className="text-xs text-stone-500">{done}/{items.length} éléments prêts</span>
+        <span className="text-xs px-2.5 py-1 rounded-full bg-white border border-stone-200 text-stone-600">
+          {phaseEnCours.emoji} Étape en cours&nbsp;: <span className="font-semibold text-stone-800">{phaseEnCours.label}</span>
+        </span>
       </div>
-      <div className="h-2 bg-white rounded-full overflow-hidden mb-3 border border-stone-200">
-        <div className={`h-full ${pct >= 80 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-stone-400'}`} style={{ width: `${pct}%` }} />
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {items.map(it => (
-          <span key={it.label} className={`text-xs px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${it.ok ? 'bg-white border-emerald-200 text-emerald-700' : 'bg-white border-dashed border-stone-300 text-stone-400'}`}>
-            {it.ok ? <Check className="w-3 h-3" /> : <Circle className="w-3 h-3" />}
-            {it.label}{it.auto ? <span className="opacity-60"> (auto)</span> : null}
-          </span>
-        ))}
+
+      <div className="space-y-3">
+        {parPhase.map(ph => {
+          const complet = ph.pct === 100;
+          return (
+            <div key={ph.id} className={`rounded-lg border p-3 ${complet ? 'border-emerald-200 bg-emerald-50/40' : ph.id === phaseEnCours.id ? 'border-amber-300 bg-amber-50/40' : 'border-stone-200 bg-white'}`}>
+              <div className="flex items-center justify-between mb-1.5 gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span>{ph.emoji}</span>
+                  <span className="text-sm font-semibold text-stone-800">{ph.label}</span>
+                  {complet && <Check className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />}
+                </div>
+                <span className="text-xs text-stone-500 flex-shrink-0">{ph.d}/{ph.total}</span>
+              </div>
+              <div className="h-1.5 bg-stone-100 rounded-full overflow-hidden mb-2 border border-stone-200">
+                <div className={`h-full ${complet ? 'bg-emerald-500' : ph.pct >= 50 ? 'bg-amber-500' : 'bg-stone-400'}`} style={{ width: `${ph.pct}%` }} />
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {ph.its.map(it => (
+                  <span key={it.label} className={`text-[11px] px-2 py-0.5 rounded-full border inline-flex items-center gap-1 ${it.ok ? 'bg-white border-emerald-200 text-emerald-700' : 'bg-white border-dashed border-stone-300 text-stone-400'}`}>
+                    {it.ok ? <Check className="w-3 h-3" /> : <Circle className="w-3 h-3" />}
+                    {it.label}{it.auto ? <span className="opacity-60"> (auto)</span> : null}
+                  </span>
+                ))}
+              </div>
+              {ph.id === phaseEnCours.id && !complet && (
+                <p className="text-[11px] text-stone-500 mt-2 italic">{ph.hint}</p>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
