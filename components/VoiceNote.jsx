@@ -44,13 +44,15 @@ export default function VoiceNote({ entityType, entity, onSaved, compact = false
       const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
       if (blob.size < 800) { setBusy(false); return; } // rien d'exploitable
 
-      // 1) Transcription
+      // 1) Transcription (la route exige le token)
+      const { data: { session } } = await supabase.auth.getSession();
       const fd = new FormData();
       fd.append('audio', blob, 'note.webm');
+      fd.append('token', session?.access_token || '');
       const tr = await fetch('/api/transcribe', { method: 'POST', body: fd });
       const trj = await tr.json();
       const texte = (trj.text || '').trim();
-      if (!trj.ok || !texte) { alert("La transcription n'a rien renvoyé."); setBusy(false); return; }
+      if (!trj.ok || !texte) { alert(trj.error || "La transcription n'a rien renvoyé."); setBusy(false); return; }
 
       // 2) Enregistre la note dans l'historique
       const { data: { user } } = await supabase.auth.getUser();
