@@ -73,7 +73,9 @@ async function executeCreateMandat(data, userId, userInitials) {
     nb_chambres: typeof data.nb_chambres === 'number' ? data.nb_chambres : null,
     etage: typeof data.etage === 'number' ? data.etage : null,
     loyers_annuels: typeof data.loyers_annuels === 'number' ? data.loyers_annuels : 0,
-    statut: data.statut || 'Sourcing',
+    // L'IA peut proposer un statut hors liste (cf. bug « Contact » sur les clients) :
+    // on le ramène aux valeurs autorisées.
+    statut: ['Sourcing', 'Prospection', 'Mandat', 'Offre', 'Promesse', 'Acte', 'Perdu', 'Vendu par autres'].includes(data.statut) ? data.statut : 'Sourcing',
     commercialisation: data.commercialisation || 'Off-market',
     marche: data.marche || null,
     description: data.description || null,
@@ -85,6 +87,30 @@ async function executeCreateMandat(data, userId, userInitials) {
   const { data: inserted, error } = await supabaseAdmin
     .from('mandats').insert(row).select('id, nom').single();
   if (error) return { ok: false, error: error.message };
+
+  // Pilier 2 — Nouveau mandat : tâches de démarrage (comme en création manuelle).
+  // Le cadastre / la situation / les transports se récupèrent automatiquement à
+  // l'ouverture du mandat (AssetsMandatInline), inutile de les déclencher ici.
+  try {
+    const starters = [
+      { titre: "Réaliser / valider l'avis de valeur", jours: 3, priorite: 'Haute' },
+      { titre: 'Organiser la prise de photos du bien', jours: 5, priorite: 'Moyenne' },
+      { titre: "Rédiger et diffuser l'annonce", jours: 7, priorite: 'Moyenne' },
+      { titre: "Compléter le dossier (pièces et champs manquants)", jours: 5, priorite: 'Moyenne' },
+    ].map(a => {
+      const ech = new Date(); ech.setDate(ech.getDate() + a.jours);
+      return {
+        titre: a.titre, priorite: a.priorite, statut: 'À faire',
+        echeance: ech.toISOString().split('T')[0],
+        assigned_to_user_id: userId || null, created_by: userId || null,
+        lien_type: 'mandat', lien_id: inserted.id,
+      };
+    });
+    await supabaseAdmin.from('todos').insert(starters);
+  } catch (e) {
+    console.warn('[assistant/execute] tâches de démarrage non créées:', e.message);
+  }
+
   return { ok: true, result: { id: inserted.id, label: inserted.nom, type: 'mandat' } };
 }
 
