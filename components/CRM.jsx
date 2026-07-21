@@ -2635,7 +2635,7 @@ async function handleFolderImport(event, opts = {}) {
         nom: clientData.nom, prenom: clientData.prenom || null,
         societe: clientData.societe || null, tel: clientData.tel || null,
         email: clientData.email || null, typologie: 'Mandant',
-        created_by: user?.id, owner: data.owner || userInitials,         pourvoyeur_id: data.pourvoyeurId || null,         vendeur_id: data.vendeurId || null,
+        created_by: user?.id, owner: data.owner || userInitials,
       }).select().single();
       if (error || !created) { alert('Erreur création client : ' + (error?.message || 'inconnue')); return; }
       update('mandantClientId', created.id);
