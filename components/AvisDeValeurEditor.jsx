@@ -121,10 +121,60 @@ function ensureSchema(data) {
   return safe;
 }
 
+// Fusion « ne remplit que les vides » : on garde tout ce que Thomas a déjà saisi,
+// l'IA ne comble que les champs vides / à zéro / listes vides.
+function estVide(v) {
+  if (v == null) return true;
+  if (typeof v === 'string') return v.trim() === '';
+  if (typeof v === 'number') return v === 0;
+  if (Array.isArray(v)) return v.length === 0;
+  return false;
+}
+function mergePrefill(current, incoming) {
+  if (Array.isArray(current) || Array.isArray(incoming)) {
+    return (Array.isArray(current) && current.length > 0) ? current : (incoming || []);
+  }
+  if (current && typeof current === 'object' && incoming && typeof incoming === 'object') {
+    const out = { ...current };
+    for (const k of Object.keys(incoming)) {
+      out[k] = mergePrefill(current[k], incoming[k]);
+    }
+    return out;
+  }
+  return estVide(current) ? incoming : current;
+}
+
 export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
   const [data, setData] = useState(ensureSchema(mandat?.avisValeur || mandat?.avis_valeur));
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [prefilling, setPrefilling] = useState(false);
+
+  // Marché : le BtoC (habitation) masque les sections d'investissement.
+  const estB2C = (mandat?.marche || mandat?.marche) === 'b2c';
+
+  // Pré-remplissage IA : premier jet complet, adapté au marché. Ne remplace que
+  // les champs vides (on ne détruit pas ce que Thomas a déjà saisi).
+  async function handlePrefill() {
+    if (!mandat?.id) { alert('Enregistre d\'abord le mandat.'); return; }
+    setPrefilling(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/avis-valeur/prefill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: session?.access_token || '', mandatId: mandat.id }),
+      });
+      const j = await res.json();
+      if (!j.ok) { alert(j.error || 'Pré-remplissage impossible.'); setPrefilling(false); return; }
+      // Fusionne : on garde ce qui est déjà rempli, l'IA complète les vides.
+      setData(prev => mergePrefill(prev, ensureSchema(j.avis)));
+    } catch (e) {
+      alert('Erreur : ' + e.message);
+    } finally {
+      setPrefilling(false);
+    }
+  }
 
   // 4 dépliées par défaut : SWOT, méthodes, reconversion, préconisation
   // 4 repliées : localisation, locatif, caractéristiques, comparables
@@ -264,11 +314,20 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
             </h2>
             <p className="text-xs text-stone-500 mt-0.5">
               {mandat?.adresse || mandat?.nom || 'Mandat'} · {mandat?.surface ? `${mandat.surface} m²` : ''}
+              <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-cream-100 text-stone-600 border border-cream-dark">{estB2C ? 'Habitation (BtoC)' : 'Investissement (BtoB)'}</span>
             </p>
           </div>
-          <button onClick={onClose} className="text-stone-500 hover:text-stone-900">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={handlePrefill} disabled={prefilling || saving || generating}
+              className="flex items-center gap-2 px-3 py-2 bg-gradient-to-br from-sage-100 to-sage-200 text-sage-darker rounded-lg text-sm hover:from-sage-200 hover:to-sage-300 font-medium border border-sage-light disabled:opacity-50"
+              title="Générer un premier jet de l'avis à partir de la fiche mandat (ne remplace pas ce qui est déjà saisi)">
+              {prefilling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              {prefilling ? 'Rédaction…' : 'Pré-remplir avec l\'IA'}
+            </button>
+            <button onClick={onClose} className="text-stone-500 hover:text-stone-900">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* BODY */}
@@ -307,7 +366,8 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
             </div>
           </Section>
 
-          {/* ─── 2. SITUATION LOCATIVE (repliée, lecture auto) ─── */}
+          {/* ─── 2. SITUATION LOCATIVE (repliée, lecture auto) — BtoB seulement ─── */}
+          {!estB2C && (
           <Section
             open={openSections.locatif} onToggle={() => toggle('locatif')}
             title="Situation locative" icon={<Key className="w-4 h-4" />}
@@ -368,6 +428,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
               </div>
             )}
           </Section>
+          )}
 
           {/* ─── 3. CARACTÉRISTIQUES (repliée) ─── */}
           <Section
@@ -545,7 +606,8 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                 </div>
               </div>
 
-              {/* Méthode par capitalisation */}
+              {/* Méthode par capitalisation — BtoB seulement */}
+              {!estB2C && (
               <div className="bg-white rounded-lg border border-stone-200 p-3">
                 <p className="text-xs font-medium text-stone-700 mb-2">💰 Par capitalisation des revenus</p>
                 <div>
@@ -608,10 +670,12 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                     placeholder="Ex: Zone d'atterrissage commercialisation : 27 M€ à 29 M€ — Atterrissage probable : 24,5 M€ à 27 M€..." />
                 </div>
               </div>
+              )}
             </div>
           </Section>
 
-          {/* ─── 7. POTENTIEL DE RECONVERSION (dépliée) ─── */}
+          {/* ─── 7. POTENTIEL DE RECONVERSION (dépliée) — BtoB seulement ─── */}
+          {!estB2C && (
           <Section
             open={openSections.reconversion} onToggle={() => toggle('reconversion')}
             title="Potentiel de reconversion" icon={<Repeat className="w-4 h-4" />}
@@ -674,6 +738,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
               />
             </div>
           </Section>
+          )}
 
           {/* ─── 8. PRÉCONISATION & 3 PRIX (dépliée) ─── */}
           <Section
