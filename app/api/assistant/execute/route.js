@@ -148,7 +148,9 @@ async function executeCreateClient(data, userId, userInitials) {
     sous_typologie: data.sous_typologie || null,
     marche: data.marche || null,
     maturite: data.maturite || 'Moyen',
-    statut: data.statut || 'Actif',
+    // L'IA peut proposer un statut libre (ex. « Contact ») refusé par la contrainte
+    // clients_statut_check : on le ramène aux valeurs autorisées.
+    statut: ['Actif', 'Inactif', 'Mandant'].includes(data.statut) ? data.statut : 'Actif',
     origine: data.origine || 'Apporteur',
     budget_min: typeof data.budget_min === 'number' ? data.budget_min : 0,
     budget_max: typeof data.budget_max === 'number' ? data.budget_max : 0,
@@ -161,6 +163,24 @@ async function executeCreateClient(data, userId, userInitials) {
     .from('clients').insert(row).select('id, prenom, nom, societe').single();
   if (error) return { ok: false, error: error.message };
   const label = [inserted.prenom, inserted.nom].filter(Boolean).join(' ') || inserted.societe || 'Nouveau client';
+
+  // Cohérence pilier 2 : tout nouveau contact est « à traiter » → tâche urgente
+  // de qualification (comme lors d'une création manuelle).
+  try {
+    await supabaseAdmin.from('todos').insert({
+      titre: `URGENT — Appeler ${label} : qualifier le besoin (budget, stratégie)`,
+      priorite: 'Haute',
+      statut: 'À faire',
+      echeance: new Date().toISOString().split('T')[0],
+      assigned_to_user_id: userId || null,
+      created_by: userId || null,
+      lien_type: 'client',
+      lien_id: inserted.id,
+    });
+  } catch (e) {
+    console.warn('[assistant/execute] tâche de qualification non créée:', e.message);
+  }
+
   return { ok: true, result: { id: inserted.id, label, type: 'client' } };
 }
 

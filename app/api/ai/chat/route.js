@@ -302,8 +302,9 @@ const tools = [
       email: { type: 'string' }, tel: { type: 'string' },
       typologie: { type: 'string', enum: ['Foncières', 'Marchands de biens', 'Particuliers', 'Fonds', 'Promoteurs', 'Family Office'] },
       sous_typologie: { type: 'string', enum: ['Privées', 'Publiques'] },
-      marche: { type: 'string', enum: ['b2b', 'b2c'] }, maturite: { type: 'string' },
-      statut: { type: 'string' }, origine: { type: 'string' }, budget_min: { type: 'number' },
+      marche: { type: 'string', enum: ['b2b', 'b2c'] },
+      maturite: { type: 'string', enum: ['Chaud', 'Moyen', 'Tiède', 'Froid'] },
+      statut: { type: 'string', enum: ['Actif', 'Inactif', 'Mandant'] }, origine: { type: 'string' }, budget_min: { type: 'number' },
       budget_max: { type: 'number' }, rendement_min: { type: 'number' }, details_recherche: { type: 'string' } }, required: ['nom'] } },
   { name: 'propose_create_task', description: 'PROPOSE la création d\'une tâche todo. Ne crée RIEN, l\'utilisateur valide.',
     input_schema: { type: 'object', properties: {
