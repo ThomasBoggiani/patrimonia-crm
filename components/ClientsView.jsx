@@ -1044,6 +1044,48 @@ export function ClientForm({ client, onSave, onClose, allProfiles = [] }) {
     };
   });
 
+  // Collage d'annonce (Leboncoin, SeLoger, mail…) → pré-remplissage par l'IA
+  const [collage, setCollage] = useState('');
+  const [analyse, setAnalyse] = useState(false);
+  const [champsRemplis, setChampsRemplis] = useState(new Set());
+
+  async function analyserCollage() {
+    if (collage.trim().length < 15) return;
+    setAnalyse(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/clients/extract-from-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: session?.access_token, texte: collage }),
+      });
+      const json = await res.json();
+      if (!json.ok) { alert(json.error || "L'analyse a échoué."); return; }
+
+      const remplis = new Set();
+      setData(prev => {
+        const next = { ...prev };
+        for (const [cle, valeur] of Object.entries(json.champs || {})) {
+          const vide = Array.isArray(valeur) ? valeur.length === 0 : (valeur === '' || valeur === 0);
+          if (vide) continue;
+          // On n'écrase jamais ce qui est déjà saisi
+          const actuel = next[cle];
+          const actuelVide = Array.isArray(actuel) ? !actuel?.length : (!actuel || actuel === 0);
+          if (!actuelVide) continue;
+          next[cle] = valeur;
+          remplis.add(cle);
+        }
+        return next;
+      });
+      setChampsRemplis(remplis);
+      if (remplis.size === 0) alert("Rien de nouveau à récupérer dans ce texte.");
+    } catch (e) {
+      alert('Erreur : ' + e.message);
+    } finally {
+      setAnalyse(false);
+    }
+  }
+
   useEffect(() => {
     async function loadCategorie() {
       const contactId = client?.contactId || client?.contact_id;
@@ -1073,6 +1115,37 @@ export function ClientForm({ client, onSave, onClose, allProfiles = [] }) {
         </div>
 
         <div className="p-6 space-y-4">
+          {!client && (
+            <div className="bg-sage-50 border border-sage-light rounded-xl p-4">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <div>
+                  <div className="text-sm font-medium text-stone-800">Créer depuis une annonce</div>
+                  <div className="text-xs text-stone-500">Colle une annonce Leboncoin / SeLoger, un mail ou tes notes d'appel : les champs se remplissent seuls.</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={analyserCollage}
+                  disabled={analyse || collage.trim().length < 15}
+                  className="px-3 py-1.5 bg-stone-900 text-white rounded-lg text-sm hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5 flex-shrink-0"
+                >
+                  {analyse ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  {analyse ? 'Analyse…' : 'Analyser'}
+                </button>
+              </div>
+              <textarea
+                value={collage}
+                onChange={e => setCollage(e.target.value)}
+                rows={3}
+                placeholder="Colle ici le texte de l'annonce ou du message…"
+                className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900"
+              />
+              {champsRemplis.size > 0 && (
+                <div className="text-xs text-emerald-700 mt-2">
+                  {champsRemplis.size} champ(s) pré-rempli(s) — vérifie avant d'enregistrer.
+                </div>
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Prénom"><input type="text" value={data.prenom || ''} onChange={e => update('prenom', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
             <Field label="Nom"><input type="text" value={data.nom || ''} onChange={e => update('nom', e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" /></Field>
@@ -1149,8 +1222,10 @@ export function ClientForm({ client, onSave, onClose, allProfiles = [] }) {
               </select>
             </Field>
           </div>
+          {/* Lié à `details_recherche` : le champ `notes` n'existait pas en base,
+              ce qui était saisi ici était silencieusement perdu à l'enregistrement. */}
           <Field label="Notes">
-            <textarea value={data.notes || ''} onChange={e => update('notes', e.target.value)} rows={3} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" />
+            <textarea value={data.detailsRecherche || ''} onChange={e => update('detailsRecherche', e.target.value)} rows={3} placeholder="Budget, stratégie, motivation, délai…" className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900" />
           </Field>
         </div>
 
