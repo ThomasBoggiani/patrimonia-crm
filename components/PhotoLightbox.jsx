@@ -67,11 +67,11 @@ export default function PhotoLightbox({ photos = [], initialIndex = 0, mandatNom
       )}
 
       {/* Main image */}
-      <div className="flex-1 flex items-center justify-center px-4 relative" onClick={(e) => e.stopPropagation()}>
+      <div className="flex-1 min-h-0 flex items-center justify-center px-4 py-2 relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <img
           src={currentUrl}
           alt={`Photo ${currentIdx + 1}`}
-          className={`max-w-full max-h-full object-contain ${isFullscreen ? 'cursor-zoom-out' : ''}`}
+          className={`max-w-full max-h-full w-auto h-auto object-contain ${isFullscreen ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}
           onClick={toggleFullscreen}
         />
 
