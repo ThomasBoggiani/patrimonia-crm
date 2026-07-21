@@ -73,6 +73,34 @@ export function DealsTab({ deals, reload, mandats, clients }) {
     const update = { statut };
     if (statut === 'Envoyé' && !deal.dateEnvoi) update.date_envoi = new Date().toISOString().split('T')[0];
     await supabase.from('deals').update(update).eq('id', id);
+
+    // Pilier 2 — relance automatique aux étapes clés du pipeline (sur le prospect).
+    // Anti-doublon par client + intitulé ; les autres transitions ne créent rien.
+    try {
+      const relance =
+        statut === 'Visite' ? { titre: 'Confirmer et préparer la visite avec le prospect', jours: 1 } :
+        statut === 'Offre'  ? { titre: "Suivre l'offre du prospect (relancer sous 48 h)", jours: 2 } :
+        null;
+      const clientId = deal?.clientId || deal?.client_id;
+      if (relance && clientId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        const { data: existe } = await supabase.from('todos').select('id')
+          .eq('lien_type', 'client').eq('lien_id', clientId)
+          .eq('titre', relance.titre).neq('statut', 'Terminé').maybeSingle();
+        if (!existe) {
+          const ech = new Date(); ech.setDate(ech.getDate() + relance.jours);
+          await supabase.from('todos').insert({
+            titre: relance.titre, priorite: 'Haute', statut: 'À faire',
+            echeance: ech.toISOString().split('T')[0],
+            assigned_to_user_id: user?.id || null, created_by: user?.id || null,
+            lien_type: 'client', lien_id: clientId,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[deals] relance non créée:', e.message);
+    }
+
     reload();
   };
 
