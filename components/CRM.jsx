@@ -1573,11 +1573,49 @@ function ClientSelector({ clients, mandats, value, onChange, onCreateNew }) {
 }
 
 // Aide à la description : dicter au micro (Whisper) + rédiger le pitch (IA).
+// Estimation IA d'un prix net vendeur à partir des champs du bien.
+function EstimerBien({ data, onEstimate }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+
+  async function estimer() {
+    setBusy(true); setNote('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/mandats/estimate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: session?.access_token || '', mandat: data }),
+      });
+      const j = await res.json();
+      if (!j.ok) { setNote(j.error || "L'estimation n'a rien renvoyé."); setBusy(false); return; }
+      if (j.prixNetVendeur) onEstimate(j.prixNetVendeur);
+      setNote(j.commentaire || '');
+    } catch (e) {
+      setNote('Erreur : ' + e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-stretch">
+      <button type="button" onClick={estimer} disabled={busy}
+        className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs whitespace-nowrap bg-gradient-to-br from-sage-100 to-sage-200 text-sage-darker border border-sage-light hover:from-sage-200 hover:to-sage-300 disabled:opacity-50">
+        {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Estimer (IA)
+      </button>
+      {note && <span className="text-[11px] text-stone-500 mt-1 max-w-[220px]">{note}</span>}
+    </div>
+  );
+}
+
 function DescriptionAssist({ value, onChange, mandat, onExtractFields }) {
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [liveText, setLiveText] = useState('');
   const mrRef = useRef(null);
   const chunksRef = useRef([]);
+  const recognitionRef = useRef(null);
 
   async function remplirChamps() {
     if (!value || value.trim().length < 10) { alert('Écris ou dicte quelques informations d\'abord.'); return; }
@@ -1603,10 +1641,29 @@ function DescriptionAssist({ value, onChange, mandat, onExtractFields }) {
       chunksRef.current = [];
       mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = () => { stream.getTracks().forEach(t => t.stop()); transcrire(); };
-      mrRef.current = mr; mr.start(); setRecording(true);
+      mrRef.current = mr; mr.start(); setRecording(true); setLiveText('');
+      // Retour en direct : transcription provisoire du navigateur pendant qu'on parle.
+      const SR = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+      if (SR) {
+        try {
+          const rec = new SR();
+          rec.lang = 'fr-FR'; rec.continuous = true; rec.interimResults = true;
+          rec.onresult = (ev) => {
+            let interim = '';
+            for (let i = ev.resultIndex; i < ev.results.length; i++) interim += ev.results[i][0].transcript;
+            setLiveText(interim);
+          };
+          rec.onerror = () => {};
+          recognitionRef.current = rec; rec.start();
+        } catch { /* pas de reconnaissance live : la transcription finale (Whisper) reste */ }
+      }
     } catch (e) { alert('Micro indisponible : ' + e.message); }
   }
-  function stopRec() { if (mrRef.current && mrRef.current.state !== 'inactive') mrRef.current.stop(); setRecording(false); }
+  function stopRec() {
+    if (mrRef.current && mrRef.current.state !== 'inactive') mrRef.current.stop();
+    if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch {} recognitionRef.current = null; }
+    setRecording(false); setLiveText('');
+  }
 
   async function transcrire() {
     setBusy(true);
@@ -1641,25 +1698,36 @@ function DescriptionAssist({ value, onChange, mandat, onExtractFields }) {
   }
 
   return (
-    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-      {recording ? (
-        <button type="button" onClick={stopRec} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-red-600 text-white hover:bg-red-700">
-          <Square className="w-3 h-3 fill-current" /> Arrêter
+    <div className="mb-1.5">
+      <div className="flex items-center gap-2 flex-wrap">
+        {recording ? (
+          <button type="button" onClick={stopRec} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-red-600 text-white hover:bg-red-700">
+            <span className="w-2 h-2 rounded-full bg-white animate-pulse" /> Arrêter
+          </button>
+        ) : (
+          <button type="button" onClick={startRec} disabled={busy} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-white border border-sage-light text-sage-darker hover:bg-sage-50 disabled:opacity-50">
+            <Mic className="w-3 h-3" /> Dicter
+          </button>
+        )}
+        <button type="button" onClick={generer} disabled={busy || recording} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-gradient-to-br from-sage-100 to-sage-200 text-sage-darker border border-sage-light hover:from-sage-200 hover:to-sage-300 disabled:opacity-50">
+          {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Rédiger le pitch (IA)
         </button>
-      ) : (
-        <button type="button" onClick={startRec} disabled={busy} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-white border border-sage-light text-sage-darker hover:bg-sage-50 disabled:opacity-50">
-          <Mic className="w-3 h-3" /> Dicter
-        </button>
+        {onExtractFields && (
+          <button type="button" onClick={remplirChamps} disabled={busy || recording} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-white border border-sage-light text-sage-darker hover:bg-sage-50 disabled:opacity-50">
+            {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />} Remplir les champs (IA)
+          </button>
+        )}
+        {!recording && <span className="text-[11px] text-stone-400">Dicte, puis remplis les champs à droite ou laisse l'IA rédiger le pitch.</span>}
+      </div>
+      {recording && (
+        <div className="mt-2 p-2.5 rounded-lg border border-red-200 bg-red-50 flex items-start gap-2">
+          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse mt-1.5 flex-shrink-0" />
+          <div className="min-w-0">
+            <div className="text-[11px] font-medium text-red-700 mb-0.5">Enregistrement en cours — parle, puis clique « Arrêter »</div>
+            <div className="text-sm text-stone-700 italic">{liveText || 'À l\'écoute…'}</div>
+          </div>
+        </div>
       )}
-      <button type="button" onClick={generer} disabled={busy || recording} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-gradient-to-br from-sage-100 to-sage-200 text-sage-darker border border-sage-light hover:from-sage-200 hover:to-sage-300 disabled:opacity-50">
-        {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Rédiger le pitch (IA)
-      </button>
-      {onExtractFields && (
-        <button type="button" onClick={remplirChamps} disabled={busy || recording} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-white border border-sage-light text-sage-darker hover:bg-sage-50 disabled:opacity-50">
-          {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />} Remplir les champs (IA)
-        </button>
-      )}
-      <span className="text-[11px] text-stone-400">Dicte, puis remplis les champs à droite ou laisse l'IA rédiger le pitch.</span>
     </div>
   );
 }
@@ -1883,7 +1951,7 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
     sousType: mandat.sousType || '',
     marche: mandat.marche || (['Appartement', 'Maison', 'Hôtel particulier'].includes(mandat.type) ? 'b2c' : 'b2b'),
   }) || {
-    nom: '', adresse: '', ville: '', marche: 'b2b', type: '', sousType: '', prix: 0, prixM2: 0,
+    nom: '', adresse: '', ville: '', marche: 'b2b', type: '', sousType: '', prix: 0, prixNetVendeur: 0, prixM2: 0,
     surface: 0, loyersAnnuels: 0, rendement: 0, nbLots: 1,
     commercialisation: 'Off-market', dateSignature: null,
     statut: 'Sourcing', owner: userInitials, description: '',
@@ -2081,7 +2149,7 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
     sous_type: 'sousType', surface: 'surface',
     nb_pieces: 'nbPieces', nb_chambres: 'nbChambres', etage: 'etage',
     annee_construction: 'anneeConstruction',
-    prix: 'prix', prix_net_vendeur: 'prix', prix_m2: 'prixM2',
+    prix: 'prix', prix_net_vendeur: 'prixNetVendeur', prix_m2: 'prixM2',
     honoraires_charge: 'honorairesCharge', honoraires_taux: 'honorairesTaux', honoraires_montant: 'honorairesMontant',     pourvoyeur_id: 'pourvoyeurId', vendeur_id: 'vendeurId',
     loyers_annuels: 'loyersAnnuels', rendement: 'rendement', rendement_optimise: 'rendementOptimise',
     charges_annuelles: 'chargesAnnuelles', taxe_fonciere: 'taxeFonciere',
@@ -2697,6 +2765,15 @@ async function handleFolderImport(event, opts = {}) {
                   </select>
                 </Field>
                 <Field label="&Eacute;ch&eacute;ance"><input type="date" value={data.mandatDateEcheance || ''} onChange={e => update('mandatDateEcheance', e.target.value)} className={fieldClass('mandatDateEcheance')} /></Field>
+              </div>
+              <div className="rounded-lg border border-sage-light bg-sage-50/50 p-3">
+                <div className="flex items-end gap-3">
+                  <Field label="Prix demandé — net vendeur (&euro;)" className="flex-1">
+                    <input type="number" value={data.prixNetVendeur || ''} onChange={e => update('prixNetVendeur', +e.target.value)} className={fieldClass('prixNetVendeur')} placeholder="Souhait du vendeur / estimation" />
+                  </Field>
+                  <EstimerBien data={data} onEstimate={(v) => update('prixNetVendeur', v)} />
+                </div>
+                <p className="text-[11px] text-stone-500 mt-1.5">Prix hors honoraires, utile pour une estimation. Le prix affiché reste le prix FAI ci-dessous.</p>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <Field label="Prix frais d'agence inclus (&euro;)"><input type="number" value={data.prix} onChange={e => { const prix = +e.target.value; setData(d => ({ ...d, prix, prixM2: (+d.surface) ? Math.round(prix / (+d.surface)) : d.prixM2, honorairesMontant: (+d.honorairesTaux) ? Math.round(prix * (+d.honorairesTaux) / 100) : d.honorairesMontant })); }} className={fieldClass('prix')} placeholder="Honoraires inclus" /></Field>
