@@ -68,6 +68,8 @@ export default function AvisPage() {
           background:#294029;color:#F5EDE5;padding:8px 16px}
         .avis-scaler{padding:56px 0 60px;display:flex;justify-content:center}
         .avis-doc{width:1920px;zoom:var(--z,1)}
+        /* Conserve TOUTES les couleurs de fond à l'impression PDF (sinon Chrome les supprime). */
+        .avis-doc, .avis-doc *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}
         .avis-doc section{width:1920px;height:1080px;position:relative;margin:0 auto 24px;box-shadow:0 10px 40px rgba(0,0,0,.35)}
         .avis-msg{min-height:100vh;display:flex;align-items:center;justify-content:center;color:#F5EDE5;
           font-family:'Albert Sans',system-ui,sans-serif;font-size:16px;padding:24px;text-align:center}

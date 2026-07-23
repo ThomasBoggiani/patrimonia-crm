@@ -196,9 +196,11 @@ export async function POST(request) {
     // pas encore publié, il renvoie 404 et est ignoré proprement) et on descend.
     // On interroge une année de plus que demandé, pour toujours obtenir la
     // profondeur voulue même quand l'année la plus récente n'existe pas encore.
-    const anneeMax = new Date().getFullYear();
+    // On part de l'année SUIVANTE (elle 404 proprement si non publiée) pour
+    // capter la donnée la plus récente même si l'horloge serveur est en retard.
+    const anneeMax = new Date().getFullYear() + 1;
     const anneesList = [];
-    for (let y = anneeMax; y > anneeMax - (annees + 1); y--) anneesList.push(y);
+    for (let y = anneeMax; y > anneeMax - (annees + 2); y--) anneesList.push(y);
 
     const dep = geo.citycode.slice(0, 2) === '97' ? geo.citycode.slice(0, 3) : geo.citycode.slice(0, 2);
     const batches = await Promise.all(anneesList.map((y, i) => ventesCommuneAnnee(dep, geo.citycode, y, i)));
