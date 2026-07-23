@@ -331,7 +331,7 @@ const tools = [
   { name: 'propose_send_email', description: 'PROPOSE l\'envoi d\'un email simple. Ne fait RIEN, l\'utilisateur valide.',
     input_schema: { type: 'object', properties: {
       to: { type: 'string' }, subject: { type: 'string' }, body: { type: 'string' }, client_id: { type: 'string' } }, required: ['to', 'subject', 'body'] } },
-  { name: 'propose_add_photos', description: 'PROPOSE d\'ajouter à la galerie photo du BIEN (mandat courant) les PHOTOS jointes à ce message. À utiliser quand les pièces jointes sont des PHOTOS du bien (pièces, façade, cour, vues), PAS des documents. Ne fait RIEN, l\'utilisateur valide. N\'invente aucune URL : le système attache automatiquement les photos réellement jointes à ce message. Fournis simplement l\'ID du mandat courant.',
+  { name: 'propose_add_photos', description: 'PROPOSE d\'ajouter des PHOTOS à la galerie du BIEN (mandat courant). Deux cas : (1) l\'utilisateur a joint des PHOTOS (fichiers image) ; (2) l\'utilisateur a joint une FICHE PDF (ex. annonce d\'un confrère) contenant des photos → le système extrait automatiquement les photos incrustées dans le PDF. Utilise cet outil dès que l\'utilisateur veut récupérer des photos, y compris depuis un PDF. Ne fait RIEN, l\'utilisateur valide. N\'invente aucune URL : le système attache automatiquement les photos réellement présentes. Fournis simplement l\'ID du mandat courant.',
     input_schema: { type: 'object', properties: {
       mandat_id: { type: 'string', description: 'ID du mandat courant (présent dans le contexte).' } }, required: ['mandat_id'] } },
   { name: 'propose_send_plaquette', description: 'PROPOSE l\'envoi d\'une plaquette PDF d\'un mandat à un client. Ne fait RIEN, l\'utilisateur valide. IMPORTANT : tu DOIS rédiger un custom_message COMPLET et auto-suffisant (jamais vide), car ce message constituera l\'INTÉGRALITÉ du corps de l\'email (seule la signature officielle de l\'agence sera ajoutée automatiquement après). Le message doit, dans le ton de voix du commercial : (1) saluer correctement le destinataire (utilise « Bonjour » + le nom ; n\'invente PAS la civilité Madame/Monsieur si tu n\'es pas sûr du genre) ; (2) présenter brièvement le bien et indiquer que la plaquette est jointe ; (3) inclure vers la fin une courte phrase invitant les professionnels de l\'immobilier et investisseurs à remplir le questionnaire (présent dans la signature) pour recevoir des opportunités off-market ciblées ; (4) se terminer par la formule de clôture du commercial. Ne rédige PAS toi-même le bloc de signature officielle (nom/coordonnées) : il est ajouté automatiquement.',
@@ -488,26 +488,62 @@ function buildProposeUpdateMandat(args) {
 }
 
 // Le modèle ne connaît pas les chemins des PJ : le système injecte les vraies
-// photos jointes à ce message (ctx.imageAttachments). L'argument mandat_id sert
-// juste à cibler le bon bien.
-function buildProposeAddPhotos(args, ctx) {
-  const imgs = (ctx && Array.isArray(ctx.imageAttachments)) ? ctx.imageAttachments : [];
-  if (imgs.length === 0) {
-    return { error: "Aucune photo (image) n'est jointe à ce message : impossible d'ajouter des photos." };
-  }
+// photos jointes à ce message (ctx.attachments). Deux sources possibles :
+//   - fichiers image joints → ajoutés directement ;
+//   - PHOTOS incrustées dans un PDF joint → extraites via mupdf (au mieux) puis
+//     déposées dans le bucket temporaire, comme des images ordinaires.
+// L'argument mandat_id sert juste à cibler le bon bien.
+async function buildProposeAddPhotos(args, ctx) {
+  const atts = (ctx && Array.isArray(ctx.attachments)) ? ctx.attachments : [];
   const mandatId = args.mandat_id || (ctx && ctx.entityId) || null;
   if (!mandatId) return { error: 'ID du mandat manquant.' };
-  const photos = imgs
-    .map(a => ({ storagePath: a.storagePath, name: a.name || null, type: a.type || null }))
-    .filter(p => p.storagePath);
-  if (photos.length === 0) return { error: 'Chemins des photos introuvables (storagePath manquant).' };
-  const names = imgs.map(a => a.name).filter(Boolean).join(', ');
+
+  const photos = [];       // { storagePath, name, type } dans assistant-attachments
+  const warnings = [];
+
+  // 1) Fichiers image joints directement
+  for (const a of atts) {
+    if (a && a.storagePath && String(a.type || '').startsWith('image/')) {
+      photos.push({ storagePath: a.storagePath, name: a.name || null, type: a.type });
+    }
+  }
+
+  // 2) Photos incrustées dans les PDF joints → extraction (au mieux)
+  const pdfs = atts.filter(a => a && a.storagePath && a.type === 'application/pdf');
+  for (const pdf of pdfs) {
+    try {
+      const { data: blob, error: dlErr } = await supabaseAdmin.storage
+        .from('assistant-attachments').download(pdf.storagePath);
+      if (dlErr || !blob) { warnings.push(`« ${pdf.name || 'document'} » illisible`); continue; }
+      const buf = Buffer.from(await blob.arrayBuffer());
+      const imgs = await extractImagesFromPdf(buf);
+      if (imgs.length === 0) { warnings.push(`aucune photo extractible dans « ${pdf.name || 'document'} »`); continue; }
+      const base = String(pdf.name || 'pdf').replace(/\.pdf$/i, '');
+      let n = 0;
+      for (const img of imgs) {
+        n++;
+        const path = await uploadTempImage(img.data, 'image/png', `${n}.png`);
+        if (path) photos.push({ storagePath: path, name: `${base}-photo-${n}.png`, type: 'image/png' });
+      }
+    } catch (e) {
+      console.error('[propose_add_photos] extraction PDF:', e?.message);
+      warnings.push(`extraction impossible pour « ${pdf.name || 'document'} »`);
+    }
+  }
+
+  if (photos.length === 0) {
+    const why = warnings.length ? ' ' + warnings.join(' ; ') + '.' : '';
+    return { error: `Aucune photo à ajouter à la galerie.${why}` };
+  }
+
   const data = { mandat_id: mandatId, photos };
   const fields = [
-    { label: 'Photos', value: `${photos.length} photo(s)${names ? ' : ' + names : ''}` },
+    { label: 'Photos', value: `${photos.length} photo(s)` },
     { label: 'Mandat ID', value: mandatId },
   ];
-  return { proposed: true, type: 'add_photos', summary: `Ajouter ${photos.length} photo(s) à la galerie du bien`, fields, data };
+  const result = { proposed: true, type: 'add_photos', summary: `Ajouter ${photos.length} photo(s) à la galerie du bien`, fields, data };
+  if (warnings.length) result.warnings = `À noter : ${warnings.join(' ; ')}.`;
+  return result;
 }
 
 function buildProposeUpdateClient(args) {
@@ -550,7 +586,7 @@ async function executeTool(name, args, ctx) {
     case 'propose_create_interaction': return buildProposeCreateInteraction(args);
     case 'propose_update_mandat': return buildProposeUpdateMandat(args);
     case 'propose_update_client': return buildProposeUpdateClient(args);
-    case 'propose_add_photos': return buildProposeAddPhotos(args, ctx);
+    case 'propose_add_photos': return await buildProposeAddPhotos(args, ctx);
     case 'propose_send_email': return buildProposeSendEmail(args);
     case 'propose_send_plaquette': return buildProposeSendPlaquette(args);
     default: return { error: `Outil inconnu : ${name}` };
@@ -621,7 +657,8 @@ ACTIONS (création / modification / envoi)
 - NE DEMANDE JAMAIS "veux-tu confirmer ?" : la carte EST la confirmation. Propose directement via l'outil.
 - Si des champs manquent, ne bloque pas : propose quand même et signale après ce qui serait utile à compléter.
 - Pour modifier le mandat ou le client COURANT, utilise son ID (présent dans le contexte ci-dessus) avec propose_update_mandat / propose_update_client.
-- PIÈCES JOINTES : si l'utilisateur joint des PHOTOS d'un bien (pièces, façade, vues), propose de les ranger dans la galerie avec propose_add_photos (mandat courant). Si ce sont des DOCUMENTS (mandat, DPE, plan, annonce, diagnostic), extrais les informations et propose propose_update_mandat. Distingue photo vs document d'après le contenu visible.
+- PIÈCES JOINTES : si l'utilisateur joint des PHOTOS d'un bien (pièces, façade, vues), propose de les ranger dans la galerie avec propose_add_photos (mandat courant). Si ce sont des DOCUMENTS (mandat, DPE, plan, annonce, diagnostic), extrais les informations et propose propose_update_mandat.
+- CAS FICHE PDF D'UN CONFRÈRE (contient à la fois des infos ET des photos) : dans le MÊME message, appelle DEUX outils : propose_update_mandat (avec les infos extraites : surface, prix, DPE, description…) ET propose_add_photos (pour récupérer les photos incrustées dans le PDF). Deux cartes de validation s'afficheront, l'utilisateur valide chacune indépendamment. Fais-le sur ce tour-ci, car le PDF n'est disponible que sur le message où il est joint.
 
 RÉFÉRENTIELS MÉTIER
 - Statut mandat : Sourcing, Analyse, Mandat signé, Commercialisation, Offre, Promesse, Acte, Vendu par autres, Perdu.
@@ -690,6 +727,75 @@ async function buildAttachmentBlocks(atts) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// EXTRACTION DES PHOTOS INCRUSTÉES DANS UN PDF (au mieux, via mupdf)
+// Utilisé pour importer les photos d'une fiche PDF de confrère dans la
+// galerie du bien. On parcourt les objets du PDF, on garde les flux image
+// suffisamment grands (on ignore logos/icônes), et on les rend en PNG.
+// Tout est fortement protégé : en cas d'échec, on renvoie [] (0 photo).
+// ═══════════════════════════════════════════════════════════════════
+const MIN_PHOTO_DIM = 300;          // px : en-dessous = logo/pictogramme → ignoré
+const MAX_EXTRACTED_PHOTOS = 40;    // sécurité anti-PDF géant
+
+async function extractImagesFromPdf(buffer) {
+  let mupdf;
+  try { mupdf = await import('mupdf'); } catch (e) { console.error('[extractImagesFromPdf] mupdf indisponible:', e?.message); return []; }
+  let pdf;
+  try {
+    const doc = mupdf.Document.openDocument(buffer, 'application/pdf');
+    pdf = (doc && typeof doc.asPDF === 'function') ? (doc.asPDF() || doc) : doc;
+  } catch (e) { console.error('[extractImagesFromPdf] ouverture:', e?.message); return []; }
+
+  const out = [];
+  let objCount = 0;
+  try { objCount = pdf.countObjects(); } catch { objCount = 0; }
+
+  for (let i = 1; i < objCount && out.length < MAX_EXTRACTED_PHOTOS; i++) {
+    let obj = null;
+    try { obj = pdf.newIndirect(i, 0); }
+    catch { try { obj = pdf.newIndirect(i); } catch { obj = null; } }
+    if (!obj) continue;
+
+    let resolved = obj;
+    try { if (typeof obj.resolve === 'function') resolved = obj.resolve(); } catch { resolved = obj; }
+
+    let isStream = false;
+    try { isStream = typeof resolved.isStream === 'function' ? resolved.isStream() : false; } catch { isStream = false; }
+    if (!isStream) continue;
+
+    let subName = '';
+    try {
+      const st = (resolved.get) ? resolved.get('Subtype') : null;
+      if (st) subName = (typeof st.asName === 'function') ? st.asName() : String(st);
+    } catch { subName = ''; }
+    if (!/Image/i.test(subName)) continue;
+
+    try {
+      const image = pdf.loadImage(resolved);
+      const w = (typeof image.getWidth === 'function') ? image.getWidth() : 0;
+      const h = (typeof image.getHeight === 'function') ? image.getHeight() : 0;
+      if (w < MIN_PHOTO_DIM || h < MIN_PHOTO_DIM) continue;   // logo/icône → ignoré
+      const pixmap = image.toPixmap();
+      const png = pixmap.asPNG();
+      out.push({ data: Buffer.from(png), width: w, height: h });
+    } catch {
+      // objet image non décodable (CMYK exotique, masque, etc.) → on saute
+      continue;
+    }
+  }
+  return out;
+}
+
+// Dépose un buffer image dans le bucket temporaire et renvoie son storagePath.
+async function uploadTempImage(buffer, contentType, baseName) {
+  const rand = Math.random().toString(36).slice(2, 8);
+  const path = `chat/extracted/${Date.now()}_${rand}_${baseName}`;
+  const { error } = await supabaseAdmin.storage
+    .from('assistant-attachments').upload(path, buffer, { contentType, upsert: false });
+  if (error) { console.error('[uploadTempImage]', error.message); return null; }
+  return path;
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // BOUCLE PRINCIPALE : streaming SSE + tool_use
 // ═══════════════════════════════════════════════════════════════════
 export async function POST(request) {
@@ -744,7 +850,8 @@ export async function POST(request) {
         ? `J'ai joint ${validAttachments.length} fichier(s) concernant ce bien. Regarde-les et agis selon leur NATURE :
 - Si ce sont des PHOTOS du bien (pièces, façade, cour, vues) → propose de les ranger dans la galerie avec l'outil propose_add_photos (utilise l'ID du mandat courant).
 - Si ce sont des DOCUMENTS (mandat, DPE, plan, annonce, diagnostic, tableau) → extrais les informations et propose de compléter la fiche avec propose_update_mandat (adresse, ville, code postal, surface, pièces/chambres/lots, étage, prix, loyers, charges, DPE, type, description). N'invente AUCUNE donnée absente.
-Si les deux sont présents, traite d'abord le plus pertinent et signale l'autre en fin de réponse. Termine par un court récapitulatif de ce que tu as vu.`
+- Si c'est une FICHE PDF de confrère (infos + photos) → dans le MÊME message, appelle propose_update_mandat (infos) ET propose_add_photos (photos du PDF) : deux cartes de validation s'afficheront.
+Termine par un court récapitulatif de ce que tu as vu.`
         : `J'ai joint ${validAttachments.length} document(s)/photo(s). Analyse-les et propose l'action la plus pertinente (création ou mise à jour) avec les informations fiables que tu peux en extraire. N'invente aucune donnée absente.`;
       userVisibleLabel = '(pièces jointes uniquement)';
     } else {
@@ -787,9 +894,10 @@ Si les deux sont présents, traite d'abord le plus pertinent et signale l'autre 
 
     const systemPrompt = await buildSystemPrompt(scope, entity, await loadTones(user.id));
 
-    // Contexte transmis aux outils : les images jointes (pour propose_add_photos)
+    // Contexte transmis aux outils : les PJ de ce tour (pour propose_add_photos,
+    // qui gère à la fois les images jointes et l'extraction des photos d'un PDF).
     const toolContext = {
-      imageAttachments: validAttachments.filter(a => String(a.type || '').startsWith('image/')),
+      attachments: validAttachments,
       entityId: entity_id,
       scope,
     };
@@ -800,7 +908,9 @@ Si les deux sont présents, traite d'abord le plus pertinent et signale l'autre 
       async start(controller) {
         const send = (obj) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
         let fullText = '';
-        let proposedAction = null;
+        // Plusieurs propositions possibles dans un même tour (ex. fiche PDF de
+        // confrère → carte "mise à jour fiche" + carte "ajout des photos").
+        const proposedActions = [];
 
         try {
           const MAX_ITER = 4;
@@ -824,16 +934,16 @@ Si les deux sont présents, traite d'abord le plus pertinent et signale l'autre 
               for (const block of toolUseBlocks) {
                 const result = await executeTool(block.name, block.input || {}, toolContext);
                 if (result?.proposed) {
-                  proposedAction = {
+                  proposedActions.push({
                     type: result.type, summary: result.summary, fields: result.fields,
                     data: result.data, warnings: result.warnings || null, missing: result.missing || null,
-                  };
+                  });
                 }
                 toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) });
               }
-              // Une proposition suffit : on l'envoie et on sort (évite le double appel)
-              if (proposedAction) {
-                send({ type: 'proposed_action', action: proposedAction });
+              // Dès qu'on a au moins une proposition, on les envoie toutes et on sort.
+              if (proposedActions.length > 0) {
+                for (const pa of proposedActions) send({ type: 'proposed_action', action: pa });
                 break;
               }
               apiMessages.push({ role: 'user', content: toolResults });
@@ -843,11 +953,11 @@ Si les deux sont présents, traite d'abord le plus pertinent et signale l'autre 
             break;
           }
 
-          // Sauvegarde l'historique
+          // Sauvegarde l'historique (compat : proposed_action = 1re proposition)
           const newHistory = [
             ...history,
             { role: 'user', content: userVisibleLabel, action: actionKey, ts: new Date().toISOString() },
-            { role: 'assistant', content: fullText, proposed_action: proposedAction, ts: new Date().toISOString() },
+            { role: 'assistant', content: fullText, proposed_action: proposedActions[0] || null, proposed_actions: proposedActions, ts: new Date().toISOString() },
           ];
           await saveConversation(scope, entity_id, user.id, newHistory);
 

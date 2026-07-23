@@ -125,7 +125,8 @@ const EMPTY_AVIS = {
     // Ajustement à la baisse justifié (discret) : facteurs de décote + note
     facteurs_decote: '', // ex : 1er étage sombre · charges 400 €/mois · marché baissier
     positionnement: '',  // ex : à positionner en fourchette basse
-    ajustements: [],     // [{label, pct}] curseurs ± % sur le prix au m²
+    ajustements: [],     // [{label, pct}] décote/surcote ± % sur le €/m² (±25 %)
+    annexes: [],         // [{type, surface, prorata}] annexes au prorata du €/m² habitable
   },
   // Méta
   date_estimation: new Date().toISOString().split('T')[0],
@@ -213,17 +214,28 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
   // Marché : le BtoC (habitation) masque les sections d'investissement.
   const estB2C = (mandat?.marche || mandat?.marche) === 'b2c';
 
-  // Les 3 prix DÉPENDENT des ajustements : prix de marché = médiane DVF × surface
-  // × (1 + Σ ajustements) ; plancher = −10 % ; coup de cœur = +10 %. Recalcul auto
-  // dès que les curseurs d'ajustement ou la médiane changent.
+  // Les 3 prix DÉCOULENT du calcul (méthode surface pondérée), identique à l'avis :
+  // référence €/m² = 70 % DVF + 30 % annonces → décote/surcote → habitable + annexes
+  // au prorata → prix de marché (arrondi 5 000 €), plancher −10 %, coup de cœur +10 %.
   useEffect(() => {
     const surf = +mandat?.surface || 0;
+    if (!surf) return;
     const med = +data.comparables.mediane_m2 || 0;
-    if (!surf || !med) return;
+    const annVals = (data.comparables.biens_similaires || [])
+      .map(b => (+b.prix && +b.surface) ? Math.round(+b.prix / +b.surface) : 0)
+      .filter(Boolean).sort((a, b) => a - b);
+    const annM2 = annVals.length ? annVals[Math.floor(annVals.length / 2)] : 0;
+    const refM2 = (med && annM2) ? Math.round(0.7 * med + 0.3 * annM2) : (med || annM2 || 0);
+    if (!refM2) return;
     const total = (data.preconisation.ajustements || []).reduce((s, a) => s + (+a.pct || 0), 0);
-    const central = Math.round(med * surf * (1 + total / 100));
-    const plancher = Math.round(central * 0.9);
-    const coup = Math.round(central * 1.1);
+    const habM2 = Math.round(refM2 * (1 + total / 100));
+    const habValue = Math.round(habM2 * surf);
+    const annexesTotal = (data.preconisation.annexes || []).reduce((s, a) =>
+      s + ((+a.surface > 0 && +a.prorata > 0) ? Math.round(+a.surface * (+a.prorata / 100) * habM2) : 0), 0);
+    const r5 = (v) => v ? Math.round(v / 5000) * 5000 : 0;
+    const central = r5(habValue + annexesTotal);
+    const plancher = r5(central * 0.9);
+    const coup = r5(central * 1.1);
     const p = data.preconisation;
     if (p.prix_marche !== central || p.prix_plancher !== plancher || p.prix_coup_de_coeur !== coup) {
       setData(prev => {
@@ -234,7 +246,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
         return n;
       });
     }
-  }, [data.preconisation.ajustements, data.comparables.mediane_m2, mandat?.surface]);
+  }, [data.preconisation.ajustements, data.preconisation.annexes, data.comparables.mediane_m2, data.comparables.biens_similaires, mandat?.surface]);
 
   // Pré-remplissage IA : premier jet complet, adapté au marché. Ne remplace que
   // les champs vides (on ne détruit pas ce que Thomas a déjà saisi).
@@ -1220,7 +1232,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
 
               {/* Ajustement à la baisse justifié — pour positionner en fourchette basse */}
               <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 space-y-2">
-                <div className="text-[11px] font-semibold text-amber-800 uppercase tracking-wide">Ajustement / décote (discret)</div>
+                <div className="text-[11px] font-semibold text-amber-800 uppercase tracking-wide">Décote / surcote (assumée, ±25 %)</div>
 
                 {/* Curseurs ± % sur le prix au m² */}
                 {(() => {
@@ -1239,7 +1251,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                         <div key={i} className="mb-2 pb-2 border-b border-amber-100 last:border-0">
                           <div className="flex items-center gap-2">
                             <input value={a.label || ''} onChange={e => upd(i, 'label', e.target.value)} placeholder="Ex : 1er étage sombre" className="w-44 px-2 py-1 text-xs border border-stone-200 rounded" />
-                            <input type="range" min="-25" max="15" step="1" value={a.pct || 0} onChange={e => upd(i, 'pct', +e.target.value)} className="flex-1 accent-sage-dark" />
+                            <input type="range" min="-25" max="25" step="1" value={a.pct || 0} onChange={e => upd(i, 'pct', +e.target.value)} className="flex-1 accent-sage-dark" />
                             <span className={`w-14 text-right text-sm font-semibold tabular-nums ${(+a.pct || 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{(+a.pct || 0) > 0 ? '+' : ''}{a.pct || 0} %</span>
                             <button type="button" onClick={() => setAj(aj.filter((_, x) => x !== i))} className="text-stone-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                           </div>
@@ -1280,7 +1292,31 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                 <p className="text-[10px] text-stone-500 italic">Le positionnement conseillé apparaît discrètement sous la préconisation.</p>
               </div>
 
-              {/* Les 3 prix — DÉRIVÉS de la médiane DVF + ajustements (arrondi 5 000 € en gros, prix réel dessous) */}
+              {/* Annexes au prorata du €/m² habitable (jardin, cave, terrasse, parking…) */}
+              <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2">
+                <label className={labelClass}>Annexes — valorisées au prorata du prix au m² habitable</label>
+                {(() => {
+                  const anx = data.preconisation.annexes || [];
+                  const setAnx = (arr) => update('preconisation.annexes', arr);
+                  const updA = (i, k, v) => { const a = [...anx]; a[i] = { ...a[i], [k]: v }; setAnx(a); };
+                  return (
+                    <div className="space-y-1.5">
+                      {anx.map((a, i) => (
+                        <div key={i} className="grid grid-cols-12 gap-1.5 items-center">
+                          <input value={a.type || ''} onChange={e => updA(i, 'type', e.target.value)} placeholder="Ex : Jardin" className="col-span-4 px-2 py-1 text-xs border border-stone-200 rounded" />
+                          <div className="col-span-3 flex items-center gap-1"><input type="number" value={a.surface || ''} onChange={e => updA(i, 'surface', +e.target.value)} placeholder="Surface" className="w-full px-2 py-1 text-xs border border-stone-200 rounded" /><span className="text-[10px] text-stone-400">m²</span></div>
+                          <div className="col-span-3 flex items-center gap-1"><input type="number" value={a.prorata || ''} onChange={e => updA(i, 'prorata', +e.target.value)} placeholder="Prorata" className="w-full px-2 py-1 text-xs border border-stone-200 rounded" /><span className="text-[10px] text-stone-400">%</span></div>
+                          <button type="button" onClick={() => setAnx(anx.filter((_, x) => x !== i))} className="col-span-2 text-stone-400 hover:text-red-600 justify-self-end"><Trash2 className="w-3.5 h-3.5" /></button>
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => setAnx([...anx, { type: '', surface: 0, prorata: 30 }])} className="text-xs text-sage-darker border border-sage-light rounded px-2 py-1 hover:bg-sage-50">+ Ajouter une annexe</button>
+                      <p className="text-[10px] text-stone-400 italic">Prorata = % du prix au m² habitable. Ex : jardin 10–80 % selon l'emplacement, cave ~15 %, terrasse ~40 %.</p>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Les 3 prix — DÉRIVÉS du calcul (référence mixte + décote/surcote + annexes) */}
               <div className="grid grid-cols-3 gap-3">
                 <PrixCard label="Prix plancher" subtitle="Base négociation" value={data.preconisation.prix_plancher} color="blue" />
                 <PrixCard label="Prix de marché" subtitle="Médiane × ajustements" value={data.preconisation.prix_marche} color="emerald" />
