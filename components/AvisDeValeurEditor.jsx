@@ -426,6 +426,12 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
   const THEMES = ['localisation', 'comparables', 'caracteristiques', 'visite', 'methodes', 'preconisation'];
   const valide = data._valide || {};
   const nbValides = THEMES.filter(k => valide[k]).length;
+  // Phase AUTO : la visite renseignée fait basculer le doc en « avis définitif ».
+  const VIS_KEYS = ['architecture', 'immeuble_qualite', 'parties_communes', 'agencement', 'volumes', 'luminosite', 'exposition', 'vues', 'etat_general', 'travaux', 'potentiel'];
+  const visiteRempli = !!(data.visite && (
+    VIS_KEYS.some(k => String(data.visite[k] || '').trim()) ||
+    (Array.isArray(data.visite.prestations) && data.visite.prestations.some(x => String(x || '').trim()))
+  ));
   const validerTheme = (k, v) => {
     setData(prev => ({ ...prev, _valide: { ...(prev._valide || {}), [k]: v } }));
     setOpenSections(s => ({ ...s, [k]: !v }));
@@ -582,25 +588,20 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
         {/* BODY */}
         <div className="flex-1 overflow-y-auto scrollbar-thin p-6 space-y-3 bg-cream-50/30">
 
-          {/* ─── 0. PHASE DU DOCUMENT (entonnoir) ─── */}
-          <div className="rounded-lg border border-sage-light bg-sage-50/60 p-3">
+          {/* ─── 0. NIVEAU DU DOCUMENT (automatique, non modifiable) ─── */}
+          <div className={`rounded-lg border p-3 ${visiteRempli ? 'border-sage-dark/40 bg-sage-50/60' : 'border-stone-200 bg-white'}`}>
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
-                <div className="text-xs font-semibold text-sage-darker uppercase tracking-wide">Niveau du document</div>
+                <div className="text-xs font-semibold text-sage-darker uppercase tracking-wide">Niveau du document — automatique</div>
                 <p className="text-[11px] text-stone-500 mt-0.5">
-                  {data.phase === 'definitif'
-                    ? 'Avis définitif — enrichi par la visite ou le dossier complet.'
-                    : 'Pré-avis — première estimation depuis l\'adresse et les données de marché.'}
+                  {visiteRempli
+                    ? 'Avis définitif — la visite est renseignée. Mêmes pages que le pré-avis, enrichies par la visite.'
+                    : 'Pré-avis — dès que tu remplis « La visite » (thème 4), le document passe tout seul en avis définitif.'}
                 </p>
               </div>
-              <div className="inline-flex rounded-lg border border-sage-light overflow-hidden bg-white">
-                {[['pre_avis', 'Pré-avis'], ['definitif', 'Avis définitif']].map(([val, lib]) => (
-                  <button key={val} type="button" onClick={() => update('phase', val)}
-                    className={`px-3 py-1.5 text-sm font-medium transition-colors ${data.phase === val ? 'bg-sage-dark text-white' : 'text-stone-600 hover:bg-sage-50'}`}>
-                    {lib}
-                  </button>
-                ))}
-              </div>
+              <span className={`px-3 py-1.5 text-sm font-semibold rounded-lg flex-shrink-0 ${visiteRempli ? 'bg-sage-dark text-white' : 'bg-stone-100 text-stone-600'}`}>
+                {visiteRempli ? 'Avis définitif' : 'Pré-avis'}
+              </span>
             </div>
           </div>
 
@@ -872,7 +873,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
             num={4} valide={valide.visite} onValider={(v) => validerTheme('visite', v)}
             open={openSections.visite} onToggle={() => toggle('visite')}
             title="La visite — le bien en détail" icon={<Building2 className="w-4 h-4" />}
-            subtitle={data.phase === 'definitif' ? "Observations de visite · dictée ou saisie" : "Phase 2 — à remplir après la visite ou sur dossier"}
+            subtitle={visiteRempli ? "Visite renseignée → avis définitif · dictée ou saisie" : "Remplis cette section pour passer en avis définitif"}
             count={Object.entries(data.visite).filter(([k, v]) => k !== 'prestations' && String(v || '').trim()).length + (data.visite.prestations || []).filter(x => String(x || '').trim()).length}
           >
             <div className="space-y-3">
