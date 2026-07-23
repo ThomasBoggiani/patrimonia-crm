@@ -59,8 +59,10 @@ const REGLES_COMMUNES = `
 Réponds UNIQUEMENT avec un JSON valide (aucun texte hors JSON, pas de backticks).
 Tu écris en français, ton sobre et professionnel d'expert immobilier.
 N'INVENTE PAS de faits vérifiables (architecte, transactions précises nominatives) : reste sur des formulations prudentes.
-Les CHIFFRES de marché (prix/m² de zone, valeurs) sont des ESTIMATIONS À VALIDER : appuie-toi sur le prix net vendeur / les loyers fournis et un raisonnement de marché plausible, sans surévaluer.
-Nombres : entiers en euros, sans espaces ni symboles.`;
+IMPORTANT — Le PRIX est déterminé séparément par les comparables DVF, PAS par toi :
+- Ne cite AUCUN prix ni €/m² dans la recommandation ni dans les commentaires (reste qualitatif : positionnement, atouts, points de vigilance, cible).
+- Mets à 0 tous les champs de prix : methode_m2 (tous les prix_m2 et valeur_totale à 0), preconisation.prix_plancher / prix_marche / prix_coup_de_coeur à 0.
+Nombres : entiers, sans espaces ni symboles.`;
 
 const SCHEMA_B2B = `Structure JSON attendue (immeuble / investissement) :
 {
