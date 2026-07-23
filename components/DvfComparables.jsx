@@ -7,7 +7,7 @@
 //  • BtoB (investissement) : périmètre large, €/m² ET €/lot, plusieurs années.
 // Paramètres ajustables + tableau triable + sélection ligne par ligne.
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Loader2, Search, Check, ArrowUpDown, MapPin, Building2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -15,7 +15,7 @@ const fmt = (n) => (n || n === 0 ? Number(n).toLocaleString('fr-FR') : '—');
 const fmtDate = (iso) => { if (!iso) return '—'; const [y, m] = iso.split('-'); return `${m}/${y}`; };
 const mediane = (arr) => { if (!arr.length) return 0; const s = [...arr].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2); };
 
-export default function DvfComparables({ mandat, onApply }) {
+export default function DvfComparables({ mandat, onApply, savedVentes }) {
   const estB2C = (mandat?.marche) === 'b2c';
 
   const [params, setParams] = useState({
@@ -31,6 +31,15 @@ export default function DvfComparables({ mandat, onApply }) {
   const [sort, setSort] = useState({ key: estB2C ? 'date' : 'distance', dir: estB2C ? 'desc' : 'asc' });
 
   const setP = (k, v) => setParams(p => ({ ...p, [k]: v }));
+
+  // Réaffiche les ventes déjà enregistrées (pas besoin de relancer une recherche)
+  useEffect(() => {
+    if (result || !Array.isArray(savedVentes) || !savedVentes.length) return;
+    const ventes = savedVentes.map((v, i) => ({ id: v.id || `saved-${i}`, distance: v.distance || 0, ...v }));
+    setResult({ ventes, geo: { label: 'Sélection enregistrée' }, params: { perimetre: 'enregistré', rayon: '', anneesInterrogees: [] }, saved: true });
+    setSelected(new Set(ventes.map(v => v.id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function rechercher() {
     if (!mandat?.id) { setError('Enregistre d\'abord le mandat.'); return; }
@@ -159,7 +168,9 @@ export default function DvfComparables({ mandat, onApply }) {
       {result && (
         <>
           <div className="text-[11px] text-stone-500">
-            {result.geo?.label} · {result.ventes.length} vente(s){result.params?.perimetre === 'immeuble' ? ' dans cet immeuble' : ` (${result.params.rayon} m)`} · {result.params.anneesInterrogees?.join(', ')}
+            {result.saved
+              ? <>✓ {result.ventes.length} vente(s) enregistrée(s) — relance une recherche pour les mettre à jour.</>
+              : <>{result.geo?.label} · {result.ventes.length} vente(s){result.params?.perimetre === 'immeuble' ? ' dans cet immeuble' : ` (${result.params.rayon} m)`} · {result.params.anneesInterrogees?.join(', ')}</>}
           </div>
 
           {result.ventes.length === 0 ? (

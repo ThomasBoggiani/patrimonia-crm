@@ -512,142 +512,6 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
             </div>
           </Section>
 
-          {/* ─── 2. SITUATION LOCATIVE (repliée, lecture auto) — BtoB seulement ─── */}
-          {!estB2C && (
-          <Section
-            open={openSections.locatif} onToggle={() => toggle('locatif')}
-            title="Situation locative" icon={<Key className="w-4 h-4" />}
-            subtitle={`Auto-affiché depuis l'état locatif · ${lotsFromMandat.length} lot${lotsFromMandat.length > 1 ? 's' : ''}`}
-            count={lotsFromMandat.length > 0 ? 1 : 0}
-          >
-            {lotsFromMandat.length === 0 ? (
-              <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 text-xs text-amber-900">
-                ⚠️ Aucun lot saisi dans l'état locatif du mandat. Saisir d'abord les lots dans le formulaire "Modifier mandat".
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-sage-50 rounded-lg p-3 border border-sage-light">
-                    <p className="text-[10px] uppercase text-sage-darker">CA actuel HT/an</p>
-                    <p className="text-lg font-semibold text-sage-darker">
-                      {caActuelHTAnnuel > 0 ? `${caActuelHTAnnuel.toLocaleString('fr-FR')} €` : '—'}
-                    </p>
-                  </div>
-                  <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
-                    <p className="text-[10px] uppercase text-amber-800">CA potentiel HT/an</p>
-                    <p className="text-lg font-semibold text-amber-800">
-                      {caPotentielHTAnnuel > 0 ? `${caPotentielHTAnnuel.toLocaleString('fr-FR')} €` : '—'}
-                    </p>
-                  </div>
-                </div>
-                <div className="bg-white rounded-lg border border-stone-200 max-h-48 overflow-y-auto">
-                  <table className="w-full text-xs">
-                    <thead className="bg-stone-50 border-b">
-                      <tr>
-                        <th className="text-left px-2 py-1.5 text-stone-600">Lot</th>
-                        <th className="text-left px-2 py-1.5 text-stone-600">Surface</th>
-                        <th className="text-right px-2 py-1.5 text-stone-600">Loyer/mois</th>
-                        <th className="text-right px-2 py-1.5 text-stone-600">Potentiel</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {lotsFromMandat.map((l, i) => (
-                        <tr key={i} className="border-b border-stone-100 last:border-0">
-                          <td className="px-2 py-1.5">{l.numero || (i + 1)} · {l.type || l.nature || '—'}</td>
-                          <td className="px-2 py-1.5">{l.surface ? `${l.surface} m²` : '—'}</td>
-                          <td className="px-2 py-1.5 text-right">{l.loyer ? `${parseFloat(l.loyer).toLocaleString('fr-FR')} €` : '—'}</td>
-                          <td className="px-2 py-1.5 text-right text-amber-700">{l.loyer_potentiel ? `${parseFloat(l.loyer_potentiel).toLocaleString('fr-FR')} €` : '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div>
-                  <label className={labelClass}>Commentaire sur la situation locative</label>
-                  <textarea
-                    value={data.situation_locative.commentaire}
-                    onChange={e => update('situation_locative.commentaire', e.target.value)}
-                    rows={2} className={fieldClass}
-                    placeholder="Ex: Immeuble livré libre à la vente, les deux occupants libèrent l'ensemble..."
-                  />
-                </div>
-              </div>
-            )}
-          </Section>
-          )}
-
-          {/* ─── 3. CARACTÉRISTIQUES (repliée) ─── */}
-          <Section
-            open={openSections.caracteristiques} onToggle={() => toggle('caracteristiques')}
-            title="Caractéristiques & atouts" icon={<Building2 className="w-4 h-4" />}
-            subtitle="Highlights IA + détails complémentaires"
-            count={data.caracteristiques.atouts_distinctifs.length}
-          >
-            <div className="space-y-3">
-              {/* Highlights IA en lecture seule */}
-              {mandatHighlights.length > 0 && (
-                <div className="bg-amber-50/50 rounded-lg p-3 border border-amber-200">
-                  <p className="text-[10px] uppercase text-amber-800 mb-1.5 flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" /> Points forts détectés par l'IA
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {mandatHighlights.map((h, i) => (
-                      <span key={i} className="text-[10px] px-2 py-0.5 bg-white border border-amber-200 text-amber-900 rounded-full">
-                        {h}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass}>Année de construction</label>
-                  <input
-                    type="text"
-                    value={data.caracteristiques.annee_construction}
-                    onChange={e => update('caracteristiques.annee_construction', e.target.value)}
-                    placeholder="ex: 1871" className={fieldClass}
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>Architecte (si connu)</label>
-                  <input
-                    type="text"
-                    value={data.caracteristiques.architecte}
-                    onChange={e => update('caracteristiques.architecte', e.target.value)}
-                    placeholder="ex: E. Gutelle" className={fieldClass}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className={labelClass}>Distribution par niveau (libre)</label>
-                <textarea
-                  value={data.caracteristiques.distribution}
-                  onChange={e => update('caracteristiques.distribution', e.target.value)}
-                  rows={3} className={fieldClass}
-                  placeholder="R-1: 415 m² · RDC: 850 m² · R+1: 510 m² · R+2: 335 m²..."
-                />
-              </div>
-
-              <ArrayEditor
-                label="Atouts distinctifs (bullets)"
-                items={data.caracteristiques.atouts_distinctifs}
-                onChange={items => update('caracteristiques.atouts_distinctifs', items)}
-                placeholder="Ex: Immeuble indépendant — totale liberté d'usage"
-              />
-
-              <div>
-                <label className={labelClass}>Commentaire général</label>
-                <textarea
-                  value={data.caracteristiques.commentaire}
-                  onChange={e => update('caracteristiques.commentaire', e.target.value)}
-                  rows={2} className={fieldClass}
-                />
-              </div>
-            </div>
-          </Section>
 
           {/* ─── 4. COMPARABLES (repliée) ─── */}
           <Section
@@ -660,6 +524,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
               {/* Comparables réels DVF (paramétrable, triable, sélectionnable) */}
               <DvfComparables
                 mandat={mandat}
+                savedVentes={data.comparables.ventes}
                 onApply={(r) => {
                   update('comparables.prix_zone_min', r.prix_zone_min);
                   update('comparables.prix_zone_max', r.prix_zone_max);
@@ -748,36 +613,145 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
             </div>
           </Section>
 
-          {/* ─── 5. SWOT (dépliée) ─── */}
+
+          {/* ─── 3. CARACTÉRISTIQUES (repliée) ─── */}
           <Section
-            open={openSections.swot} onToggle={() => toggle('swot')}
-            title="Analyse SWOT" icon={<Sparkles className="w-4 h-4" />}
-            subtitle="Forces / Opportunités / Limites / Menaces"
-            count={data.swot.forces.length + data.swot.opportunites.length + data.swot.facteurs_limitatifs.length + data.swot.menaces.length}
+            open={openSections.caracteristiques} onToggle={() => toggle('caracteristiques')}
+            title="Caractéristiques & atouts" icon={<Building2 className="w-4 h-4" />}
+            subtitle="Highlights IA + détails complémentaires"
+            count={data.caracteristiques.atouts_distinctifs.length}
           >
-            <div className="grid grid-cols-2 gap-3">
-              <SwotQuadrant
-                label="Forces" color="emerald" icon={<TrendingUp className="w-4 h-4" />}
-                items={data.swot.forces}
-                onChange={items => update('swot.forces', items)}
+            <div className="space-y-3">
+              {/* Highlights IA en lecture seule */}
+              {mandatHighlights.length > 0 && (
+                <div className="bg-amber-50/50 rounded-lg p-3 border border-amber-200">
+                  <p className="text-[10px] uppercase text-amber-800 mb-1.5 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" /> Points forts détectés par l'IA
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {mandatHighlights.map((h, i) => (
+                      <span key={i} className="text-[10px] px-2 py-0.5 bg-white border border-amber-200 text-amber-900 rounded-full">
+                        {h}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass}>Année de construction</label>
+                  <input
+                    type="text"
+                    value={data.caracteristiques.annee_construction}
+                    onChange={e => update('caracteristiques.annee_construction', e.target.value)}
+                    placeholder="ex: 1871" className={fieldClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Architecte (si connu)</label>
+                  <input
+                    type="text"
+                    value={data.caracteristiques.architecte}
+                    onChange={e => update('caracteristiques.architecte', e.target.value)}
+                    placeholder="ex: E. Gutelle" className={fieldClass}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className={labelClass}>Distribution par niveau (libre)</label>
+                <textarea
+                  value={data.caracteristiques.distribution}
+                  onChange={e => update('caracteristiques.distribution', e.target.value)}
+                  rows={3} className={fieldClass}
+                  placeholder="R-1: 415 m² · RDC: 850 m² · R+1: 510 m² · R+2: 335 m²..."
+                />
+              </div>
+
+              <ArrayEditor
+                label="Atouts distinctifs (bullets)"
+                items={data.caracteristiques.atouts_distinctifs}
+                onChange={items => update('caracteristiques.atouts_distinctifs', items)}
+                placeholder="Ex: Immeuble indépendant — totale liberté d'usage"
               />
-              <SwotQuadrant
-                label="Opportunités" color="blue" icon={<Sparkles className="w-4 h-4" />}
-                items={data.swot.opportunites}
-                onChange={items => update('swot.opportunites', items)}
-              />
-              <SwotQuadrant
-                label="Facteurs limitatifs" color="amber" icon={<AlertTriangle className="w-4 h-4" />}
-                items={data.swot.facteurs_limitatifs}
-                onChange={items => update('swot.facteurs_limitatifs', items)}
-              />
-              <SwotQuadrant
-                label="Menaces" color="red" icon={<Cloud className="w-4 h-4" />}
-                items={data.swot.menaces}
-                onChange={items => update('swot.menaces', items)}
-              />
+
+              <div>
+                <label className={labelClass}>Commentaire général</label>
+                <textarea
+                  value={data.caracteristiques.commentaire}
+                  onChange={e => update('caracteristiques.commentaire', e.target.value)}
+                  rows={2} className={fieldClass}
+                />
+              </div>
             </div>
           </Section>
+
+
+          {/* ─── 2. SITUATION LOCATIVE (repliée, lecture auto) — BtoB seulement ─── */}
+          {!estB2C && (
+          <Section
+            open={openSections.locatif} onToggle={() => toggle('locatif')}
+            title="Situation locative" icon={<Key className="w-4 h-4" />}
+            subtitle={`Auto-affiché depuis l'état locatif · ${lotsFromMandat.length} lot${lotsFromMandat.length > 1 ? 's' : ''}`}
+            count={lotsFromMandat.length > 0 ? 1 : 0}
+          >
+            {lotsFromMandat.length === 0 ? (
+              <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 text-xs text-amber-900">
+                ⚠️ Aucun lot saisi dans l'état locatif du mandat. Saisir d'abord les lots dans le formulaire "Modifier mandat".
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-sage-50 rounded-lg p-3 border border-sage-light">
+                    <p className="text-[10px] uppercase text-sage-darker">CA actuel HT/an</p>
+                    <p className="text-lg font-semibold text-sage-darker">
+                      {caActuelHTAnnuel > 0 ? `${caActuelHTAnnuel.toLocaleString('fr-FR')} €` : '—'}
+                    </p>
+                  </div>
+                  <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+                    <p className="text-[10px] uppercase text-amber-800">CA potentiel HT/an</p>
+                    <p className="text-lg font-semibold text-amber-800">
+                      {caPotentielHTAnnuel > 0 ? `${caPotentielHTAnnuel.toLocaleString('fr-FR')} €` : '—'}
+                    </p>
+                  </div>
+                </div>
+                <div className="bg-white rounded-lg border border-stone-200 max-h-48 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-stone-50 border-b">
+                      <tr>
+                        <th className="text-left px-2 py-1.5 text-stone-600">Lot</th>
+                        <th className="text-left px-2 py-1.5 text-stone-600">Surface</th>
+                        <th className="text-right px-2 py-1.5 text-stone-600">Loyer/mois</th>
+                        <th className="text-right px-2 py-1.5 text-stone-600">Potentiel</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lotsFromMandat.map((l, i) => (
+                        <tr key={i} className="border-b border-stone-100 last:border-0">
+                          <td className="px-2 py-1.5">{l.numero || (i + 1)} · {l.type || l.nature || '—'}</td>
+                          <td className="px-2 py-1.5">{l.surface ? `${l.surface} m²` : '—'}</td>
+                          <td className="px-2 py-1.5 text-right">{l.loyer ? `${parseFloat(l.loyer).toLocaleString('fr-FR')} €` : '—'}</td>
+                          <td className="px-2 py-1.5 text-right text-amber-700">{l.loyer_potentiel ? `${parseFloat(l.loyer_potentiel).toLocaleString('fr-FR')} €` : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div>
+                  <label className={labelClass}>Commentaire sur la situation locative</label>
+                  <textarea
+                    value={data.situation_locative.commentaire}
+                    onChange={e => update('situation_locative.commentaire', e.target.value)}
+                    rows={2} className={fieldClass}
+                    placeholder="Ex: Immeuble livré libre à la vente, les deux occupants libèrent l'ensemble..."
+                  />
+                </div>
+              </div>
+            )}
+          </Section>
+          )}
+
 
           {/* ─── 6. MÉTHODES D'ANALYSE DE VALEUR (dépliée) ─── */}
           <Section
@@ -869,6 +843,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
             </div>
           </Section>
 
+
           {/* ─── 7. POTENTIEL DE RECONVERSION (dépliée) — BtoB seulement ─── */}
           {!estB2C && (
           <Section
@@ -934,6 +909,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
             </div>
           </Section>
           )}
+
 
           {/* ─── 8. PRÉCONISATION & 3 PRIX (dépliée) ─── */}
           <Section
@@ -1084,6 +1060,38 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                     onChange={e => update('validite_mois', +e.target.value)} className={fieldClass} />
                 </div>
               </div>
+            </div>
+          </Section>
+
+
+          {/* ─── 5. SWOT (dépliée) ─── */}
+          <Section
+            open={openSections.swot} onToggle={() => toggle('swot')}
+            title="Analyse SWOT" icon={<Sparkles className="w-4 h-4" />}
+            subtitle="Forces / Opportunités / Limites / Menaces"
+            count={data.swot.forces.length + data.swot.opportunites.length + data.swot.facteurs_limitatifs.length + data.swot.menaces.length}
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <SwotQuadrant
+                label="Forces" color="emerald" icon={<TrendingUp className="w-4 h-4" />}
+                items={data.swot.forces}
+                onChange={items => update('swot.forces', items)}
+              />
+              <SwotQuadrant
+                label="Opportunités" color="blue" icon={<Sparkles className="w-4 h-4" />}
+                items={data.swot.opportunites}
+                onChange={items => update('swot.opportunites', items)}
+              />
+              <SwotQuadrant
+                label="Facteurs limitatifs" color="amber" icon={<AlertTriangle className="w-4 h-4" />}
+                items={data.swot.facteurs_limitatifs}
+                onChange={items => update('swot.facteurs_limitatifs', items)}
+              />
+              <SwotQuadrant
+                label="Menaces" color="red" icon={<Cloud className="w-4 h-4" />}
+                items={data.swot.menaces}
+                onChange={items => update('swot.menaces', items)}
+              />
             </div>
           </Section>
 
