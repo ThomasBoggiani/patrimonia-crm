@@ -1200,32 +1200,25 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
               </div>
 
 
-              {/* Transparence : d'où vient le prix + resync depuis le DVF */}
+              {/* Aperçu du calcul — IDENTIQUE à l'avis (référence mixte → décote/surcote → habitable + annexes) */}
               {(() => {
                 const surf = +mandat?.surface || 0;
                 const med = +data.comparables.mediane_m2 || 0;
-                const m2 = (v) => (surf && +v ? `${Math.round(+v / surf).toLocaleString('fr-FR')} €/m²` : '—');
+                const annVals = (data.comparables.biens_similaires || []).map(b => (+b.prix && +b.surface) ? Math.round(+b.prix / +b.surface) : 0).filter(Boolean).sort((a, b) => a - b);
+                const annM2 = annVals.length ? annVals[Math.floor(annVals.length / 2)] : 0;
+                const refM2 = (med && annM2) ? Math.round(0.7 * med + 0.3 * annM2) : (med || annM2 || 0);
+                const total = (data.preconisation.ajustements || []).reduce((s, a) => s + (+a.pct || 0), 0);
+                const habM2 = Math.round(refM2 * (1 + total / 100));
+                const habValue = Math.round(habM2 * surf);
+                const annexesTotal = (data.preconisation.annexes || []).reduce((s, a) => s + ((+a.surface > 0 && +a.prorata > 0) ? Math.round(+a.surface * (+a.prorata / 100) * habM2) : 0), 0);
+                const finale = (habValue + annexesTotal) ? Math.round((habValue + annexesTotal) / 5000) * 5000 : 0;
+                const f = (n) => (n || 0).toLocaleString('fr-FR');
+                if (!refM2 || !surf) return <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-xs text-amber-800">Renseigne la surface du mandat et lance une recherche DVF pour calculer le prix.</div>;
                 return (
                   <div className="rounded-lg border border-sage-light bg-sage-50/40 p-3 text-xs space-y-1">
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      {med ? <span>Médiane DVF retenue : <b className="text-sage-darker">{med.toLocaleString('fr-FR')} €/m²</b></span> : <span className="text-stone-400">Aucune médiane DVF (lance/coche des comparables).</span>}
-                      {surf ? <span className="text-stone-500">× {surf} m²</span> : <span className="text-red-500">surface du mandat manquante</span>}
-                      {med && surf ? <span>= <b className="text-sage-darker">{(med * surf).toLocaleString('fr-FR')} €</b></span> : null}
-                      {med && surf && (
-                        <button type="button"
-                          onClick={() => {
-                            const centre = Math.round(med * surf);
-                            setData(prev => { const n = JSON.parse(JSON.stringify(prev));
-                              n.preconisation.prix_marche = centre; n.preconisation.prix_plancher = Math.round(centre * 0.9); n.preconisation.prix_coup_de_coeur = Math.round(centre * 1.1);
-                              n.methode_m2 = { valeur_basse:{prix_m2:Math.round(med*0.9),valeur_totale:Math.round(centre*0.9),commentaire:'Scénario prudent (−10 % sous la médiane).'}, valeur_centrale:{prix_m2:med,valeur_totale:centre,commentaire:'Médiane DVF du secteur × surface.'}, valeur_haute:{prix_m2:Math.round(med*1.1),valeur_totale:Math.round(centre*1.1),commentaire:'Scénario haut (+10 % au-dessus de la médiane).'} };
-                              return n; });
-                          }}
-                          className="ml-auto px-2 py-1 rounded bg-sage-dark text-white hover:bg-sage-darker">↺ Recalculer depuis le DVF</button>
-                      )}
-                    </div>
-                    <div className="text-stone-500">
-                      €/m² actuels — plancher {m2(data.preconisation.prix_plancher)} · marché {m2(data.preconisation.prix_marche)} · présentation {m2(data.preconisation.prix_coup_de_coeur)}
-                    </div>
+                    <div><b>Prix de référence :</b> <b className="text-sage-darker">{f(refM2)} €/m²</b>{annM2 ? <span className="text-stone-500"> (70 % DVF {f(med)} + 30 % annonces {f(annM2)})</span> : <span className="text-stone-500"> (DVF)</span>}</div>
+                    <div>Décote / surcote <b className={total < 0 ? 'text-red-600' : 'text-emerald-700'}>{total > 0 ? '+' : ''}{total} %</b> → €/m² retenu <b className="text-sage-darker">{f(habM2)} €/m²</b></div>
+                    <div>Habitable {f(habValue)} €{annexesTotal ? <> + annexes {f(annexesTotal)} €</> : ''} = <b className="text-sage-darker">prix de marché {f(finale)} €</b></div>
                   </div>
                 );
               })()}
@@ -1239,11 +1232,6 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                   const aj = data.preconisation.ajustements || [];
                   const setAj = (arr) => update('preconisation.ajustements', arr);
                   const upd = (i, k, v) => { const a = [...aj]; a[i] = { ...a[i], [k]: v }; setAj(a); };
-                  const total = aj.reduce((s, a) => s + (+a.pct || 0), 0);
-                  const surf = +mandat?.surface || 0;
-                  const baseM2 = surf && +data.preconisation.prix_marche ? Math.round(+data.preconisation.prix_marche / surf) : (+mandat?.prix_m2 || 0);
-                  const adjM2 = baseM2 ? Math.round(baseM2 * (1 + total / 100)) : 0;
-                  const adjPrix = adjM2 && surf ? Math.round(adjM2 * surf) : 0;
                   return (
                     <div>
                       <label className={labelClass}>Facteurs ± % (curseur)</label>
@@ -1259,15 +1247,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                         </div>
                       ))}
                       <button type="button" onClick={() => setAj([...aj, { label: '', pct: -5, note: '' }])} className="text-xs text-sage-darker border border-sage-light rounded px-2 py-1 hover:bg-sage-50">+ Ajouter un facteur</button>
-                      {baseM2 > 0 && (
-                        <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm bg-white rounded-lg border border-stone-200 p-2">
-                          <span className="text-stone-500">{baseM2.toLocaleString('fr-FR')} €/m²</span>
-                          <span className={total < 0 ? 'text-red-600 font-semibold' : 'text-emerald-700 font-semibold'}>{total > 0 ? '+' : ''}{total} %</span>
-                          <span>→ <b className="text-sage-darker">{adjM2.toLocaleString('fr-FR')} €/m²</b></span>
-                          <span>soit <b className="text-sage-darker">{adjPrix.toLocaleString('fr-FR')} €</b></span>
-                          <button type="button" onClick={() => update('preconisation.prix_marche', adjPrix)} className="text-[11px] text-sage-darker underline">appliquer au prix de marché</button>
-                        </div>
-                      )}
+                      <p className="text-[10px] text-stone-400 mt-1.5 italic">La décote/surcote s'applique au prix de référence au m² ci-dessus. Le prix de marché se recalcule automatiquement.</p>
                     </div>
                   );
                 })()}
