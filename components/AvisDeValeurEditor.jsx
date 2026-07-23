@@ -82,8 +82,10 @@ const EMPTY_AVIS = {
     commentaire: '',
     ventes: [],         // DVF structuré [{date,adresse,type,surface,prix,prixM2,lots,memeImmeuble}]
     par_annee: [],      // [{annee,count,m2Median}]
-    mediane_m2: 0,      // médiane €/m² retenue (pilote le prix de marché)
+    mediane_m2: 0,      // médiane €/m² DVF retenue (pilote le prix de marché)
     biens_similaires: [], // 3 biens dispo saisis à la main [{lien,adresse,prix,surface}]
+    meilleurs_agents_m2: 0,        // €/m² MeilleursAgents (saisi d'après un screenshot)
+    meilleurs_agents_screenshot: '', // capture MeilleursAgents (image data-URL)
   },
   // 5. SWOT (déplié)
   swot: {
@@ -225,7 +227,9 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
       .map(b => (+b.prix && +b.surface) ? Math.round(+b.prix / +b.surface) : 0)
       .filter(Boolean).sort((a, b) => a - b);
     const annM2 = annVals.length ? annVals[Math.floor(annVals.length / 2)] : 0;
-    const refM2 = (med && annM2) ? Math.round(0.7 * med + 0.3 * annM2) : (med || annM2 || 0);
+    const maM2 = +data.comparables.meilleurs_agents_m2 || 0;
+    const rParts = [[med, 0.5], [annM2, 0.25], [maM2, 0.25]].filter(x => x[0] > 0);
+    const refM2 = rParts.length ? Math.round(rParts.reduce((s, [v, w]) => s + v * w, 0) / rParts.reduce((s, [, w]) => s + w, 0)) : 0;
     if (!refM2) return;
     const total = (data.preconisation.ajustements || []).reduce((s, a) => s + (+a.pct || 0), 0);
     const habM2 = Math.round(refM2 * (1 + total / 100));
@@ -246,7 +250,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
         return n;
       });
     }
-  }, [data.preconisation.ajustements, data.preconisation.annexes, data.comparables.mediane_m2, data.comparables.biens_similaires, mandat?.surface]);
+  }, [data.preconisation.ajustements, data.preconisation.annexes, data.comparables.mediane_m2, data.comparables.biens_similaires, data.comparables.meilleurs_agents_m2, mandat?.surface]);
 
   // Pré-remplissage IA : premier jet complet, adapté au marché. Ne remplace que
   // les champs vides (on ne détruit pas ce que Thomas a déjà saisi).
@@ -712,13 +716,20 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                 </div>
               </div>
               <div>
-                <label className={labelClass}>Transactions récentes (texte libre — tu peux coller un tableau)</label>
-                <textarea value={data.comparables.transactions_recentes}
-                  onChange={e => update('comparables.transactions_recentes', e.target.value)}
-                  rows={5} className={fieldClass}
-                  placeholder="Ex:&#10;37 Saint-Sébastien · Paris 11 · 2 500 m² · 12,25 M€ · 4 900 €/m² · value-add · T2 2024&#10;15 Nation · Paris 11 · 7 750 m² · 89 M€ · 11 500 €/m² · core · T4 2024..."
-                />
-                <p className="text-[10px] text-stone-400 mt-1 italic">Plus tard : auto-rempli depuis BDD marché & nos signatures.</p>
+                <label className={labelClass}>Prix au m² MeilleursAgents (d'après un screenshot de la rue)</label>
+                <div className="flex gap-2 items-start">
+                  <label className="w-16 h-16 flex-shrink-0 rounded border border-stone-200 bg-stone-50 overflow-hidden flex items-center justify-center cursor-pointer hover:border-sage-light" title="Coller le screenshot MeilleursAgents">
+                    {data.comparables.meilleurs_agents_screenshot ? <img src={data.comparables.meilleurs_agents_screenshot} alt="" className="w-full h-full object-cover" /> : <ImageIcon className="w-4 h-4 text-stone-300" />}
+                    <input type="file" accept="image/*" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; try { const url = await readImageCompressed(f); update('comparables.meilleurs_agents_screenshot', url); } catch { alert('Image illisible.'); } }} />
+                  </label>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <input type="number" value={data.comparables.meilleurs_agents_m2 || ''} onChange={e => update('comparables.meilleurs_agents_m2', +e.target.value)} placeholder="Prix au m² MeilleursAgents" className={fieldClass} />
+                      <span className="text-xs text-stone-400 whitespace-nowrap">€/m²</span>
+                    </div>
+                    <p className="text-[10px] text-stone-400 mt-1 italic">Saisi à la main d'après MeilleursAgents (pas d'API). Entre dans le prix de référence, avec le DVF et les annonces.</p>
+                  </div>
+                </div>
               </div>
               <div>
                 <label className={labelClass}>Commentaire sur le marché local</label>
@@ -1206,7 +1217,10 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                 const med = +data.comparables.mediane_m2 || 0;
                 const annVals = (data.comparables.biens_similaires || []).map(b => (+b.prix && +b.surface) ? Math.round(+b.prix / +b.surface) : 0).filter(Boolean).sort((a, b) => a - b);
                 const annM2 = annVals.length ? annVals[Math.floor(annVals.length / 2)] : 0;
-                const refM2 = (med && annM2) ? Math.round(0.7 * med + 0.3 * annM2) : (med || annM2 || 0);
+                const maM2 = +data.comparables.meilleurs_agents_m2 || 0;
+                const rParts = [[med, 0.5], [annM2, 0.25], [maM2, 0.25]].filter(x => x[0] > 0);
+                const refM2 = rParts.length ? Math.round(rParts.reduce((s, [v, w]) => s + v * w, 0) / rParts.reduce((s, [, w]) => s + w, 0)) : 0;
+                const srcTxt = [med && `DVF ${med.toLocaleString('fr-FR')}`, annM2 && `annonces ${annM2.toLocaleString('fr-FR')}`, maM2 && `MeilleursAgents ${maM2.toLocaleString('fr-FR')}`].filter(Boolean).join(' · ');
                 const total = (data.preconisation.ajustements || []).reduce((s, a) => s + (+a.pct || 0), 0);
                 const habM2 = Math.round(refM2 * (1 + total / 100));
                 const habValue = Math.round(habM2 * surf);
@@ -1216,7 +1230,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                 if (!refM2 || !surf) return <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-xs text-amber-800">Renseigne la surface du mandat et lance une recherche DVF pour calculer le prix.</div>;
                 return (
                   <div className="rounded-lg border border-sage-light bg-sage-50/40 p-3 text-xs space-y-1">
-                    <div><b>Prix de référence :</b> <b className="text-sage-darker">{f(refM2)} €/m²</b>{annM2 ? <span className="text-stone-500"> (70 % DVF {f(med)} + 30 % annonces {f(annM2)})</span> : <span className="text-stone-500"> (DVF)</span>}</div>
+                    <div><b>Prix de référence :</b> <b className="text-sage-darker">{f(refM2)} €/m²</b> <span className="text-stone-500">(moyenne : {srcTxt})</span></div>
                     <div>Décote / surcote <b className={total < 0 ? 'text-red-600' : 'text-emerald-700'}>{total > 0 ? '+' : ''}{total} %</b> → €/m² retenu <b className="text-sage-darker">{f(habM2)} €/m²</b></div>
                     <div>Habitable {f(habValue)} €{annexesTotal ? <> + annexes {f(annexesTotal)} €</> : ''} = <b className="text-sage-darker">prix de marché {f(finale)} €</b></div>
                   </div>
