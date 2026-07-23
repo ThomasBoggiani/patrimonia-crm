@@ -238,8 +238,8 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
       s + ((+a.surface > 0 && +a.prorata > 0) ? Math.round(+a.surface * (+a.prorata / 100) * habM2) : 0), 0);
     const r5 = (v) => v ? Math.round(v / 5000) * 5000 : 0;
     const central = r5(habValue + annexesTotal);
-    const plancher = r5(central * 0.9);
-    const coup = r5(central * 1.1);
+    const plancher = r5(central * 0.95);
+    const coup = r5(central * 1.05);
     const p = data.preconisation;
     if (p.prix_marche !== central || p.prix_plancher !== plancher || p.prix_coup_de_coeur !== coup) {
       setData(prev => {
@@ -422,6 +422,14 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
   }
 
   const toggle = (k) => setOpenSections(s => ({ ...s, [k]: !s[k] }));
+  // Grands thèmes à valider : on coche un bloc → il passe en vert et se replie.
+  const THEMES = ['localisation', 'comparables', 'caracteristiques', 'visite', 'methodes', 'preconisation'];
+  const valide = data._valide || {};
+  const nbValides = THEMES.filter(k => valide[k]).length;
+  const validerTheme = (k, v) => {
+    setData(prev => ({ ...prev, _valide: { ...(prev._valide || {}), [k]: v } }));
+    setOpenSections(s => ({ ...s, [k]: !v }));
+  };
   const update = (path, value) => {
     setData(prev => {
       const copy = JSON.parse(JSON.stringify(prev));
@@ -596,8 +604,22 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
             </div>
           </div>
 
+          {/* ─── PROGRESSION DES GRANDS THÈMES ─── */}
+          <div className="rounded-lg border border-stone-200 bg-white p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-stone-600 uppercase tracking-wide">Grands thèmes à valider</span>
+              <span className="text-xs font-medium text-sage-darker">{nbValides} / {THEMES.length} validés</span>
+            </div>
+            <div className="flex gap-1">
+              {THEMES.map((k, i) => (
+                <div key={k} className={`flex-1 h-1.5 rounded-full ${valide[k] ? 'bg-sage-dark' : 'bg-stone-200'}`} title={`Thème ${i + 1}`} />
+              ))}
+            </div>
+          </div>
+
           {/* ─── 1. LOCALISATION (repliée) ─── */}
           <Section
+            num={1} valide={valide.localisation} onValider={(v) => validerTheme('localisation', v)}
             open={openSections.localisation} onToggle={() => toggle('localisation')}
             title="Le secteur — quartier, rue & urbanisme" icon={<MapPin className="w-4 h-4" />}
             subtitle="Quartier, transports, cadastre & risques auto-récupérés · enrichis les commentaires"
@@ -652,6 +674,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
 
           {/* ─── 4. COMPARABLES (repliée) ─── */}
           <Section
+            num={2} valide={valide.comparables} onValider={(v) => validerTheme('comparables', v)}
             open={openSections.comparables} onToggle={() => toggle('comparables')}
             title="Comparables & données marché" icon={<BarChart3 className="w-4 h-4" />}
             subtitle="Ventes réelles DVF + saisie libre"
@@ -678,12 +701,12 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                     // Le prix de marché = médiane DVF × surface ; méthode : centrale −10 % / +10 %
                     if (centre) {
                       next.preconisation.prix_marche = centre;
-                      next.preconisation.prix_plancher = Math.round(centre * 0.9);
-                      next.preconisation.prix_coup_de_coeur = Math.round(centre * 1.1);
+                      next.preconisation.prix_plancher = Math.round(centre * 0.95);
+                      next.preconisation.prix_coup_de_coeur = Math.round(centre * 1.05);
                       next.methode_m2 = {
-                        valeur_basse: { prix_m2: Math.round(med * 0.9), valeur_totale: Math.round(centre * 0.9), commentaire: 'Scénario prudent (−10 % sous la médiane).' },
+                        valeur_basse: { prix_m2: Math.round(med * 0.95), valeur_totale: Math.round(centre * 0.95), commentaire: 'Scénario prudent (−5 % sous la médiane).' },
                         valeur_centrale: { prix_m2: med, valeur_totale: centre, commentaire: 'Médiane DVF du secteur × surface.' },
-                        valeur_haute: { prix_m2: Math.round(med * 1.1), valeur_totale: Math.round(centre * 1.1), commentaire: 'Scénario haut (+10 % au-dessus de la médiane).' },
+                        valeur_haute: { prix_m2: Math.round(med * 1.05), valeur_totale: Math.round(centre * 1.05), commentaire: 'Scénario haut (+5 % au-dessus de la médiane).' },
                       };
                     }
                     return next;
@@ -779,6 +802,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
 
           {/* ─── 3. CARACTÉRISTIQUES (repliée) ─── */}
           <Section
+            num={3} valide={valide.caracteristiques} onValider={(v) => validerTheme('caracteristiques', v)}
             open={openSections.caracteristiques} onToggle={() => toggle('caracteristiques')}
             title="Caractéristiques & atouts — le bien" icon={<Building2 className="w-4 h-4" />}
             subtitle="Phase 2 (visite / dossier) · highlights IA + détails du bien"
@@ -845,6 +869,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
 
           {/* ─── 3bis. VISITE (Phase 2) — dictée + champs ─── */}
           <Section
+            num={4} valide={valide.visite} onValider={(v) => validerTheme('visite', v)}
             open={openSections.visite} onToggle={() => toggle('visite')}
             title="La visite — le bien en détail" icon={<Building2 className="w-4 h-4" />}
             subtitle={data.phase === 'definitif' ? "Observations de visite · dictée ou saisie" : "Phase 2 — à remplir après la visite ou sur dossier"}
@@ -1035,6 +1060,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
 
           {/* ─── 6. MÉTHODES D'ANALYSE DE VALEUR (dépliée) ─── */}
           <Section
+            num={5} valide={valide.methodes} onValider={(v) => validerTheme('methodes', v)}
             open={openSections.methodes} onToggle={() => toggle('methodes')}
             title="Méthodes d'analyse de valeur" icon={<Calculator className="w-4 h-4" />}
             subtitle="Par comparaison m² + par capitalisation"
@@ -1193,6 +1219,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
 
           {/* ─── 8. PRÉCONISATION & 3 PRIX (dépliée) ─── */}
           <Section
+            num={6} valide={valide.preconisation} onValider={(v) => validerTheme('preconisation', v)}
             open={openSections.preconisation} onToggle={() => toggle('preconisation')}
             title="Préconisation & 3 prix" icon={<Tag className="w-4 h-4" />}
             subtitle="Recommandation finale + prix + consultant"
@@ -1478,25 +1505,35 @@ function FicheField({ label, value, format, block, multiline }) {
   );
 }
 
-function Section({ title, icon, subtitle, open, onToggle, count, children }) {
+function Section({ title, icon, subtitle, open, onToggle, count, children, num, valide, onValider }) {
+  const isTheme = num != null;
   return (
-    <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between p-4 hover:bg-cream-50 text-left"
-      >
-        <div className="flex items-center gap-2 min-w-0">
+    <div className={`bg-white rounded-xl border overflow-hidden ${valide ? 'border-sage-dark/40' : 'border-stone-200'}`}>
+      <div className={`w-full flex items-center justify-between p-4 ${valide ? 'bg-sage-50/60' : ''}`}>
+        <button onClick={onToggle} className="flex items-center gap-2 min-w-0 flex-1 text-left hover:opacity-80">
           {open ? <ChevronDown className="w-4 h-4 text-stone-400 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-stone-400 flex-shrink-0" />}
-          <span className="text-stone-600 flex-shrink-0">{icon}</span>
+          {isTheme
+            ? <span className={`w-5 h-5 flex-shrink-0 rounded-full flex items-center justify-center text-[11px] font-semibold ${valide ? 'bg-sage-dark text-white' : 'bg-stone-100 text-stone-500'}`}>{valide ? '✓' : num}</span>
+            : <span className="text-stone-500 flex-shrink-0">{icon}</span>}
           <h3 className="font-medium text-sm text-stone-900">{title}</h3>
+          {!isTheme && <span className="text-[10px] bg-stone-100 text-stone-400 px-1.5 py-0.5 rounded-full flex-shrink-0">complément</span>}
           {count > 0 && (
             <span className="text-[10px] bg-sage-100 text-sage-darker px-1.5 py-0.5 rounded-full flex-shrink-0">
               {count}
             </span>
           )}
-          {subtitle && <span className="text-xs text-stone-400 italic truncate">· {subtitle}</span>}
-        </div>
-      </button>
+          {subtitle && <span className="text-xs text-stone-400 italic truncate hidden sm:inline">· {subtitle}</span>}
+        </button>
+        {onValider && (
+          <button
+            onClick={() => onValider(!valide)}
+            className={`ml-2 flex-shrink-0 text-xs px-2.5 py-1 rounded-full border transition-colors ${valide
+              ? 'border-sage-dark/30 text-sage-darker bg-white hover:bg-sage-50'
+              : 'border-sage-dark bg-sage-dark text-white hover:bg-sage-darker'}`}>
+            {valide ? 'Modifier' : 'Valider ✓'}
+          </button>
+        )}
+      </div>
       {open && <div className="px-4 pb-4 pt-1">{children}</div>}
     </div>
   );
