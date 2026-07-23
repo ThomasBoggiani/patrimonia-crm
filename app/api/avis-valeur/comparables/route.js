@@ -213,7 +213,21 @@ export async function POST(request) {
       return { ...v, distance, memeRue, memeImmeuble };
     });
 
-    // Filtres
+    // TENDANCE DE MARCHÉ — médiane €/m² par année sur TOUTE la commune
+    // (avant filtre rayon), pour un vrai graphique 5 ans même si les comparables
+    // du micro-secteur ne couvrent que 1-2 ans.
+    const parAn = {};
+    for (const v of ventes) {
+      if (typeVoulu && v.type !== typeVoulu) continue;
+      const y = parseInt(String(v.date).slice(0, 4), 10);
+      if (!y) continue;
+      (parAn[y] = parAn[y] || []).push(v.prixM2);
+    }
+    const secteurParAnnee = Object.entries(parAn)
+      .map(([annee, arr]) => ({ annee: +annee, count: arr.length, m2Median: mediane(arr) }))
+      .sort((a, b) => a.annee - b.annee);
+
+    // Filtres (comparables du micro-secteur)
     ventes = ventes
       .filter(v => onlyImmeuble ? v.memeImmeuble : v.distance <= rayon)
       .filter(v => !typeVoulu || v.type === typeVoulu)
@@ -228,6 +242,7 @@ export async function POST(request) {
       params: { perimetre: perimetreEff, rayon, annees, type: typeVoulu || 'tous', surfaceMin, surfaceMax, anneesInterrogees: anneesList },
       mandat: { surface: mandatSurface, typeDeduit: mandatType, estB2C },
       ventes,
+      secteurParAnnee,
     });
   } catch (e) {
     console.error('[avis-valeur/comparables]', e);
