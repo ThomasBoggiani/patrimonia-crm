@@ -331,6 +331,9 @@ const tools = [
   { name: 'propose_send_email', description: 'PROPOSE l\'envoi d\'un email simple. Ne fait RIEN, l\'utilisateur valide.',
     input_schema: { type: 'object', properties: {
       to: { type: 'string' }, subject: { type: 'string' }, body: { type: 'string' }, client_id: { type: 'string' } }, required: ['to', 'subject', 'body'] } },
+  { name: 'propose_add_photos', description: 'PROPOSE d\'ajouter à la galerie photo du BIEN (mandat courant) les PHOTOS jointes à ce message. À utiliser quand les pièces jointes sont des PHOTOS du bien (pièces, façade, cour, vues), PAS des documents. Ne fait RIEN, l\'utilisateur valide. N\'invente aucune URL : le système attache automatiquement les photos réellement jointes à ce message. Fournis simplement l\'ID du mandat courant.',
+    input_schema: { type: 'object', properties: {
+      mandat_id: { type: 'string', description: 'ID du mandat courant (présent dans le contexte).' } }, required: ['mandat_id'] } },
   { name: 'propose_send_plaquette', description: 'PROPOSE l\'envoi d\'une plaquette PDF d\'un mandat à un client. Ne fait RIEN, l\'utilisateur valide. IMPORTANT : tu DOIS rédiger un custom_message COMPLET et auto-suffisant (jamais vide), car ce message constituera l\'INTÉGRALITÉ du corps de l\'email (seule la signature officielle de l\'agence sera ajoutée automatiquement après). Le message doit, dans le ton de voix du commercial : (1) saluer correctement le destinataire (utilise « Bonjour » + le nom ; n\'invente PAS la civilité Madame/Monsieur si tu n\'es pas sûr du genre) ; (2) présenter brièvement le bien et indiquer que la plaquette est jointe ; (3) inclure vers la fin une courte phrase invitant les professionnels de l\'immobilier et investisseurs à remplir le questionnaire (présent dans la signature) pour recevoir des opportunités off-market ciblées ; (4) se terminer par la formule de clôture du commercial. Ne rédige PAS toi-même le bloc de signature officielle (nom/coordonnées) : il est ajouté automatiquement.',
     input_schema: { type: 'object', properties: {
       mandat_id: { type: 'string' }, client_id: { type: 'string' }, custom_message: { type: 'string', description: 'Corps COMPLET de l\'email à rédiger obligatoirement (salutation + présentation + plaquette jointe + invitation questionnaire pour pros/investisseurs + clôture). Jamais vide.' } }, required: ['mandat_id', 'client_id', 'custom_message'] } },
@@ -484,6 +487,29 @@ function buildProposeUpdateMandat(args) {
   return { proposed: true, type: 'update_mandat', summary: 'Mandat à modifier', fields, data };
 }
 
+// Le modèle ne connaît pas les chemins des PJ : le système injecte les vraies
+// photos jointes à ce message (ctx.imageAttachments). L'argument mandat_id sert
+// juste à cibler le bon bien.
+function buildProposeAddPhotos(args, ctx) {
+  const imgs = (ctx && Array.isArray(ctx.imageAttachments)) ? ctx.imageAttachments : [];
+  if (imgs.length === 0) {
+    return { error: "Aucune photo (image) n'est jointe à ce message : impossible d'ajouter des photos." };
+  }
+  const mandatId = args.mandat_id || (ctx && ctx.entityId) || null;
+  if (!mandatId) return { error: 'ID du mandat manquant.' };
+  const photos = imgs
+    .map(a => ({ storagePath: a.storagePath, name: a.name || null, type: a.type || null }))
+    .filter(p => p.storagePath);
+  if (photos.length === 0) return { error: 'Chemins des photos introuvables (storagePath manquant).' };
+  const names = imgs.map(a => a.name).filter(Boolean).join(', ');
+  const data = { mandat_id: mandatId, photos };
+  const fields = [
+    { label: 'Photos', value: `${photos.length} photo(s)${names ? ' : ' + names : ''}` },
+    { label: 'Mandat ID', value: mandatId },
+  ];
+  return { proposed: true, type: 'add_photos', summary: `Ajouter ${photos.length} photo(s) à la galerie du bien`, fields, data };
+}
+
 function buildProposeUpdateClient(args) {
   const data = { ...args };
   const fields = [{ label: 'ID client', value: data.id }];
@@ -512,7 +538,7 @@ function buildProposeSendPlaquette(args) {
   return { proposed: true, type: 'send_plaquette', summary: 'Plaquette à envoyer', fields, data };
 }
 
-async function executeTool(name, args) {
+async function executeTool(name, args, ctx) {
   switch (name) {
     case 'search_mandats': return await executeSearchMandats(args);
     case 'search_clients': return await executeSearchClients(args);
@@ -524,6 +550,7 @@ async function executeTool(name, args) {
     case 'propose_create_interaction': return buildProposeCreateInteraction(args);
     case 'propose_update_mandat': return buildProposeUpdateMandat(args);
     case 'propose_update_client': return buildProposeUpdateClient(args);
+    case 'propose_add_photos': return buildProposeAddPhotos(args, ctx);
     case 'propose_send_email': return buildProposeSendEmail(args);
     case 'propose_send_plaquette': return buildProposeSendPlaquette(args);
     default: return { error: `Outil inconnu : ${name}` };
@@ -594,6 +621,7 @@ ACTIONS (création / modification / envoi)
 - NE DEMANDE JAMAIS "veux-tu confirmer ?" : la carte EST la confirmation. Propose directement via l'outil.
 - Si des champs manquent, ne bloque pas : propose quand même et signale après ce qui serait utile à compléter.
 - Pour modifier le mandat ou le client COURANT, utilise son ID (présent dans le contexte ci-dessus) avec propose_update_mandat / propose_update_client.
+- PIÈCES JOINTES : si l'utilisateur joint des PHOTOS d'un bien (pièces, façade, vues), propose de les ranger dans la galerie avec propose_add_photos (mandat courant). Si ce sont des DOCUMENTS (mandat, DPE, plan, annonce, diagnostic), extrais les informations et propose propose_update_mandat. Distingue photo vs document d'après le contenu visible.
 
 RÉFÉRENTIELS MÉTIER
 - Statut mandat : Sourcing, Analyse, Mandat signé, Commercialisation, Offre, Promesse, Acte, Vendu par autres, Perdu.
@@ -623,12 +651,51 @@ async function loadEntity(scope, entityId) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// PIÈCES JOINTES → blocs de contenu pour le modèle (vision + PDF)
+// Les fichiers sont sur le bucket "assistant-attachments" (URL signée courte).
+// On les télécharge côté serveur et on les envoie en base64 au modèle.
+// ═══════════════════════════════════════════════════════════════════
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;   // limite API image
+const MAX_PDF_BYTES = 32 * 1024 * 1024;    // limite API document
+const MAX_ATTACHMENTS = 8;
+
+function normalizeAttachments(attachments) {
+  if (!Array.isArray(attachments)) return [];
+  return attachments
+    .filter(a => a && a.signedUrl && (String(a.type || '').startsWith('image/') || a.type === 'application/pdf'))
+    .slice(0, MAX_ATTACHMENTS);
+}
+
+// Télécharge chaque PJ et la convertit en bloc Anthropic. Renvoie
+// { blocks, skipped: [noms trop volumineux ou en erreur] }.
+async function buildAttachmentBlocks(atts) {
+  const blocks = [];
+  const skipped = [];
+  await Promise.all(atts.map(async (a) => {
+    try {
+      const resp = await fetch(a.signedUrl);
+      if (!resp.ok) { skipped.push(a.name || 'fichier'); return; }
+      const buf = Buffer.from(await resp.arrayBuffer());
+      const isPdf = a.type === 'application/pdf';
+      if (buf.length > (isPdf ? MAX_PDF_BYTES : MAX_IMAGE_BYTES)) { skipped.push(a.name || 'fichier'); return; }
+      const data = buf.toString('base64');
+      blocks.push(isPdf
+        ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } }
+        : { type: 'image', source: { type: 'base64', media_type: a.type, data } });
+    } catch {
+      skipped.push(a.name || 'fichier');
+    }
+  }));
+  return { blocks, skipped };
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // BOUCLE PRINCIPALE : streaming SSE + tool_use
 // ═══════════════════════════════════════════════════════════════════
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { token, scope = 'global', entity_id = null, message, action, mode } = body;
+    const { token, scope = 'global', entity_id = null, message, action, mode, attachments } = body;
 
     if (!VALID_SCOPES.includes(scope)) {
       return jsonResponse({ ok: false, error: 'scope invalide' }, 400);
@@ -656,7 +723,10 @@ export async function POST(request) {
       if (!entity) return jsonResponse({ ok: false, error: `${scope} introuvable` }, 404);
     }
 
-    // Détermine le message utilisateur (quick action ou texte libre)
+    // Pièces jointes valides (images / PDF) envoyées par le front
+    const validAttachments = normalizeAttachments(attachments);
+
+    // Détermine le message utilisateur (quick action, texte libre, ou PJ seules)
     let userMessage, userVisibleLabel, actionKey = null;
     if (action && QUICK_ACTIONS[action]) {
       if (!QUICK_ACTIONS[action].scopes.includes(scope)) {
@@ -668,9 +738,40 @@ export async function POST(request) {
     } else if (message && message.trim()) {
       userMessage = message.trim();
       userVisibleLabel = message.trim();
+    } else if (validAttachments.length > 0) {
+      // PJ seules, sans texte : instruction d'analyse par défaut selon le scope
+      userMessage = scope === 'mandat'
+        ? `J'ai joint ${validAttachments.length} fichier(s) concernant ce bien. Regarde-les et agis selon leur NATURE :
+- Si ce sont des PHOTOS du bien (pièces, façade, cour, vues) → propose de les ranger dans la galerie avec l'outil propose_add_photos (utilise l'ID du mandat courant).
+- Si ce sont des DOCUMENTS (mandat, DPE, plan, annonce, diagnostic, tableau) → extrais les informations et propose de compléter la fiche avec propose_update_mandat (adresse, ville, code postal, surface, pièces/chambres/lots, étage, prix, loyers, charges, DPE, type, description). N'invente AUCUNE donnée absente.
+Si les deux sont présents, traite d'abord le plus pertinent et signale l'autre en fin de réponse. Termine par un court récapitulatif de ce que tu as vu.`
+        : `J'ai joint ${validAttachments.length} document(s)/photo(s). Analyse-les et propose l'action la plus pertinente (création ou mise à jour) avec les informations fiables que tu peux en extraire. N'invente aucune donnée absente.`;
+      userVisibleLabel = '(pièces jointes uniquement)';
     } else {
       return jsonResponse({ ok: false, error: 'message ou action requis' }, 400);
     }
+
+    // Prépare les blocs "pièces jointes" (vision / PDF) pour ce tour
+    let attachmentBlocks = [];
+    if (validAttachments.length > 0) {
+      const built = await buildAttachmentBlocks(validAttachments);
+      attachmentBlocks = built.blocks;
+      if (built.skipped.length > 0) {
+        userMessage += `\n\n(Note : ${built.skipped.length} fichier(s) n'ont pas pu être lus — trop volumineux ou illisibles : ${built.skipped.join(', ')}. Ne les prends pas en compte.)`;
+      }
+      // Trace des noms de PJ dans l'historique persistant (affichage au rechargement)
+      const names = validAttachments.map(a => a.name).filter(Boolean).join(', ');
+      if (names) {
+        userVisibleLabel = userVisibleLabel === '(pièces jointes uniquement)'
+          ? `📎 ${names}`
+          : `${userVisibleLabel}\n📎 ${names}`;
+      }
+    }
+
+    // Le dernier message user : texte seul, ou texte + blocs images/documents
+    const lastUserContent = attachmentBlocks.length > 0
+      ? [...attachmentBlocks, { type: 'text', text: userMessage }]
+      : userMessage;
 
     // Charge l'historique et construit les messages API
     const history = await loadConversation(scope, entity_id, user.id);
@@ -681,10 +782,17 @@ export async function POST(request) {
           ? QUICK_ACTIONS[m.action].user
           : m.content,
       })),
-      { role: 'user', content: userMessage },
+      { role: 'user', content: lastUserContent },
     ];
 
     const systemPrompt = await buildSystemPrompt(scope, entity, await loadTones(user.id));
+
+    // Contexte transmis aux outils : les images jointes (pour propose_add_photos)
+    const toolContext = {
+      imageAttachments: validAttachments.filter(a => String(a.type || '').startsWith('image/')),
+      entityId: entity_id,
+      scope,
+    };
 
     // Stream SSE
     const encoder = new TextEncoder();
@@ -714,7 +822,7 @@ export async function POST(request) {
               apiMessages.push({ role: 'assistant', content: finalMsg.content });
               const toolResults = [];
               for (const block of toolUseBlocks) {
-                const result = await executeTool(block.name, block.input || {});
+                const result = await executeTool(block.name, block.input || {}, toolContext);
                 if (result?.proposed) {
                   proposedAction = {
                     type: result.type, summary: result.summary, fields: result.fields,

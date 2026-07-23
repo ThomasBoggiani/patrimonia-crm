@@ -168,7 +168,7 @@ export default function CRM() {
       setTimeout(() => {
         if (type === 'create_client' || type === 'update_client') {
           navigateToClient(result.id);
-        } else if (type === 'create_mandat' || type === 'update_mandat') {
+        } else if (type === 'create_mandat' || type === 'update_mandat' || type === 'add_photos') {
           navigateToMandat(result.id);
         }
       }, 100);

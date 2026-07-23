@@ -518,7 +518,7 @@ function ProposalCard({ action, onConfirm, onCancel, executing, executed, execut
       {executed && executedResult && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: '#e8f0e8', color: SAGE_DARKER }}>
           <Check className="w-3.5 h-3.5 flex-shrink-0" />
-          <span>{action.type?.startsWith('update_') ? 'Modifié' : action.type?.startsWith('send_') ? 'Envoyé' : 'Créé'} avec succès : {executedResult.label}</span>
+          <span>{action.type === 'add_photos' ? 'Ajouté' : action.type?.startsWith('update_') ? 'Modifié' : action.type?.startsWith('send_') ? 'Envoyé' : 'Créé'} avec succès : {executedResult.label}</span>
         </div>
       )}
 
@@ -539,7 +539,7 @@ function ProposalCard({ action, onConfirm, onCancel, executing, executed, execut
             title={action.missing ? 'Complète les champs obligatoires avant de créer' : ''}
           >
             {executing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-            {executing ? 'En cours…' : (action.type?.startsWith('update_') ? 'Modifier' : action.type?.startsWith('send_') ? 'Envoyer' : 'Créer')}
+            {executing ? 'En cours…' : (action.type === 'add_photos' ? 'Ajouter' : action.type?.startsWith('update_') ? 'Modifier' : action.type?.startsWith('send_') ? 'Envoyer' : 'Créer')}
           </button>
           <button
             onClick={onCancel}
@@ -882,7 +882,7 @@ export default function AIAssistantChat({
       if (action) payload.action = action;
       else payload.message = text;
       if (currentAttachments.length > 0) {
-        payload.attachments = currentAttachments.map(a => ({ name: a.name, type: a.type, signedUrl: a.signedUrl }));
+        payload.attachments = currentAttachments.map(a => ({ name: a.name, type: a.type, signedUrl: a.signedUrl, storagePath: a.storagePath }));
       }
 
       const res = await fetch('/api/ai/chat', {
