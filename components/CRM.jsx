@@ -2061,7 +2061,8 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   // Le taux suit le barème dégressif, sauf si l'agent l'a fixé à la main.
   const recalcDepuisNet = (net, d) => {
     const taux = (tauxManuel && +d.honorairesTaux > 0) ? +d.honorairesTaux : commissionTauxDefaut(net);
-    const honoraires = Math.round((+net || 0) * taux / 100);
+    // Honoraires plancher : minimum 10 000 € dès qu'il y a un prix.
+    const honoraires = (+net > 0) ? Math.max(Math.round((+net) * taux / 100), 10000) : 0;
     const fai = (+net || 0) + honoraires;
     const surf = +d.surface || 0;
     return {
@@ -2374,7 +2375,7 @@ async function handleFolderImport(event, opts = {}) {
       // Honoraires : taux 5% par défaut si absent, et montant € calculé auto (prix FAI × taux).
       if (!newData.honorairesTaux) newData.honorairesTaux = 5;
       if (newData.prix && newData.honorairesTaux && !newData.honorairesMontant) {
-        newData.honorairesMontant = Math.round((+newData.prix) * (+newData.honorairesTaux) / 100);
+        newData.honorairesMontant = Math.max(Math.round((+newData.prix) * (+newData.honorairesTaux) / 100), 10000);
       }
       setData(newData);
       setFilledFields(newFilled);
