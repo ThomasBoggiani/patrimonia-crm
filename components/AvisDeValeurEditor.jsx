@@ -198,17 +198,33 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
     preconisation: true,
   });
 
-  // Consultants (équipe) — pour le choix déroulant + email/tél automatiques
+  // Consultants (équipe) — pour le choix déroulant + email/tél automatiques.
+  // Repli sur l'équipe connue si la table profiles ne renvoie rien.
+  const EQUIPE_FALLBACK = [
+    { id: 'thomas-boggiani', prenom: 'Thomas', nom: 'Boggiani', fonction: 'Directeur du développement' },
+    { id: 'thomas-ezquerra', prenom: 'Thomas', nom: 'Ezquerra', fonction: 'Dirigeant' },
+    { id: 'philippe-korchia', prenom: 'Philippe', nom: 'Korchia', fonction: 'Directeur commercial' },
+    { id: 'lucas-hindelang', prenom: 'Lucas', nom: 'Hindelang', fonction: 'Développement foncier' },
+  ];
   const [profiles, setProfiles] = useState([]);
   useEffect(() => {
     (async () => {
-      const { data: profs } = await supabase.from('profiles').select('id, prenom, nom, email, tel, fonction').eq('actif', true);
-      setProfiles(profs || []);
+      let list = [];
+      try {
+        const { data: profs } = await supabase.from('profiles').select('id, prenom, nom, email, tel, fonction');
+        list = (profs || []).filter(p => p.prenom || p.nom);
+      } catch { /* ignore */ }
+      if (!list.length) list = EQUIPE_FALLBACK;
+      setProfiles(list);
       const { data: { user } } = await supabase.auth.getUser();
       // Par défaut : le consultant = celui qui crée l'avis (si non déjà choisi)
-      if (!data.preconisation.consultant_id && user) {
-        const meProf = (profs || []).find(p => p.id === user.id);
+      if (!data.preconisation.consultant_id) {
+        const meProf = list.find(p => p.id === user?.id) || list[0];
         if (meProf) setConsultant(meProf);
+      }
+      // Honoraires par défaut : barème selon le prix (sinon 5 %)
+      if (!(+data.preconisation.honoraires_pct)) {
+        update('preconisation.honoraires_pct', honorairesBareme(data.preconisation.prix_marche || mandat?.prix_net_vendeur || mandat?.prix));
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -263,6 +279,26 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
     } catch (e) { setAssistNote('⚠️ ' + e.message); }
     finally { setAssistBusy(false); }
   }
+
+  // Compresse un screenshot en data URL (max 1000px) pour les biens similaires
+  function readImageCompressed(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new window.Image();
+        img.onload = () => {
+          const max = 1000; const scale = Math.min(1, max / img.width);
+          const c = document.createElement('canvas');
+          c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          resolve(c.toDataURL('image/jpeg', 0.82));
+        };
+        img.onerror = reject; img.src = e.target.result;
+      };
+      reader.onerror = reject; reader.readAsDataURL(file);
+    });
+  }
+
   async function validerBienLien(i) {
     const arr = [...(data.comparables.biens_similaires || [])];
     const bs = arr[i] || {};
@@ -687,9 +723,13 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                   };
                   return (
                     <div key={i} className="flex gap-2 mb-2 items-start">
-                      <div className="w-14 h-14 flex-shrink-0 rounded border border-stone-200 bg-stone-50 overflow-hidden flex items-center justify-center">
+                      <label className="w-14 h-14 flex-shrink-0 rounded border border-stone-200 bg-stone-50 overflow-hidden flex items-center justify-center cursor-pointer hover:border-sage-light" title="Ajouter un screenshot de l'annonce">
                         {bs.photo ? <img src={bs.photo} alt="" className="w-full h-full object-cover" /> : <ImageIcon className="w-4 h-4 text-stone-300" />}
-                      </div>
+                        <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                          const f = e.target.files?.[0]; if (!f) return;
+                          try { const url = await readImageCompressed(f); setBs('photo', url); } catch { alert('Image illisible.'); }
+                        }} />
+                      </label>
                       <div className="flex-1 grid grid-cols-12 gap-1.5">
                         <input value={bs.adresse || ''} onChange={e => setBs('adresse', e.target.value)} placeholder={`Bien ${i + 1} — adresse / titre`} className="col-span-5 px-2 py-1.5 text-xs border border-stone-200 rounded" />
                         <input type="number" value={bs.surface || ''} onChange={e => setBs('surface', +e.target.value)} placeholder="m²" className="col-span-2 px-2 py-1.5 text-xs border border-stone-200 rounded" />
