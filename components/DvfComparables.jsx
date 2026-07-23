@@ -108,8 +108,12 @@ export default function DvfComparables({ mandat, onApply, savedVentes }) {
       mediane: globalMedian,
       count: selVentes.length,
       // Liste structurée pour l'avis (tableau) + évolution par année
-      ventes: selVentes.map(v => ({ date: v.date, adresse: v.adresse, type: v.type, surface: v.surface, prix: v.prix, prixM2: v.prixM2, lots: v.lots, memeImmeuble: !!v.memeImmeuble })),
-      parAnnee: parAnnee.map(a => ({ annee: a.annee, count: a.count, m2Median: a.m2Median })),
+      ventes: selVentes.map(v => ({ date: v.date, adresse: v.adresse, type: v.type, surface: v.surface, prix: v.prix, prixM2: v.prixM2, lots: v.lots, memeImmeuble: !!v.memeImmeuble, memeRue: !!v.memeRue })),
+      // Tendance de marché = médiane par année sur toute la commune (vrai graphique 5 ans),
+      // sinon repli sur les années des comparables sélectionnés.
+      parAnnee: (result?.secteurParAnnee && result.secteurParAnnee.length)
+        ? result.secteurParAnnee
+        : parAnnee.map(a => ({ annee: a.annee, count: a.count, m2Median: a.m2Median })),
     });
   }
 
