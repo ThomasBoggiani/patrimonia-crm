@@ -119,7 +119,9 @@ function buildMandatContext(mandat) {
   if (mandat.adresse) lines.push(`- Adresse : ${mandat.adresse}`);
   if (mandat.ville) lines.push(`- Ville : ${mandat.ville}`);
   if (mandat.code_postal) lines.push(`- Code postal : ${mandat.code_postal}`);
-  if (mandat.surface) lines.push(`- Surface : ${mandat.surface} m²`);
+  if (mandat.surface) lines.push(`- Surface habitable : ${mandat.surface} m²`);
+  if (mandat.surface_exterieure) lines.push(`- Surface extérieure : ${mandat.surface_exterieure} m²${mandat.type_exterieur ? ' (' + mandat.type_exterieur + ')' : ''}`);
+  if (mandat.surface_plancher) lines.push(`- Surface de plancher totale : ${mandat.surface_plancher} m²`);
   if (mandat.nb_pieces) lines.push(`- Pièces : ${mandat.nb_pieces}`);
   if (mandat.nb_chambres) lines.push(`- Chambres : ${mandat.nb_chambres}`);
   if (mandat.etage !== null && mandat.etage !== undefined) lines.push(`- Étage : ${mandat.etage}`);
@@ -148,6 +150,47 @@ function buildMandatContext(mandat) {
     lines.push(`# Description actuelle`);
     lines.push(mandat.description);
   }
+  return lines.join('\n');
+}
+
+// Contacts liés au mandat (mandant/propriétaire, apporteurs, notaires) via le
+// pivot mandat_contacts. Sans ça, l'assistant ne "voit" pas le propriétaire du
+// bien alors qu'il est affiché sur la fiche.
+const MANDAT_CONTACT_ROLE_LABELS = {
+  mandant: 'Mandant (propriétaire du bien)',
+  apporteur_mandat: 'Apporteur du mandat',
+  apporteur_acquereur: "Apporteur d'acquéreur",
+  notaire_vendeur: 'Notaire vendeur',
+  notaire_acquereur: 'Notaire acquéreur',
+};
+
+async function buildMandatContacts(mandatId) {
+  if (!mandatId) return '';
+  let data;
+  try {
+    const res = await supabaseAdmin
+      .from('mandat_contacts')
+      .select('role, contact:contacts(prenom, nom, societe, email, tel)')
+      .eq('mandat_id', mandatId);
+    data = res.data;
+  } catch (e) { return ''; }
+  if (!Array.isArray(data) || data.length === 0) return '';
+
+  const lines = ['', '# Contacts liés à ce mandat (déjà renseignés sur la fiche)'];
+  let any = false;
+  for (const mc of data) {
+    const c = mc.contact;
+    if (!c) continue;
+    const nom = [c.prenom, c.nom].filter(Boolean).join(' ') || c.societe || '(sans nom)';
+    const parts = [nom];
+    if (c.societe && (c.prenom || c.nom)) parts.push(`société : ${c.societe}`);
+    if (c.email) parts.push(`email : ${c.email}`);
+    if (c.tel) parts.push(`tél : ${c.tel}`);
+    lines.push(`- ${MANDAT_CONTACT_ROLE_LABELS[mc.role] || mc.role} : ${parts.join(' — ')}`);
+    any = true;
+  }
+  if (!any) return '';
+  lines.push(`\nCes coordonnées sont disponibles : si on te demande "qui est le propriétaire/mandant" ou d'écrire au mandant, utilise le contact ci-dessus. Ne réponds PAS qu'elles sont manquantes.`);
   return lines.join('\n');
 }
 
@@ -633,7 +676,7 @@ async function buildSystemPrompt(scope, entity, tones) {
   let roleLine = '';
   if (scope === 'mandat' && entity) {
     roleLine = `Tu es l'assistant du MANDAT ci-dessous : un copilote de vente qui aide à valoriser ce bien, le décrire, trouver les bons acquéreurs et faire avancer la transaction.`;
-    contextBlock = '\n\n' + buildMandatContext(entity) + (await buildMandatMatching(entity));
+    contextBlock = '\n\n' + buildMandatContext(entity) + (await buildMandatContacts(entity.id)) + (await buildMandatMatching(entity));
   } else if (scope === 'client' && entity) {
     roleLine = `Tu es l'assistant du CLIENT ci-dessous : un copilote qui aide à mieux servir cet acquéreur, lui recommander les bons mandats, rédiger ses emails et faire avancer la relation.`;
     contextBlock = '\n\n' + (await buildClientContext(entity)) + (await buildClientMatching(entity));
