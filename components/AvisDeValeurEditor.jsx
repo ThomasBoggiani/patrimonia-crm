@@ -206,16 +206,9 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
   const [generating, setGenerating] = useState(false);
   const [prefilling, setPrefilling] = useState(false);
 
-  // ── SOURCE UNIQUE : les champs partagés avec la fiche mandat sont lus/écrits
-  //    directement sur le mandat (plus de double saisie). On accumule les
-  //    modifications dans mandatPatch (colonnes snake_case) et on les enregistre
-  //    en même temps que l'avis. `mandatVal` lit le patch, sinon le mandat, sinon
-  //    l'ancienne valeur de l'avis (migration douce des dossiers existants).
-  const [mandatPatch, setMandatPatch] = useState({});
-  const updM = (col, val) => setMandatPatch(p => ({ ...p, [col]: val }));
-  const mandatVal = (col, fallback = '') => (col in mandatPatch)
-    ? mandatPatch[col]
-    : (mandat?.[col] != null && mandat?.[col] !== '' ? mandat[col] : fallback);
+  // SOURCE UNIQUE : les infos déjà sur la fiche mandat (taxe, charges, année,
+  // descriptif, lots) sont affichées en LECTURE SEULE dans l'avis (composant
+  // FicheField) et ne sont plus re-saisies ici. On les modifie sur la fiche.
 
   // Marché : le BtoC (habitation) masque les sections d'investissement.
   const estB2C = (mandat?.marche || mandat?.marche) === 'b2c';
@@ -426,7 +419,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
     try {
       const { error } = await supabase
         .from('mandats')
-        .update({ avis_valeur: data, ...mandatPatch })
+        .update({ avis_valeur: data })
         .eq('id', mandat.id);
       if (error) {
         alert('Erreur sauvegarde : ' + error.message);
@@ -765,12 +758,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Année de construction <span className="text-sage-dark">· fiche</span></label>
-                  <input
-                    type="text"
-                    value={mandatVal('annee_construction', data.caracteristiques.annee_construction) || ''}
-                    onChange={e => updM('annee_construction', e.target.value.trim() === '' ? null : (parseInt(e.target.value, 10) || null))}
-                    placeholder="ex: 1871" className={fieldClass}
-                  />
+                  <FicheField value={mandat?.annee_construction} block />
                 </div>
                 <div>
                   <label className={labelClass}>Architecte (si connu)</label>
@@ -802,13 +790,8 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
 
               <div>
                 <label className={labelClass}>Descriptif du bien <span className="text-sage-dark">· fiche</span></label>
-                <textarea
-                  value={mandatVal('description', data.caracteristiques.commentaire) || ''}
-                  onChange={e => updM('description', e.target.value)}
-                  rows={3} className={fieldClass}
-                  placeholder="Descriptif commercial de l'appartement (affiché sur l'avis et les plaquettes)…"
-                />
-                <p className="text-[10px] text-stone-400 mt-1 italic">Saisi une seule fois : sert à l'avis de valeur et aux plaquettes.</p>
+                <FicheField value={mandat?.description} block multiline />
+                <p className="text-[10px] text-stone-400 mt-1 italic">Vient de la fiche du bien (« Modifier mandat ») — sert aussi aux plaquettes.</p>
               </div>
             </div>
           </Section>
@@ -876,7 +859,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
             open={openSections.documents} onToggle={() => toggle('documents')}
             title="Documents — copropriété, fiscalité & DPE" icon={<FileDown className="w-4 h-4" />}
             subtitle="DPE, charges, taxe foncière, diagnostics, servitudes"
-            count={[data.documents.travaux_votes, data.documents.procedures, data.documents.diagnostics, data.documents.servitudes, data.documents.commentaire].filter(v => String(v || '').trim()).length + [data.documents.taxe_fonciere, data.documents.charges_annuelles, data.documents.fonds_travaux, data.documents.copro_nb_lots].filter(v => +v).length}
+            count={[data.documents.travaux_votes, data.documents.procedures, data.documents.diagnostics, data.documents.servitudes, data.documents.commentaire, data.documents.charges_detail].filter(v => String(v || '').trim()).length + [mandat?.taxe_fonciere, mandat?.charges_annuelles, mandat?.nb_lots, data.documents.fonds_travaux].filter(v => +v).length}
           >
             <div className="space-y-3">
               {/* DPE — repris du mandat, commentaire d'expert optionnel */}
@@ -892,24 +875,20 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                 <textarea value={data.dpe.commentaire || ''} onChange={e => update('dpe.commentaire', e.target.value)}
                   rows={2} className={fieldClass} placeholder="Ex : audit réalisé, devis d'isolation obtenu à 25 000 €, gain estimé de 2 classes…" />
               </div>
-              {/* Chiffres clés du dossier */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass}>Taxe foncière (€/an) <span className="text-sage-dark">· fiche</span></label>
-                  <input type="number" value={mandatVal('taxe_fonciere', data.documents.taxe_fonciere) || ''} onChange={e => updM('taxe_fonciere', +e.target.value)} className={fieldClass} />
+              {/* Infos déjà sur la fiche — lecture seule (source unique, plus de double saisie) */}
+              <div className="rounded-lg border border-cream-dark bg-cream-100/40 p-3">
+                <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wide mb-2">Depuis la fiche du bien</div>
+                <div className="grid grid-cols-3 gap-3">
+                  <FicheField label="Taxe foncière" value={mandat?.taxe_fonciere} format={v => `${(+v).toLocaleString('fr-FR')} €/an`} />
+                  <FicheField label="Charges copro" value={mandat?.charges_annuelles} format={v => `${(+v).toLocaleString('fr-FR')} €/an`} />
+                  <FicheField label="Nombre de lots" value={mandat?.nb_lots} />
                 </div>
-                <div>
-                  <label className={labelClass}>Charges copropriété (€/an) <span className="text-sage-dark">· fiche</span></label>
-                  <input type="number" value={mandatVal('charges_annuelles', data.documents.charges_annuelles) || ''} onChange={e => updM('charges_annuelles', +e.target.value)} className={fieldClass} />
-                </div>
-                <div>
-                  <label className={labelClass}>Fonds travaux (€)</label>
-                  <input type="number" value={data.documents.fonds_travaux || ''} onChange={e => update('documents.fonds_travaux', +e.target.value)} className={fieldClass} />
-                </div>
-                <div>
-                  <label className={labelClass}>Nombre de lots (copro) <span className="text-sage-dark">· fiche</span></label>
-                  <input type="number" value={mandatVal('nb_lots', data.documents.copro_nb_lots) || ''} onChange={e => updM('nb_lots', +e.target.value)} className={fieldClass} />
-                </div>
+                <p className="text-[10px] text-stone-400 mt-2 italic">Ces infos viennent de la fiche du bien — pour les modifier, ouvre « Modifier mandat ».</p>
+              </div>
+              {/* Fonds travaux — spécifique à l'avis */}
+              <div>
+                <label className={labelClass}>Fonds travaux (€)</label>
+                <input type="number" value={data.documents.fonds_travaux || ''} onChange={e => update('documents.fonds_travaux', +e.target.value)} className={fieldClass} />
               </div>
               <div>
                 <div className="flex items-center justify-between mb-1">
@@ -1437,7 +1416,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
             <button onClick={async () => {
               setGenerating(true);
               try {
-                await supabase.from('mandats').update({ avis_valeur: data, ...mandatPatch }).eq('id', mandat.id);
+                await supabase.from('mandats').update({ avis_valeur: data }).eq('id', mandat.id);
                 window.open(`/avis/${mandat.id}`, '_blank', 'noopener');
               } catch (e) { alert('Erreur : ' + e.message); }
               setGenerating(false);
@@ -1458,6 +1437,26 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
 // ═══════════════════════════════════════════════════════════════════
 // Sub-components
 // ═══════════════════════════════════════════════════════════════════
+
+// Affichage LECTURE SEULE d'une info venant de la fiche mandat (source unique).
+function FicheField({ label, value, format, block, multiline }) {
+  const has = value != null && value !== '' && !(typeof value === 'number' && value === 0);
+  const disp = has ? (format ? format(value) : String(value)) : null;
+  if (block) {
+    return (
+      <div className={`px-3 py-2 rounded-lg bg-cream-100/50 border border-cream-dark text-sm text-stone-700 ${multiline ? 'whitespace-pre-wrap min-h-[60px]' : 'min-h-[38px] flex items-center'}`}>
+        {disp || <span className="text-stone-400 italic text-xs">à compléter sur la fiche</span>}
+      </div>
+    );
+  }
+  return (
+    <div>
+      {label && <div className="text-[10px] uppercase tracking-wide text-stone-500 mb-0.5">{label}</div>}
+      {disp ? <div className="text-sm font-medium text-stone-800">{disp}</div>
+        : <div className="text-xs text-stone-400 italic">à compléter</div>}
+    </div>
+  );
+}
 
 function Section({ title, icon, subtitle, open, onToggle, count, children }) {
   return (
