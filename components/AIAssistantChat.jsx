@@ -572,7 +572,8 @@ export default function AIAssistantChat({
     else setInternalOpen(val);
   };
 
-  // Messages = { role, content?, proposed_action?, action_state? }
+  // Messages = { role, content?, proposed_actions?: [], action_states?: [] }
+  // (compat ancienne forme : proposed_action / action_state uniques)
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -704,10 +705,14 @@ export default function AIAssistantChat({
           // On reconstruit les messages d'affichage depuis l'historique persistant
           const restored = data.messages.map(m => {
             const msg = { role: m.role, content: m.content || '' };
-            if (m.proposed_action) {
-              msg.proposed_action = m.proposed_action;
-              // Une action rechargée depuis l'historique est considérée comme déjà traitée
-              msg.action_state = { executing: false, executed: true, result: { label: '' } };
+            // Compat : proposed_actions (tableau, nouveau) ou proposed_action (unique, ancien)
+            const props = Array.isArray(m.proposed_actions) && m.proposed_actions.length
+              ? m.proposed_actions
+              : (m.proposed_action ? [m.proposed_action] : []);
+            if (props.length) {
+              msg.proposed_actions = props;
+              // Actions rechargées depuis l'historique = déjà traitées
+              msg.action_states = props.map(() => ({ executing: false, executed: true, result: { label: '' } }));
             }
             return msg;
           });
@@ -893,7 +898,7 @@ export default function AIAssistantChat({
       if (!res.ok || !res.body) throw new Error((await res.text().catch(() => '')) || 'Erreur serveur');
 
       let acc = '';
-      let proposal = null;
+      let proposalCount = 0;
       await readStream(res, (evt) => {
         if (evt.type === 'delta') {
           acc += evt.text || '';
@@ -903,14 +908,18 @@ export default function AIAssistantChat({
             return copy;
           });
         } else if (evt.type === 'proposed_action') {
-          proposal = evt.action;
+          proposalCount++;
           setMessages(prev => {
             const copy = [...prev];
-            if (copy[assistantIdx]) copy[assistantIdx] = {
-              ...copy[assistantIdx],
-              proposed_action: proposal,
-              action_state: { executing: false, executed: false }
-            };
+            if (copy[assistantIdx]) {
+              const prevProps = copy[assistantIdx].proposed_actions || [];
+              const prevStates = copy[assistantIdx].action_states || [];
+              copy[assistantIdx] = {
+                ...copy[assistantIdx],
+                proposed_actions: [...prevProps, evt.action],
+                action_states: [...prevStates, { executing: false, executed: false }],
+              };
+            }
             return copy;
           });
         } else if (evt.type === 'error') {
@@ -921,8 +930,9 @@ export default function AIAssistantChat({
       // Si rien n'a été streamé ni proposé
       setMessages(prev => {
         const copy = [...prev];
-        if (copy[assistantIdx] && !copy[assistantIdx].content && !copy[assistantIdx].proposed_action) {
-          copy[assistantIdx] = { ...copy[assistantIdx], content: '(réponse vide)' };
+        const m = copy[assistantIdx];
+        if (m && !m.content && !(m.proposed_actions && m.proposed_actions.length)) {
+          copy[assistantIdx] = { ...m, content: '(réponse vide)' };
         }
         return copy;
       });
@@ -982,73 +992,59 @@ export default function AIAssistantChat({
   // CONFIRMATION D'UNE ACTION (exécution réelle via /api/assistant/execute)
   // ========================================================================
 
-  const confirmAction = async (msgIdx, editData) => {
-    const msg = messages[msgIdx];
-    if (!msg?.proposed_action) return;
-
+  // Met à jour l'état (action_states[propIdx]) d'une proposition d'un message, de façon immuable.
+  const setActionState = (msgIdx, propIdx, patch) => {
     setMessages(prev => {
       const copy = [...prev];
-      copy[msgIdx] = { ...copy[msgIdx], action_state: { executing: true, executed: false } };
+      const m = copy[msgIdx];
+      if (!m) return copy;
+      const states = [...(m.action_states || [])];
+      states[propIdx] = { ...(states[propIdx] || {}), ...patch };
+      copy[msgIdx] = { ...m, action_states: states };
       return copy;
     });
+  };
+
+  const confirmAction = async (msgIdx, propIdx, editData) => {
+    const msg = messages[msgIdx];
+    const proposal = msg?.proposed_actions?.[propIdx];
+    if (!proposal) return;
+
+    setActionState(msgIdx, propIdx, { executing: true, executed: false });
 
     try {
       const token = await getToken();
-      const finalData = { ...msg.proposed_action.data, ...editData };
+      const finalData = { ...proposal.data, ...editData };
 
       const res = await fetch('/api/assistant/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: { type: msg.proposed_action.type, data: finalData },
+          action: { type: proposal.type, data: finalData },
           token
         })
       });
 
       const data = await res.json();
 
-      setMessages(prev => {
-        const copy = [...prev];
-        if (data.ok) {
-          copy[msgIdx] = {
-            ...copy[msgIdx],
-            action_state: { executing: false, executed: true, result: data.result }
-          };
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('patrimonia:action-executed', {
-              detail: { type: msg.proposed_action.type, result: data.result }
-            }));
-          }
-        } else {
-          copy[msgIdx] = {
-            ...copy[msgIdx],
-            action_state: { executing: false, executed: true, error: data.error || 'Erreur inconnue' }
-          };
+      if (data.ok) {
+        setActionState(msgIdx, propIdx, { executing: false, executed: true, result: data.result });
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('patrimonia:action-executed', {
+            detail: { type: proposal.type, result: data.result }
+          }));
         }
-        return copy;
-      });
+      } else {
+        setActionState(msgIdx, propIdx, { executing: false, executed: true, error: data.error || 'Erreur inconnue' });
+      }
     } catch (err) {
       console.error('[AIAssistantChat] Execute error:', err);
-      setMessages(prev => {
-        const copy = [...prev];
-        copy[msgIdx] = {
-          ...copy[msgIdx],
-          action_state: { executing: false, executed: true, error: err.message }
-        };
-        return copy;
-      });
+      setActionState(msgIdx, propIdx, { executing: false, executed: true, error: err.message });
     }
   };
 
-  const cancelAction = (msgIdx) => {
-    setMessages(prev => {
-      const copy = [...prev];
-      copy[msgIdx] = {
-        ...copy[msgIdx],
-        action_state: { executing: false, executed: true, error: 'Annulé par l\'utilisateur' }
-      };
-      return copy;
-    });
+  const cancelAction = (msgIdx, propIdx) => {
+    setActionState(msgIdx, propIdx, { executing: false, executed: true, error: 'Annulé par l\'utilisateur' });
   };
 
   // ========================================================================
@@ -1317,7 +1313,9 @@ export default function AIAssistantChat({
 
             {messages.map((msg, i) => {
               const isUser = msg.role === 'user';
-              const hasProposal = msg.proposed_action;
+              // Compat : proposed_actions (tableau) ou proposed_action (unique, ancien state)
+              const proposals = msg.proposed_actions || (msg.proposed_action ? [msg.proposed_action] : []);
+              const hasProposal = proposals.length > 0;
               return (
                 <div key={i} className={`flex ${isUser ? 'justify-end' : 'justify-start'} ${hasProposal ? 'flex-col items-start gap-2' : ''}`}>
                   {msg.content && (
@@ -1332,18 +1330,22 @@ export default function AIAssistantChat({
                     />
                   )}
 
-                  {hasProposal && (
-                    <ProposalCard
-                      action={msg.proposed_action}
-                      onConfirm={(editData) => confirmAction(i, editData)}
-                      onCancel={() => cancelAction(i)}
-                      executing={msg.action_state?.executing}
-                      executed={msg.action_state?.executed}
-                      executedResult={msg.action_state?.result}
-                      executedError={msg.action_state?.error}
-                      profiles={profiles}
-                    />
-                  )}
+                  {proposals.map((proposal, pIdx) => {
+                    const st = msg.action_states?.[pIdx] || msg.action_state || {};
+                    return (
+                      <ProposalCard
+                        key={pIdx}
+                        action={proposal}
+                        onConfirm={(editData) => confirmAction(i, pIdx, editData)}
+                        onCancel={() => cancelAction(i, pIdx)}
+                        executing={st.executing}
+                        executed={st.executed}
+                        executedResult={st.result}
+                        executedError={st.error}
+                        profiles={profiles}
+                      />
+                    );
+                  })}
                 </div>
               );
             })}
