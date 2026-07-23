@@ -206,6 +206,17 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
   const [generating, setGenerating] = useState(false);
   const [prefilling, setPrefilling] = useState(false);
 
+  // ── SOURCE UNIQUE : les champs partagés avec la fiche mandat sont lus/écrits
+  //    directement sur le mandat (plus de double saisie). On accumule les
+  //    modifications dans mandatPatch (colonnes snake_case) et on les enregistre
+  //    en même temps que l'avis. `mandatVal` lit le patch, sinon le mandat, sinon
+  //    l'ancienne valeur de l'avis (migration douce des dossiers existants).
+  const [mandatPatch, setMandatPatch] = useState({});
+  const updM = (col, val) => setMandatPatch(p => ({ ...p, [col]: val }));
+  const mandatVal = (col, fallback = '') => (col in mandatPatch)
+    ? mandatPatch[col]
+    : (mandat?.[col] != null && mandat?.[col] !== '' ? mandat[col] : fallback);
+
   // Marché : le BtoC (habitation) masque les sections d'investissement.
   const estB2C = (mandat?.marche || mandat?.marche) === 'b2c';
 
@@ -415,7 +426,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
     try {
       const { error } = await supabase
         .from('mandats')
-        .update({ avis_valeur: data })
+        .update({ avis_valeur: data, ...mandatPatch })
         .eq('id', mandat.id);
       if (error) {
         alert('Erreur sauvegarde : ' + error.message);
@@ -753,11 +764,11 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelClass}>Année de construction</label>
+                  <label className={labelClass}>Année de construction <span className="text-sage-dark">· fiche</span></label>
                   <input
                     type="text"
-                    value={data.caracteristiques.annee_construction}
-                    onChange={e => update('caracteristiques.annee_construction', e.target.value)}
+                    value={mandatVal('annee_construction', data.caracteristiques.annee_construction) || ''}
+                    onChange={e => updM('annee_construction', e.target.value.trim() === '' ? null : (parseInt(e.target.value, 10) || null))}
                     placeholder="ex: 1871" className={fieldClass}
                   />
                 </div>
@@ -790,12 +801,14 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
               />
 
               <div>
-                <label className={labelClass}>Commentaire général</label>
+                <label className={labelClass}>Descriptif du bien <span className="text-sage-dark">· fiche</span></label>
                 <textarea
-                  value={data.caracteristiques.commentaire}
-                  onChange={e => update('caracteristiques.commentaire', e.target.value)}
-                  rows={2} className={fieldClass}
+                  value={mandatVal('description', data.caracteristiques.commentaire) || ''}
+                  onChange={e => updM('description', e.target.value)}
+                  rows={3} className={fieldClass}
+                  placeholder="Descriptif commercial de l'appartement (affiché sur l'avis et les plaquettes)…"
                 />
+                <p className="text-[10px] text-stone-400 mt-1 italic">Saisi une seule fois : sert à l'avis de valeur et aux plaquettes.</p>
               </div>
             </div>
           </Section>
@@ -882,20 +895,20 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
               {/* Chiffres clés du dossier */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelClass}>Taxe foncière (€/an)</label>
-                  <input type="number" value={data.documents.taxe_fonciere || ''} onChange={e => update('documents.taxe_fonciere', +e.target.value)} className={fieldClass} />
+                  <label className={labelClass}>Taxe foncière (€/an) <span className="text-sage-dark">· fiche</span></label>
+                  <input type="number" value={mandatVal('taxe_fonciere', data.documents.taxe_fonciere) || ''} onChange={e => updM('taxe_fonciere', +e.target.value)} className={fieldClass} />
                 </div>
                 <div>
-                  <label className={labelClass}>Charges copropriété (€/an)</label>
-                  <input type="number" value={data.documents.charges_annuelles || ''} onChange={e => update('documents.charges_annuelles', +e.target.value)} className={fieldClass} />
+                  <label className={labelClass}>Charges copropriété (€/an) <span className="text-sage-dark">· fiche</span></label>
+                  <input type="number" value={mandatVal('charges_annuelles', data.documents.charges_annuelles) || ''} onChange={e => updM('charges_annuelles', +e.target.value)} className={fieldClass} />
                 </div>
                 <div>
                   <label className={labelClass}>Fonds travaux (€)</label>
                   <input type="number" value={data.documents.fonds_travaux || ''} onChange={e => update('documents.fonds_travaux', +e.target.value)} className={fieldClass} />
                 </div>
                 <div>
-                  <label className={labelClass}>Nombre de lots (copro)</label>
-                  <input type="number" value={data.documents.copro_nb_lots || ''} onChange={e => update('documents.copro_nb_lots', +e.target.value)} className={fieldClass} />
+                  <label className={labelClass}>Nombre de lots (copro) <span className="text-sage-dark">· fiche</span></label>
+                  <input type="number" value={mandatVal('nb_lots', data.documents.copro_nb_lots) || ''} onChange={e => updM('nb_lots', +e.target.value)} className={fieldClass} />
                 </div>
               </div>
               <div>
@@ -1424,7 +1437,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
             <button onClick={async () => {
               setGenerating(true);
               try {
-                await supabase.from('mandats').update({ avis_valeur: data }).eq('id', mandat.id);
+                await supabase.from('mandats').update({ avis_valeur: data, ...mandatPatch }).eq('id', mandat.id);
                 window.open(`/avis/${mandat.id}`, '_blank', 'noopener');
               } catch (e) { alert('Erreur : ' + e.message); }
               setGenerating(false);
