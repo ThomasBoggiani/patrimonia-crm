@@ -192,10 +192,13 @@ export async function POST(request) {
     // Type retenu : 'auto' = déduit du mandat (sinon tous)
     const typeVoulu = typeFiltre === 'auto' ? mandatType : (typeFiltre === 'tous' ? '' : typeFiltre);
 
-    // Années à interroger : on part de l'an dernier (DVF a ~6 mois de retard)
-    const anneeMax = new Date().getFullYear() - 1;
+    // Années à interroger : on part de l'ANNÉE EN COURS (si son fichier DVF n'est
+    // pas encore publié, il renvoie 404 et est ignoré proprement) et on descend.
+    // On interroge une année de plus que demandé, pour toujours obtenir la
+    // profondeur voulue même quand l'année la plus récente n'existe pas encore.
+    const anneeMax = new Date().getFullYear();
     const anneesList = [];
-    for (let y = anneeMax; y > anneeMax - annees; y--) anneesList.push(y);
+    for (let y = anneeMax; y > anneeMax - (annees + 1); y--) anneesList.push(y);
 
     const dep = geo.citycode.slice(0, 2) === '97' ? geo.citycode.slice(0, 3) : geo.citycode.slice(0, 2);
     const batches = await Promise.all(anneesList.map((y, i) => ventesCommuneAnnee(dep, geo.citycode, y, i)));
