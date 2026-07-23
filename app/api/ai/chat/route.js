@@ -119,7 +119,9 @@ function buildMandatContext(mandat) {
   if (mandat.adresse) lines.push(`- Adresse : ${mandat.adresse}`);
   if (mandat.ville) lines.push(`- Ville : ${mandat.ville}`);
   if (mandat.code_postal) lines.push(`- Code postal : ${mandat.code_postal}`);
-  if (mandat.surface) lines.push(`- Surface : ${mandat.surface} m²`);
+  if (mandat.surface) lines.push(`- Surface habitable : ${mandat.surface} m²`);
+  if (mandat.surface_exterieure) lines.push(`- Surface extérieure : ${mandat.surface_exterieure} m²${mandat.type_exterieur ? ' (' + mandat.type_exterieur + ')' : ''}`);
+  if (mandat.surface_plancher) lines.push(`- Surface de plancher totale : ${mandat.surface_plancher} m²`);
   if (mandat.nb_pieces) lines.push(`- Pièces : ${mandat.nb_pieces}`);
   if (mandat.nb_chambres) lines.push(`- Chambres : ${mandat.nb_chambres}`);
   if (mandat.etage !== null && mandat.etage !== undefined) lines.push(`- Étage : ${mandat.etage}`);

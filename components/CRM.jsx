@@ -1034,29 +1034,40 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
     let mandatId = mandat.id;
     const isNouveauMandat = !mandat.id;
 
-    // `pieces_presentes` (check-list du dossier) peut ne pas encore exister en base.
-    // On tente avec, et on rejoue sans si la colonne est absente — l'enregistrement
-    // ne doit jamais échouer pour cette raison.
-    const colonneManquante = (err) =>
-      err && /pieces_presentes/i.test(err.message || '') &&
-      /column|colonne|schema cache/i.test(err.message || '');
+    // Certaines colonnes (check-list du dossier, nouvelles surfaces…) peuvent ne
+    // pas encore exister en base. Plutôt que de faire échouer TOUT l'enregistrement,
+    // on repère la colonne absente dans le message d'erreur, on la retire, et on
+    // réessaie. L'enregistrement ne doit jamais casser pour une colonne manquante.
+    const colonneAbsente = (err) => {
+      if (!err) return null;
+      const msg = err.message || '';
+      if (!/schema cache|does not exist|could not find/i.test(msg)) return null;
+      const m = msg.match(/'([a-z0-9_]+)' column/i) || msg.match(/column ["']?([a-z0-9_]+)["']?/i);
+      return m ? m[1] : null;
+    };
+    const enregistrerResilient = async (payload, kind) => {
+      let body = { ...payload };
+      for (let i = 0; i < 10; i++) {
+        const q = kind === 'insert'
+          ? supabase.from('mandats').insert(body).select().single()
+          : supabase.from('mandats').update(body).eq('id', mandat.id);
+        const { data: row, error } = await q;
+        if (!error) return { row, error: null };
+        const col = colonneAbsente(error);
+        if (!col || !(col in body)) return { row: null, error };
+        delete body[col]; // colonne pas encore créée en base → on l'ignore et on réessaie
+      }
+      return { row: null, error: { message: 'Trop de colonnes manquantes en base' } };
+    };
 
     if (mandat.id) {
       snakeData.updated_by = user?.id;
-      let { error } = await supabase.from('mandats').update(snakeData).eq('id', mandat.id);
-      if (colonneManquante(error)) {
-        const { pieces_presentes, ...sansChecklist } = snakeData;
-        ({ error } = await supabase.from('mandats').update(sansChecklist).eq('id', mandat.id));
-      }
+      const { error } = await enregistrerResilient(snakeData, 'update');
       if (error) { alert('Erreur enregistrement : ' + error.message); return; }
     } else {
       delete snakeData.id;
       snakeData.created_by = user?.id;
-      let { data: created, error } = await supabase.from('mandats').insert(snakeData).select().single();
-      if (colonneManquante(error)) {
-        const { pieces_presentes, ...sansChecklist } = snakeData;
-        ({ data: created, error } = await supabase.from('mandats').insert(sansChecklist).select().single());
-      }
+      let { row: created, error } = await enregistrerResilient(snakeData, 'insert');
       if (error) { alert('Erreur création : ' + error.message); return; }
       if (created) mandatId = created.id;
     }
@@ -2812,7 +2823,17 @@ async function handleFolderImport(event, opts = {}) {
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Ville"><input type="text" value={data.ville || ''} onChange={e => update('ville', e.target.value)} className={fieldClass('ville')} /></Field>
                 <Field label="Code postal"><input type="text" value={data.code_postal || ''} onChange={e => update('code_postal', e.target.value)} className={fieldClass('code_postal')} /></Field>
-                <Field label="Surface (m²)"><input type="number" value={data.surface} onChange={e => { const surface = +e.target.value; setData(d => ({ ...d, surface, prixM2: surface ? Math.round((+d.prix || 0) / surface) : d.prixM2 })); }} className={fieldClass('surface')} /></Field>
+                <Field label="Surface habitable (m²)"><input type="number" value={data.surface} onChange={e => { const surface = +e.target.value; setData(d => ({ ...d, surface, prixM2: surface ? Math.round((+d.prix || 0) / surface) : d.prixM2 })); }} className={fieldClass('surface')} /></Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Surface extérieure (m²)"><input type="number" value={data.surfaceExterieure ?? ''} onChange={e => update('surfaceExterieure', e.target.value === '' ? null : +e.target.value)} className={fieldClass('surfaceExterieure')} placeholder="terrasse, balcon, jardin…" /></Field>
+                <Field label="Type d'extérieur">
+                  <select value={data.typeExterieur || ''} onChange={e => update('typeExterieur', e.target.value)} className={fieldClass('typeExterieur')}>
+                    <option value="">—</option>
+                    {['Terrasse', 'Balcon', 'Jardin', 'Loggia', 'Terrasse + Jardin', 'Cour', 'Rooftop'].map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </Field>
+                <Field label="Surface de plancher totale (m²)"><input type="number" value={data.surfacePlancher ?? ''} onChange={e => update('surfacePlancher', e.target.value === '' ? null : +e.target.value)} className={fieldClass('surfacePlancher')} placeholder="surface totale de plancher" /></Field>
               </div>
               <Field label="Marché">
                 <div className="flex gap-2">
@@ -3929,6 +3950,8 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
             </div>
             <div className="grid grid-cols-5 gap-4 mt-4 pt-4 border-t border-cream">
               <DetailItem label="Surface" value={mandat.surface ? `${mandat.surface} m²` : '—'} />
+              {mandat.surfaceExterieure ? <DetailItem label="Surface extérieure" value={`${mandat.surfaceExterieure} m²${mandat.typeExterieur ? ' · ' + mandat.typeExterieur : ''}`} /> : null}
+              {mandat.surfacePlancher ? <DetailItem label="Surface de plancher" value={`${mandat.surfacePlancher} m²`} /> : null}
               <DetailItem label="Type" value={mandat.sousType ? `${mandat.type} · ${mandat.sousType}` : mandat.type} />
               <DetailItem label="DPE" value={mandat.dpeConsommation ? <span className="text-2xl font-bold" style={{color: getDPEColor(mandat.dpeConsommation)}}>{getDPEClass(mandat.dpeConsommation)}</span> : '—'} />
               <DetailItem label="Taxe foncière" value={mandat.taxeFonciere ? `${parseFloat(mandat.taxeFonciere).toLocaleString('fr')} €` : '—'} />
