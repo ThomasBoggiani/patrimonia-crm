@@ -526,13 +526,31 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                 mandat={mandat}
                 savedVentes={data.comparables.ventes}
                 onApply={(r) => {
-                  update('comparables.prix_zone_min', r.prix_zone_min);
-                  update('comparables.prix_zone_max', r.prix_zone_max);
-                  update('comparables.transactions_recentes', r.transactions_recentes);
-                  update('comparables.ventes', r.ventes || []);
-                  update('comparables.par_annee', r.parAnnee || []);
-                  if (r.mediane) update('comparables.commentaire',
-                    `Médiane observée : ${r.mediane.toLocaleString('fr-FR')} €/m² sur ${r.count} vente(s) DVF retenue(s).`);
+                  const surf = +mandat?.surface || 0;
+                  const med = +r.mediane || 0; // médiane €/m²
+                  const centre = med && surf ? Math.round(med * surf) : 0;
+                  setData(prev => {
+                    const next = JSON.parse(JSON.stringify(prev));
+                    next.comparables.prix_zone_min = r.prix_zone_min;
+                    next.comparables.prix_zone_max = r.prix_zone_max;
+                    next.comparables.transactions_recentes = r.transactions_recentes;
+                    next.comparables.ventes = r.ventes || [];
+                    next.comparables.par_annee = r.parAnnee || [];
+                    if (med) next.comparables.commentaire = `Médiane observée : ${med.toLocaleString('fr-FR')} €/m² sur ${r.count} vente(s) DVF retenue(s).`;
+                    // Le prix de marché = médiane DVF × surface ; méthode : centrale −10 % / +10 %
+                    if (centre) {
+                      next.preconisation.prix_marche = centre;
+                      next.preconisation.prix_plancher = Math.round(centre * 0.9);
+                      next.preconisation.prix_coup_de_coeur = Math.round(centre * 1.1);
+                      next.methode_m2 = {
+                        valeur_basse: { prix_m2: Math.round(med * 0.9), valeur_totale: Math.round(centre * 0.9), commentaire: prev.methode_m2?.valeur_basse?.commentaire || '' },
+                        valeur_centrale: { prix_m2: med, valeur_totale: centre, commentaire: prev.methode_m2?.valeur_centrale?.commentaire || 'Médiane DVF du secteur.' },
+                        valeur_haute: { prix_m2: Math.round(med * 1.1), valeur_totale: Math.round(centre * 1.1), commentaire: prev.methode_m2?.valeur_haute?.commentaire || '' },
+                      };
+                    }
+                    return next;
+                  });
+                  if (med && !surf) alert('Astuce : renseigne la surface du mandat pour calculer automatiquement le prix (médiane × surface).');
                 }}
               />
               <div className="grid grid-cols-2 gap-3">
