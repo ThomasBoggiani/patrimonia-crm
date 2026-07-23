@@ -70,6 +70,7 @@ const EMPTY_AVIS = {
     diagnostics: '',
     servitudes: '',
     commentaire: '',
+    checklist: {},          // pièces réunies cochées à la main (le reste est auto-détecté)
   },
   // 4. Comparables & marché
   comparables: {
@@ -904,6 +905,27 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                 </div>
                 <textarea value={data.documents.charges_detail || ''} onChange={e => update('documents.charges_detail', e.target.value)}
                   rows={2} className={fieldClass} placeholder="Ex : chauffage collectif et eau chaude inclus, gardien, entretien des parties communes, ascenseur…" />
+              </div>
+              {/* Check-list des pièces réunies (cases à cocher) */}
+              <div className="rounded-lg border border-stone-200 bg-white p-3">
+                <label className={labelClass}>Pièces réunies (check-list du dossier)</label>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                  {[
+                    { k: 'titre', label: 'Titre de propriété' },
+                    { k: 'plans', label: 'Plans du bien' },
+                    { k: 'reglement', label: 'Règlement de copropriété' },
+                    { k: 'pv_ag', label: 'PV des 3 dernières AG' },
+                    { k: 'carnet', label: "Carnet d'entretien de l'immeuble" },
+                  ].map(({ k, label }) => (
+                    <label key={k} className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer">
+                      <input type="checkbox" checked={!!(data.documents.checklist || {})[k]}
+                        onChange={e => update('documents.checklist', { ...(data.documents.checklist || {}), [k]: e.target.checked })}
+                        className="w-4 h-4 accent-sage-dark" />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+                <p className="text-[10px] text-stone-400 mt-2 italic">Le DPE, les charges, la taxe foncière, les diagnostics et les photos se cochent automatiquement dès qu'ils sont renseignés.</p>
               </div>
               {/* Textes du dossier (dictée possible) */}
               {[
