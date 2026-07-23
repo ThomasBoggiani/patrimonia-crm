@@ -178,8 +178,12 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
       });
       const j = await res.json();
       if (!j.ok) { alert(j.error || 'Pré-remplissage impossible.'); setPrefilling(false); return; }
-      // Fusionne : on garde ce qui est déjà rempli, l'IA complète les vides.
-      setData(prev => mergePrefill(prev, ensureSchema(j.avis)));
+      // Le PRIX vient uniquement du DVF : l'IA ne touche pas aux méthodes de valeur
+      // ni aux 3 prix (sinon elle invente des chiffres qui contredisent le DVF).
+      const avis = ensureSchema(j.avis);
+      delete avis.methode_m2; delete avis.methode_capi;
+      if (avis.preconisation) { delete avis.preconisation.prix_marche; delete avis.preconisation.prix_plancher; delete avis.preconisation.prix_coup_de_coeur; }
+      setData(prev => mergePrefill(prev, avis));
     } catch (e) {
       alert('Erreur : ' + e.message);
     } finally {
@@ -545,9 +549,9 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                       next.preconisation.prix_plancher = Math.round(centre * 0.9);
                       next.preconisation.prix_coup_de_coeur = Math.round(centre * 1.1);
                       next.methode_m2 = {
-                        valeur_basse: { prix_m2: Math.round(med * 0.9), valeur_totale: Math.round(centre * 0.9), commentaire: prev.methode_m2?.valeur_basse?.commentaire || '' },
-                        valeur_centrale: { prix_m2: med, valeur_totale: centre, commentaire: prev.methode_m2?.valeur_centrale?.commentaire || 'Médiane DVF du secteur.' },
-                        valeur_haute: { prix_m2: Math.round(med * 1.1), valeur_totale: Math.round(centre * 1.1), commentaire: prev.methode_m2?.valeur_haute?.commentaire || '' },
+                        valeur_basse: { prix_m2: Math.round(med * 0.9), valeur_totale: Math.round(centre * 0.9), commentaire: 'Scénario prudent (−10 % sous la médiane).' },
+                        valeur_centrale: { prix_m2: med, valeur_totale: centre, commentaire: 'Médiane DVF du secteur × surface.' },
+                        valeur_haute: { prix_m2: Math.round(med * 1.1), valeur_totale: Math.round(centre * 1.1), commentaire: 'Scénario haut (+10 % au-dessus de la médiane).' },
                       };
                     }
                     return next;
@@ -988,7 +992,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                             const centre = Math.round(med * surf);
                             setData(prev => { const n = JSON.parse(JSON.stringify(prev));
                               n.preconisation.prix_marche = centre; n.preconisation.prix_plancher = Math.round(centre * 0.9); n.preconisation.prix_coup_de_coeur = Math.round(centre * 1.1);
-                              n.methode_m2 = { valeur_basse:{prix_m2:Math.round(med*0.9),valeur_totale:Math.round(centre*0.9),commentaire:n.methode_m2?.valeur_basse?.commentaire||''}, valeur_centrale:{prix_m2:med,valeur_totale:centre,commentaire:n.methode_m2?.valeur_centrale?.commentaire||'Médiane DVF du secteur.'}, valeur_haute:{prix_m2:Math.round(med*1.1),valeur_totale:Math.round(centre*1.1),commentaire:n.methode_m2?.valeur_haute?.commentaire||''} };
+                              n.methode_m2 = { valeur_basse:{prix_m2:Math.round(med*0.9),valeur_totale:Math.round(centre*0.9),commentaire:'Scénario prudent (−10 % sous la médiane).'}, valeur_centrale:{prix_m2:med,valeur_totale:centre,commentaire:'Médiane DVF du secteur × surface.'}, valeur_haute:{prix_m2:Math.round(med*1.1),valeur_totale:Math.round(centre*1.1),commentaire:'Scénario haut (+10 % au-dessus de la médiane).'} };
                               return n; });
                           }}
                           className="ml-auto px-2 py-1 rounded bg-sage-dark text-white hover:bg-sage-darker">↺ Recalculer depuis le DVF</button>
