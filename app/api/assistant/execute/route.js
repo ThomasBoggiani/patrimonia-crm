@@ -322,6 +322,88 @@ async function executeUpdateMandat(data, userId) {
 }
 
 // ==========================================================================
+// AJOUT DE PHOTOS À LA GALERIE DU BIEN
+// Les photos ont été déposées dans le chat (bucket temporaire
+// "assistant-attachments"). On les RECOPIE dans le stockage permanent
+// "mandat-photos", puis on les ajoute au tableau medias du mandat.
+// ==========================================================================
+const ASSISTANT_BUCKET = 'assistant-attachments';
+const PHOTOS_BUCKET = 'mandat-photos';
+const PHOTO_SIGNED_TTL = 60 * 60 * 24 * 365 * 10; // 10 ans
+
+async function executeAddPhotos(data, userId) {
+  const mandatId = data.mandat_id || data.id;
+  if (!mandatId) return { ok: false, error: 'ID du mandat manquant' };
+  const photos = Array.isArray(data.photos) ? data.photos.filter(p => p && p.storagePath) : [];
+  if (photos.length === 0) return { ok: false, error: 'Aucune photo à ajouter' };
+
+  // Charge le mandat (medias actuel + photos legacy + nom)
+  const { data: mandat, error: loadErr } = await supabaseAdmin
+    .from('mandats').select('id, nom, medias, photos').eq('id', mandatId).single();
+  if (loadErr || !mandat) return { ok: false, error: 'Mandat introuvable' };
+
+  // Reconstruit la liste medias existante en préservant TOUT le contenu.
+  // Si le mandat est encore au format legacy `photos`, on le convertit en medias.
+  let existingMedias = Array.isArray(mandat.medias) ? [...mandat.medias] : [];
+  if (existingMedias.length === 0 && Array.isArray(mandat.photos) && mandat.photos.length > 0) {
+    existingMedias = mandat.photos
+      .map(p => (typeof p === 'string' ? { url: p } : p))
+      .filter(p => p && p.url)
+      .map((p, i) => ({ type: 'photo', url: p.url, ordre: i, cover: i === 0, ...(p.nom ? { nom: p.nom } : {}) }));
+  }
+  const existingPhotoCount = existingMedias.filter(m => m && m.type === 'photo').length;
+  const hasCover = existingMedias.some(m => m && m.type === 'photo' && m.cover);
+
+  // Recopie chaque photo depuis le bucket temporaire vers le bucket permanent
+  const added = [];
+  const failed = [];
+  for (const p of photos) {
+    try {
+      const { data: blob, error: dlErr } = await supabaseAdmin.storage
+        .from(ASSISTANT_BUCKET).download(p.storagePath);
+      if (dlErr || !blob) { failed.push(p.name || 'photo'); continue; }
+      const contentType = p.type || blob.type || 'image/jpeg';
+      const cleanName = String(p.name || 'photo')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
+      const newPath = `${mandatId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${cleanName}`;
+      const buffer = Buffer.from(await blob.arrayBuffer());
+      const { error: upErr } = await supabaseAdmin.storage
+        .from(PHOTOS_BUCKET).upload(newPath, buffer, { contentType, upsert: false });
+      if (upErr) { console.error('[add_photos] upload:', upErr); failed.push(p.name || 'photo'); continue; }
+      const { data: signed, error: sErr } = await supabaseAdmin.storage
+        .from(PHOTOS_BUCKET).createSignedUrl(newPath, PHOTO_SIGNED_TTL);
+      if (sErr || !signed?.signedUrl) { failed.push(p.name || 'photo'); continue; }
+      added.push({ url: signed.signedUrl, nom: p.name || null });
+    } catch (e) {
+      console.error('[add_photos] erreur:', e);
+      failed.push(p.name || 'photo');
+    }
+  }
+
+  if (added.length === 0) {
+    return { ok: false, error: 'Aucune photo n\'a pu être ajoutée' + (failed.length ? ` (${failed.join(', ')})` : '') };
+  }
+
+  const startOrdre = existingMedias.length;
+  const newMedias = added.map((p, i) => ({
+    type: 'photo',
+    url: p.url,
+    ordre: startOrdre + i,
+    cover: hasCover ? false : (existingPhotoCount === 0 && i === 0),
+    ...(p.nom ? { nom: p.nom } : {}),
+  }));
+  const merged = [...existingMedias, ...newMedias];
+
+  const { error: updErr } = await supabaseAdmin.from('mandats')
+    .update({ medias: merged, updated_by: userId || null, updated_at: new Date().toISOString() })
+    .eq('id', mandatId);
+  if (updErr) return { ok: false, error: updErr.message };
+
+  const label = `${added.length} photo(s) ajoutée(s)${failed.length ? `, ${failed.length} échec(s)` : ''} — ${mandat.nom || 'bien'}`;
+  return { ok: true, result: { id: mandatId, label, type: 'mandat' } };
+}
+
+// ==========================================================================
 // MODIFICATION CLIENT
 // ==========================================================================
 
@@ -480,6 +562,7 @@ export async function POST(req) {
       case 'create_event': result = await executeCreateEvent(action.data, user.id, userInitials, token); break;
       case 'create_interaction': result = await executeCreateInteraction(action.data, user.id, userInitials); break;
       case 'update_mandat': result = await executeUpdateMandat(action.data, user.id); break;
+      case 'add_photos': result = await executeAddPhotos(action.data, user.id); break;
       case 'update_client': result = await executeUpdateClient(action.data, user.id); break;
       case 'send_email': result = await executeSendEmail(action.data, user.id, userInitials, token); break;
       case 'send_plaquette': result = await executeSendPlaquette(action.data, user.id, userInitials, token); break;
