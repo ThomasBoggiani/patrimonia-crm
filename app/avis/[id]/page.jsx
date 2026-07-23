@@ -35,6 +35,36 @@ export default function AvisPage() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+  // À l'impression, on masque tout ce qui n'est pas l'avis lui-même : les
+  // extensions du navigateur injectent souvent un bouton flottant (assistant IA,
+  // lecteur…) en position fixe, qui se retrouverait imprimé sur chaque page.
+  useEffect(() => {
+    const hidden = [];
+    const onBefore = () => {
+      const doc = document.querySelector('.avis-scaler');
+      if (!doc) return;
+      Array.from(document.body.children).forEach((el) => {
+        if (el.contains(doc)) return; // on garde la branche qui contient l'avis
+        if (el.style.display === 'none') return;
+        hidden.push([el, el.style.getPropertyValue('display'), el.style.getPropertyPriority('display')]);
+        el.style.setProperty('display', 'none', 'important');
+      });
+    };
+    const onAfter = () => {
+      hidden.forEach(([el, val, prio]) => {
+        if (val) el.style.setProperty('display', val, prio);
+        else el.style.removeProperty('display');
+      });
+      hidden.length = 0;
+    };
+    window.addEventListener('beforeprint', onBefore);
+    window.addEventListener('afterprint', onAfter);
+    return () => {
+      window.removeEventListener('beforeprint', onBefore);
+      window.removeEventListener('afterprint', onAfter);
+    };
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
