@@ -18,10 +18,14 @@ import MicButton from './MicButton';
 
 // Schéma vide par défaut
 const EMPTY_AVIS = {
+  // Phase du document : 'pre_avis' (depuis l'adresse) → 'definitif' (visite/dossier).
+  phase: 'pre_avis',
   // 1. Localisation
   localisation: {
     transports: '', // texte libre (en attendant intégration auto)
     commentaire: '', // commentaire stratégique sur l'emplacement
+    commentaire_rue: '', // analyse de la rue (page dédiée)
+    commentaire_urbanisme: '', // cadastre / urbanisme / risques (page dédiée)
   },
   // 2. Situation locative (auto depuis etat_locatif, juste commentaire ici)
   situation_locative: {
@@ -33,6 +37,37 @@ const EMPTY_AVIS = {
     architecte: '',
     distribution: '', // texte libre (R-1, RDC, R+1...)
     atouts_distinctifs: [], // bullets
+    commentaire: '',
+  },
+  // 3bis. Visite — observations Phase 2 (avis définitif). Dictée + champs.
+  visite: {
+    architecture: '',       // architecture / style de l'immeuble
+    immeuble_qualite: '',    // qualité de la construction / de l'immeuble
+    parties_communes: '',    // hall, escalier, ascenseur, entretien
+    agencement: '',          // distribution / agencement intérieur
+    volumes: '',             // volumes, hauteur sous plafond
+    luminosite: '',          // luminosité
+    exposition: '',          // expositions
+    vues: '',                // vues / dégagement
+    prestations: [],         // prestations remarquables (bullets)
+    etat_general: '',        // état général
+    travaux: '',             // travaux éventuels à prévoir
+    potentiel: '',           // potentiel de valorisation
+  },
+  // 3ter. DPE (classe/conso viennent du mandat) — commentaire d'expert optionnel.
+  dpe: {
+    commentaire: '',
+  },
+  // 3quater. Documents — copropriété, fiscalité, diagnostics (option « sur pièces »).
+  documents: {
+    taxe_fonciere: 0,
+    charges_annuelles: 0,
+    fonds_travaux: 0,
+    copro_nb_lots: 0,
+    travaux_votes: '',
+    procedures: '',
+    diagnostics: '',
+    servitudes: '',
     commentaire: '',
   },
   // 4. Comparables & marché
@@ -79,6 +114,7 @@ const EMPTY_AVIS = {
     prix_marche: 0,
     prix_plancher: 0,
     avis_client: '',
+    confiance: '', // niveau de confiance affiché ('' = auto ; 'Indicatif'|'Correct'|'Élevé')
     consultant_id: '',
     consultant_nom: '',
     consultant_email: '',
@@ -108,6 +144,13 @@ function ensureSchema(data) {
       atouts_distinctifs: Array.isArray(data.caracteristiques?.atouts_distinctifs)
         ? data.caracteristiques.atouts_distinctifs : [],
     },
+    visite: {
+      ...EMPTY_AVIS.visite,
+      ...(data.visite || {}),
+      prestations: Array.isArray(data.visite?.prestations) ? data.visite.prestations : [],
+    },
+    dpe: { ...EMPTY_AVIS.dpe, ...(data.dpe || {}) },
+    documents: { ...EMPTY_AVIS.documents, ...(data.documents || {}) },
     comparables: { ...EMPTY_AVIS.comparables, ...(data.comparables || {}) },
     swot: { ...EMPTY_AVIS.swot, ...(data.swot || {}) },
     methode_m2: {
@@ -196,6 +239,8 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
     localisation: true,
     locatif: true,
     caracteristiques: true,
+    visite: true,
+    documents: true,
     comparables: true,
     swot: true,
     methodes: true,
@@ -484,12 +529,34 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
         {/* BODY */}
         <div className="flex-1 overflow-y-auto scrollbar-thin p-6 space-y-3 bg-cream-50/30">
 
+          {/* ─── 0. PHASE DU DOCUMENT (entonnoir) ─── */}
+          <div className="rounded-lg border border-sage-light bg-sage-50/60 p-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <div className="text-xs font-semibold text-sage-darker uppercase tracking-wide">Niveau du document</div>
+                <p className="text-[11px] text-stone-500 mt-0.5">
+                  {data.phase === 'definitif'
+                    ? 'Avis définitif — enrichi par la visite ou le dossier complet.'
+                    : 'Pré-avis — première estimation depuis l\'adresse et les données de marché.'}
+                </p>
+              </div>
+              <div className="inline-flex rounded-lg border border-sage-light overflow-hidden bg-white">
+                {[['pre_avis', 'Pré-avis'], ['definitif', 'Avis définitif']].map(([val, lib]) => (
+                  <button key={val} type="button" onClick={() => update('phase', val)}
+                    className={`px-3 py-1.5 text-sm font-medium transition-colors ${data.phase === val ? 'bg-sage-dark text-white' : 'text-stone-600 hover:bg-sage-50'}`}>
+                    {lib}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {/* ─── 1. LOCALISATION (repliée) ─── */}
           <Section
             open={openSections.localisation} onToggle={() => toggle('localisation')}
-            title="Localisation & transports" icon={<MapPin className="w-4 h-4" />}
-            subtitle="Auto-récupéré depuis la fiche · enrichis le commentaire"
-            count={data.localisation.commentaire || data.localisation.transports ? 1 : 0}
+            title="Le secteur — quartier, rue & urbanisme" icon={<MapPin className="w-4 h-4" />}
+            subtitle="Quartier, transports, cadastre & risques auto-récupérés · enrichis les commentaires"
+            count={[data.localisation.commentaire, data.localisation.commentaire_rue, data.localisation.commentaire_urbanisme].filter(Boolean).length}
           >
             <div className="space-y-3">
               <div className="bg-cream-100/50 rounded-lg p-3 text-xs text-stone-600">
@@ -506,13 +573,33 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                 <p className="text-[10px] text-stone-400 mt-1 italic">Plus tard : récupération auto via API transports.</p>
               </div>
               <div>
-                <label className={labelClass}>Commentaire stratégique sur l'emplacement</label>
+                <label className={labelClass}>Commentaire sur le quartier (page « Le secteur »)</label>
                 <textarea
                   value={data.localisation.commentaire}
                   onChange={e => update('localisation.commentaire', e.target.value)}
                   rows={3} className={fieldClass}
                   placeholder="Ex: Emplacement stratégique au cœur du quartier Bastille, l'un des secteurs tertiaires les plus dynamiques..."
                 />
+              </div>
+              <div>
+                <label className={labelClass}>Commentaire sur la rue (page « L'analyse de la rue »)</label>
+                <textarea
+                  value={data.localisation.commentaire_rue}
+                  onChange={e => update('localisation.commentaire_rue', e.target.value)}
+                  rows={2} className={fieldClass}
+                  placeholder="Ex: Rue calme et recherchée, immeubles de caractère, faible rotation des biens…"
+                />
+                <p className="text-[10px] text-stone-400 mt-1 italic">Vide = phrase générée automatiquement à partir des ventes DVF de la voie.</p>
+              </div>
+              <div>
+                <label className={labelClass}>Commentaire urbanisme / cadastre / risques (page « Cadastre & urbanisme »)</label>
+                <textarea
+                  value={data.localisation.commentaire_urbanisme}
+                  onChange={e => update('localisation.commentaire_urbanisme', e.target.value)}
+                  rows={2} className={fieldClass}
+                  placeholder="Ex: Zone UG du PLU, secteur sauvegardé du Marais, servitude de cour commune…"
+                />
+                <p className="text-[10px] text-stone-400 mt-1 italic">Les risques naturels (Géorisques) et la parcelle cadastrale sont ajoutés automatiquement.</p>
               </div>
             </div>
           </Section>
@@ -641,8 +728,8 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
           {/* ─── 3. CARACTÉRISTIQUES (repliée) ─── */}
           <Section
             open={openSections.caracteristiques} onToggle={() => toggle('caracteristiques')}
-            title="Caractéristiques & atouts" icon={<Building2 className="w-4 h-4" />}
-            subtitle="Highlights IA + détails complémentaires"
+            title="Caractéristiques & atouts — le bien" icon={<Building2 className="w-4 h-4" />}
+            subtitle="Phase 2 (visite / dossier) · highlights IA + détails du bien"
             count={data.caracteristiques.atouts_distinctifs.length}
           >
             <div className="space-y-3">
@@ -707,6 +794,127 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                   onChange={e => update('caracteristiques.commentaire', e.target.value)}
                   rows={2} className={fieldClass}
                 />
+              </div>
+            </div>
+          </Section>
+
+
+          {/* ─── 3bis. VISITE (Phase 2) — dictée + champs ─── */}
+          <Section
+            open={openSections.visite} onToggle={() => toggle('visite')}
+            title="La visite — le bien en détail" icon={<Building2 className="w-4 h-4" />}
+            subtitle={data.phase === 'definitif' ? "Observations de visite · dictée ou saisie" : "Phase 2 — à remplir après la visite ou sur dossier"}
+            count={Object.entries(data.visite).filter(([k, v]) => k !== 'prestations' && String(v || '').trim()).length + (data.visite.prestations || []).filter(x => String(x || '').trim()).length}
+          >
+            <div className="space-y-3">
+              <div className="bg-sage-50/60 border border-sage-light rounded-lg p-2.5 text-[11px] text-sage-darker flex items-center gap-2">
+                <MessageCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                Dicte tes observations sur place (bouton micro de chaque champ) ou écris-les. Ces éléments alimentent les pages « L'immeuble », « Volumes & lumière » et « Prestations & état ».
+              </div>
+              {(() => {
+                const F = [
+                  { k: 'architecture', label: 'Architecture / style', ph: 'Ex : immeuble haussmannien en pierre de taille, façade ordonnancée…' },
+                  { k: 'immeuble_qualite', label: "Qualité de l'immeuble", ph: 'Ex : construction soignée, standing, ravalement récent…' },
+                  { k: 'parties_communes', label: 'Parties communes', ph: 'Ex : hall en marbre, ascenseur, escalier avec tapis, bien entretenu…' },
+                  { k: 'agencement', label: 'Agencement / distribution', ph: 'Ex : double séjour traversant, pas de perte de place…' },
+                  { k: 'volumes', label: 'Volumes', ph: 'Ex : hauteur sous plafond 3,10 m, belles réceptions…' },
+                  { k: 'luminosite', label: 'Luminosité', ph: 'Ex : très lumineux, traversant est-ouest…' },
+                  { k: 'exposition', label: 'Exposition', ph: 'Ex : sud-ouest sur rue calme…' },
+                  { k: 'vues', label: 'Vues / dégagement', ph: 'Ex : dégagée sur cour arborée, sans vis-à-vis…' },
+                  { k: 'etat_general', label: 'État général', ph: 'Ex : bon état, rafraîchissement à prévoir dans la cuisine…' },
+                  { k: 'travaux', label: 'Travaux éventuels', ph: 'Ex : électricité à reprendre, cuisine à refaire…' },
+                  { k: 'potentiel', label: 'Potentiel de valorisation', ph: 'Ex : combles aménageables, possibilité de créer une suite parentale…' },
+                ];
+                return (
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                    {F.map(({ k, label, ph }) => (
+                      <div key={k}>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className={labelClass} style={{ marginBottom: 0 }}>{label}</label>
+                          <MicButton compact onText={(t) => update('visite.' + k, ((data.visite[k] || '').trim() + ' ' + t).trim())} />
+                        </div>
+                        <textarea value={data.visite[k] || ''} onChange={e => update('visite.' + k, e.target.value)}
+                          rows={2} className={fieldClass} placeholder={ph} />
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className={labelClass} style={{ marginBottom: 0 }}>Prestations remarquables (une par ligne)</label>
+                  <MicButton compact onText={(t) => update('visite.prestations', [...(data.visite.prestations || []), t])} />
+                </div>
+                <textarea
+                  value={(data.visite.prestations || []).join('\n')}
+                  onChange={e => update('visite.prestations', e.target.value.split('\n'))}
+                  rows={4} className={fieldClass}
+                  placeholder={"Ex :\nParquet point de Hongrie\nCheminées en marbre\nMoulures et rosaces d'origine\nCuisine équipée haut de gamme"}
+                />
+              </div>
+            </div>
+          </Section>
+
+
+          {/* ─── 3ter. DOCUMENTS & DPE (Phase 2 — option « sur pièces ») ─── */}
+          <Section
+            open={openSections.documents} onToggle={() => toggle('documents')}
+            title="Documents — copropriété, fiscalité & DPE" icon={<FileDown className="w-4 h-4" />}
+            subtitle="DPE, charges, taxe foncière, diagnostics, servitudes"
+            count={[data.documents.travaux_votes, data.documents.procedures, data.documents.diagnostics, data.documents.servitudes, data.documents.commentaire].filter(v => String(v || '').trim()).length + [data.documents.taxe_fonciere, data.documents.charges_annuelles, data.documents.fonds_travaux, data.documents.copro_nb_lots].filter(v => +v).length}
+          >
+            <div className="space-y-3">
+              {/* DPE — repris du mandat, commentaire d'expert optionnel */}
+              <div className="bg-cream-100/50 rounded-lg p-3 text-xs text-stone-600 flex items-center gap-2">
+                <strong>DPE :</strong> {mandat?.dpe_classe ? `Classe ${mandat.dpe_classe}` : 'classe non renseignée'}{mandat?.dpe_consommation ? ` · ${mandat.dpe_consommation} kWh/m²·an` : ''}
+                <span className="text-stone-400 italic">— l'impact valeur, les obligations et les pistes sont générés automatiquement.</span>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className={labelClass} style={{ marginBottom: 0 }}>Commentaire DPE (optionnel)</label>
+                  <MicButton compact onText={(t) => update('dpe.commentaire', ((data.dpe.commentaire || '').trim() + ' ' + t).trim())} />
+                </div>
+                <textarea value={data.dpe.commentaire || ''} onChange={e => update('dpe.commentaire', e.target.value)}
+                  rows={2} className={fieldClass} placeholder="Ex : audit réalisé, devis d'isolation obtenu à 25 000 €, gain estimé de 2 classes…" />
+              </div>
+              {/* Chiffres clés du dossier */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass}>Taxe foncière (€/an)</label>
+                  <input type="number" value={data.documents.taxe_fonciere || ''} onChange={e => update('documents.taxe_fonciere', +e.target.value)} className={fieldClass} />
+                </div>
+                <div>
+                  <label className={labelClass}>Charges copropriété (€/an)</label>
+                  <input type="number" value={data.documents.charges_annuelles || ''} onChange={e => update('documents.charges_annuelles', +e.target.value)} className={fieldClass} />
+                </div>
+                <div>
+                  <label className={labelClass}>Fonds travaux (€)</label>
+                  <input type="number" value={data.documents.fonds_travaux || ''} onChange={e => update('documents.fonds_travaux', +e.target.value)} className={fieldClass} />
+                </div>
+                <div>
+                  <label className={labelClass}>Nombre de lots (copro)</label>
+                  <input type="number" value={data.documents.copro_nb_lots || ''} onChange={e => update('documents.copro_nb_lots', +e.target.value)} className={fieldClass} />
+                </div>
+              </div>
+              {/* Textes du dossier (dictée possible) */}
+              {[
+                { k: 'travaux_votes', label: 'Travaux votés / à prévoir (copropriété)', ph: 'Ex : ravalement voté 2025, réfection toiture à prévoir…' },
+                { k: 'procedures', label: 'Procédures / points de vigilance copropriété', ph: 'Ex : aucune procédure en cours · impayés maîtrisés…' },
+                { k: 'diagnostics', label: 'Diagnostics techniques', ph: 'Ex : amiante néant, plomb néant, électricité conforme…' },
+                { k: 'servitudes', label: 'Servitudes', ph: 'Ex : cour commune, servitude de passage…' },
+              ].map(({ k, label, ph }) => (
+                <div key={k}>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className={labelClass} style={{ marginBottom: 0 }}>{label}</label>
+                    <MicButton compact onText={(t) => update('documents.' + k, ((data.documents[k] || '').trim() + ' ' + t).trim())} />
+                  </div>
+                  <textarea value={data.documents[k] || ''} onChange={e => update('documents.' + k, e.target.value)} rows={2} className={fieldClass} placeholder={ph} />
+                </div>
+              ))}
+              <div>
+                <label className={labelClass}>Synthèse du dossier (optionnel)</label>
+                <textarea value={data.documents.commentaire || ''} onChange={e => update('documents.commentaire', e.target.value)}
+                  rows={2} className={fieldClass} placeholder="Ex : copropriété saine, charges maîtrisées, aucun point bloquant pour la vente." />
               </div>
             </div>
           </Section>
@@ -1023,14 +1231,17 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                     <div>
                       <label className={labelClass}>Facteurs ± % (curseur)</label>
                       {aj.map((a, i) => (
-                        <div key={i} className="flex items-center gap-2 mb-1.5">
-                          <input value={a.label || ''} onChange={e => upd(i, 'label', e.target.value)} placeholder="Ex : 1er étage sombre" className="w-44 px-2 py-1 text-xs border border-stone-200 rounded" />
-                          <input type="range" min="-25" max="15" step="1" value={a.pct || 0} onChange={e => upd(i, 'pct', +e.target.value)} className="flex-1 accent-sage-dark" />
-                          <span className={`w-14 text-right text-sm font-semibold tabular-nums ${(+a.pct || 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{(+a.pct || 0) > 0 ? '+' : ''}{a.pct || 0} %</span>
-                          <button type="button" onClick={() => setAj(aj.filter((_, x) => x !== i))} className="text-stone-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+                        <div key={i} className="mb-2 pb-2 border-b border-amber-100 last:border-0">
+                          <div className="flex items-center gap-2">
+                            <input value={a.label || ''} onChange={e => upd(i, 'label', e.target.value)} placeholder="Ex : 1er étage sombre" className="w-44 px-2 py-1 text-xs border border-stone-200 rounded" />
+                            <input type="range" min="-25" max="15" step="1" value={a.pct || 0} onChange={e => upd(i, 'pct', +e.target.value)} className="flex-1 accent-sage-dark" />
+                            <span className={`w-14 text-right text-sm font-semibold tabular-nums ${(+a.pct || 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{(+a.pct || 0) > 0 ? '+' : ''}{a.pct || 0} %</span>
+                            <button type="button" onClick={() => setAj(aj.filter((_, x) => x !== i))} className="text-stone-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+                          </div>
+                          <input value={a.note || ''} onChange={e => upd(i, 'note', e.target.value)} placeholder="Justification (affichée sur la page de calcul) — ex : offre rare sur ce micro-secteur" className="mt-1 w-full px-2 py-1 text-xs border border-stone-200 rounded text-stone-600" />
                         </div>
                       ))}
-                      <button type="button" onClick={() => setAj([...aj, { label: '', pct: -5 }])} className="text-xs text-sage-darker border border-sage-light rounded px-2 py-1 hover:bg-sage-50">+ Ajouter un facteur</button>
+                      <button type="button" onClick={() => setAj([...aj, { label: '', pct: -5, note: '' }])} className="text-xs text-sage-darker border border-sage-light rounded px-2 py-1 hover:bg-sage-50">+ Ajouter un facteur</button>
                       {baseM2 > 0 && (
                         <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm bg-white rounded-lg border border-stone-200 p-2">
                           <span className="text-stone-500">{baseM2.toLocaleString('fr-FR')} €/m²</span>
@@ -1112,6 +1323,17 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                   <label className={labelClass}>Validité (mois)</label>
                   <input type="number" value={data.validite_mois || ''}
                     onChange={e => update('validite_mois', +e.target.value)} className={fieldClass} />
+                </div>
+                <div>
+                  <label className={labelClass}>Niveau de confiance</label>
+                  <select value={data.preconisation.confiance || ''}
+                    onChange={e => update('preconisation.confiance', e.target.value)} className={fieldClass}>
+                    <option value="">Auto (selon les données)</option>
+                    <option value="Indicatif">Indicatif</option>
+                    <option value="Correct">Correct</option>
+                    <option value="Élevé">Élevé</option>
+                  </select>
+                  <p className="text-[10px] text-stone-400 mt-1 italic">Affiché sur la page de la fourchette.</p>
                 </div>
               </div>
             </div>
