@@ -45,6 +45,7 @@ const EMPTY_AVIS = {
     commentaire: '',
     ventes: [],         // DVF structuré [{date,adresse,type,surface,prix,prixM2,lots,memeImmeuble}]
     par_annee: [],      // [{annee,count,m2Median}]
+    mediane_m2: 0,      // médiane €/m² retenue (pilote le prix de marché)
     biens_similaires: [], // 3 biens dispo saisis à la main [{lien,adresse,prix,surface}]
   },
   // 5. SWOT (déplié)
@@ -536,6 +537,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                     next.comparables.transactions_recentes = r.transactions_recentes;
                     next.comparables.ventes = r.ventes || [];
                     next.comparables.par_annee = r.parAnnee || [];
+                    next.comparables.mediane_m2 = med;
                     if (med) next.comparables.commentaire = `Médiane observée : ${med.toLocaleString('fr-FR')} €/m² sur ${r.count} vente(s) DVF retenue(s).`;
                     // Le prix de marché = médiane DVF × surface ; méthode : centrale −10 % / +10 %
                     if (centre) {
@@ -968,6 +970,36 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                   color="blue"
                 />
               </div>
+
+              {/* Transparence : d'où vient le prix + resync depuis le DVF */}
+              {(() => {
+                const surf = +mandat?.surface || 0;
+                const med = +data.comparables.mediane_m2 || 0;
+                const m2 = (v) => (surf && +v ? `${Math.round(+v / surf).toLocaleString('fr-FR')} €/m²` : '—');
+                return (
+                  <div className="rounded-lg border border-sage-light bg-sage-50/40 p-3 text-xs space-y-1">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      {med ? <span>Médiane DVF retenue : <b className="text-sage-darker">{med.toLocaleString('fr-FR')} €/m²</b></span> : <span className="text-stone-400">Aucune médiane DVF (lance/coche des comparables).</span>}
+                      {surf ? <span className="text-stone-500">× {surf} m²</span> : <span className="text-red-500">surface du mandat manquante</span>}
+                      {med && surf ? <span>= <b className="text-sage-darker">{(med * surf).toLocaleString('fr-FR')} €</b></span> : null}
+                      {med && surf && (
+                        <button type="button"
+                          onClick={() => {
+                            const centre = Math.round(med * surf);
+                            setData(prev => { const n = JSON.parse(JSON.stringify(prev));
+                              n.preconisation.prix_marche = centre; n.preconisation.prix_plancher = Math.round(centre * 0.9); n.preconisation.prix_coup_de_coeur = Math.round(centre * 1.1);
+                              n.methode_m2 = { valeur_basse:{prix_m2:Math.round(med*0.9),valeur_totale:Math.round(centre*0.9),commentaire:n.methode_m2?.valeur_basse?.commentaire||''}, valeur_centrale:{prix_m2:med,valeur_totale:centre,commentaire:n.methode_m2?.valeur_centrale?.commentaire||'Médiane DVF du secteur.'}, valeur_haute:{prix_m2:Math.round(med*1.1),valeur_totale:Math.round(centre*1.1),commentaire:n.methode_m2?.valeur_haute?.commentaire||''} };
+                              return n; });
+                          }}
+                          className="ml-auto px-2 py-1 rounded bg-sage-dark text-white hover:bg-sage-darker">↺ Recalculer depuis le DVF</button>
+                      )}
+                    </div>
+                    <div className="text-stone-500">
+                      €/m² actuels — plancher {m2(data.preconisation.prix_plancher)} · marché {m2(data.preconisation.prix_marche)} · présentation {m2(data.preconisation.prix_coup_de_coeur)}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Ajustement à la baisse justifié — pour positionner en fourchette basse */}
               <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 space-y-2">
