@@ -249,11 +249,13 @@ export default function DvfComparables({ mandat, onApply, savedVentes }) {
                 </table>
               </div>
 
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] text-stone-400 italic">Ligne surlignée = cet immeuble. Décoche les ventes non pertinentes, clique une colonne pour trier.</p>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] text-stone-500">
+                  Médiane retenue : <b className="text-sage-darker">{fmt(globalMedian)} €/m²</b> — deviendra le <b>prix de marché</b> (× surface). Décoche les ventes non pertinentes.
+                </p>
                 <button type="button" onClick={appliquer} disabled={!selVentes.length}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-sage-dark text-white hover:bg-sage-darker disabled:opacity-50">
-                  <Check className="w-3.5 h-3.5" /> Appliquer aux comparables ({selVentes.length})
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-sage-dark text-white hover:bg-sage-darker disabled:opacity-50 flex-shrink-0">
+                  <Check className="w-3.5 h-3.5" /> Appliquer → fixe le prix ({fmt(globalMedian)} €/m²)
                 </button>
               </div>
             </>
