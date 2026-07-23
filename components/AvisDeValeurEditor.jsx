@@ -213,6 +213,29 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
   // Marché : le BtoC (habitation) masque les sections d'investissement.
   const estB2C = (mandat?.marche || mandat?.marche) === 'b2c';
 
+  // Les 3 prix DÉPENDENT des ajustements : prix de marché = médiane DVF × surface
+  // × (1 + Σ ajustements) ; plancher = −10 % ; coup de cœur = +10 %. Recalcul auto
+  // dès que les curseurs d'ajustement ou la médiane changent.
+  useEffect(() => {
+    const surf = +mandat?.surface || 0;
+    const med = +data.comparables.mediane_m2 || 0;
+    if (!surf || !med) return;
+    const total = (data.preconisation.ajustements || []).reduce((s, a) => s + (+a.pct || 0), 0);
+    const central = Math.round(med * surf * (1 + total / 100));
+    const plancher = Math.round(central * 0.9);
+    const coup = Math.round(central * 1.1);
+    const p = data.preconisation;
+    if (p.prix_marche !== central || p.prix_plancher !== plancher || p.prix_coup_de_coeur !== coup) {
+      setData(prev => {
+        const n = JSON.parse(JSON.stringify(prev));
+        n.preconisation.prix_marche = central;
+        n.preconisation.prix_plancher = plancher;
+        n.preconisation.prix_coup_de_coeur = coup;
+        return n;
+      });
+    }
+  }, [data.preconisation.ajustements, data.comparables.mediane_m2, mandat?.surface]);
+
   // Pré-remplissage IA : premier jet complet, adapté au marché. Ne remplace que
   // les champs vides (on ne détruit pas ce que Thomas a déjà saisi).
   async function handlePrefill() {
@@ -1164,26 +1187,6 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                   placeholder="Écris ou dicte : positionner le bien à... compte tenu de... avec un objectif de signature sous X mois..." />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <PrixCard
-                  label="Prix coup de cœur" subtitle="Acquéreur convaincu"
-                  value={data.preconisation.prix_coup_de_coeur}
-                  onChange={v => update('preconisation.prix_coup_de_coeur', v)}
-                  color="amber"
-                />
-                <PrixCard
-                  label="Prix de marché" subtitle="Recommandé"
-                  value={data.preconisation.prix_marche}
-                  onChange={v => update('preconisation.prix_marche', v)}
-                  color="emerald"
-                />
-                <PrixCard
-                  label="Prix plancher" subtitle="Base négociation"
-                  value={data.preconisation.prix_plancher}
-                  onChange={v => update('preconisation.prix_plancher', v)}
-                  color="blue"
-                />
-              </div>
 
               {/* Transparence : d'où vient le prix + resync depuis le DVF */}
               {(() => {
@@ -1274,8 +1277,16 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                     className={fieldClass}
                     placeholder="Ex : à positionner en fourchette basse, sous le prix de marché" />
                 </div>
-                <p className="text-[10px] text-stone-500 italic">Fixe librement les 3 prix ci-dessus (fourchette basse si besoin) ; cette note apparaît discrètement sous la préconisation.</p>
+                <p className="text-[10px] text-stone-500 italic">Le positionnement conseillé apparaît discrètement sous la préconisation.</p>
               </div>
+
+              {/* Les 3 prix — DÉRIVÉS de la médiane DVF + ajustements (arrondi 5 000 € en gros, prix réel dessous) */}
+              <div className="grid grid-cols-3 gap-3">
+                <PrixCard label="Prix plancher" subtitle="Base négociation" value={data.preconisation.prix_plancher} color="blue" />
+                <PrixCard label="Prix de marché" subtitle="Médiane × ajustements" value={data.preconisation.prix_marche} color="emerald" />
+                <PrixCard label="Prix coup de cœur" subtitle="Acquéreur convaincu" value={data.preconisation.prix_coup_de_coeur} color="amber" />
+              </div>
+              <p className="text-[10px] text-stone-400 italic -mt-1">Ces 3 prix se recalculent automatiquement à partir de la médiane DVF et des ajustements ci-dessus — bouge les curseurs pour les faire évoluer.</p>
 
               <div>
                 <label className={labelClass}>Avis client (témoignage à inclure)</label>
@@ -1522,7 +1533,9 @@ function SwotQuadrant({ label, color, icon, items, onChange }) {
   );
 }
 
-function PrixCard({ label, subtitle, value, onChange, color }) {
+// Carte prix — LECTURE SEULE : dérivée des ajustements. Arrondi 5 000 € en grand,
+// prix réel calculé en petit dessous.
+function PrixCard({ label, subtitle, value, color }) {
   const colorClasses = {
     blue: 'bg-blue-50 border-blue-200',
     emerald: 'bg-emerald-50 border-emerald-200',
@@ -1533,24 +1546,15 @@ function PrixCard({ label, subtitle, value, onChange, color }) {
     emerald: 'text-emerald-900',
     amber: 'text-amber-900',
   };
+  const precis = Math.round(+value || 0);
+  const arrondi = precis ? Math.round(precis / 5000) * 5000 : 0;
   return (
     <div className={`rounded-lg border p-3 ${colorClasses[color]}`}>
       <p className={`text-xs font-medium ${labelColors[color]}`}>{label}</p>
       <p className="text-[10px] text-stone-500 mb-2">{subtitle}</p>
-      <div className="relative">
-        <input
-          type="number"
-          value={value || ''}
-          onChange={e => onChange(+e.target.value)}
-          placeholder="0"
-          className="w-full px-2 py-1.5 bg-white border border-stone-200 rounded text-sm font-medium focus:outline-none focus:border-stone-900"
-        />
-        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-stone-400">€</span>
-      </div>
-      {value > 0 && (
-        <p className="text-[10px] text-stone-500 mt-1">
-          {value.toLocaleString('fr-FR')} €
-        </p>
+      <div className="text-xl font-bold text-stone-900 tabular-nums">{arrondi ? `${arrondi.toLocaleString('fr-FR')} €` : '—'}</div>
+      {precis > 0 && (
+        <p className="text-[10px] text-stone-500 mt-1">prix réel : {precis.toLocaleString('fr-FR')} €</p>
       )}
     </div>
   );
