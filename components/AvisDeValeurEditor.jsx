@@ -62,6 +62,7 @@ const EMPTY_AVIS = {
   documents: {
     taxe_fonciere: 0,
     charges_annuelles: 0,
+    charges_detail: '',      // ce que comprennent les charges (chauffage collectif, eau chaude…)
     fonds_travaux: 0,
     copro_nb_lots: 0,
     travaux_votes: '',
@@ -895,6 +896,14 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                   <label className={labelClass}>Nombre de lots (copro)</label>
                   <input type="number" value={data.documents.copro_nb_lots || ''} onChange={e => update('documents.copro_nb_lots', +e.target.value)} className={fieldClass} />
                 </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className={labelClass} style={{ marginBottom: 0 }}>Ce que comprennent les charges</label>
+                  <MicButton compact onText={(t) => update('documents.charges_detail', ((data.documents.charges_detail || '').trim() + ' ' + t).trim())} />
+                </div>
+                <textarea value={data.documents.charges_detail || ''} onChange={e => update('documents.charges_detail', e.target.value)}
+                  rows={2} className={fieldClass} placeholder="Ex : chauffage collectif et eau chaude inclus, gardien, entretien des parties communes, ascenseur…" />
               </div>
               {/* Textes du dossier (dictée possible) */}
               {[
