@@ -94,50 +94,6 @@ function textToHtml(text) {
     .map(p => `<p style="margin:0 0 14px">${esc(p).replace(/\n/g, '<br>')}</p>`).join('');
 }
 
-// Diagnostic (public, sans envoi de mail) : sonde l'environnement Chromium pour
-// comprendre pourquoi libnss3 ne se charge pas. À retirer ensuite.
-export async function GET(request) {
-  const marker = 'diag-4-probe';
-  const out = { marker, node: process.version };
-  try {
-    const chromium = (await import('@sparticuz/chromium-min')).default;
-    const fs = await import('node:fs');
-    const PACK = 'https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar';
-    try { chromium.setGraphicsMode = false; } catch { /* */ }
-    const t0 = Date.now();
-    out.execPath = await chromium.executablePath(PACK);
-    out.execPathMs = Date.now() - t0;
-    out.ldLibraryPath = process.env.LD_LIBRARY_PATH || null;
-    // Contenu de /tmp et recherche de libnss3
-    const walk = (dir, depth = 0, acc = []) => {
-      if (depth > 2) return acc;
-      let entries = [];
-      try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return acc; }
-      for (const e of entries) {
-        const p = dir + '/' + e.name;
-        if (e.name.includes('libnss3')) acc.push(p);
-        if (e.isDirectory() && acc.length < 30) walk(p, depth + 1, acc);
-      }
-      return acc;
-    };
-    out.tmpTop = (() => { try { return require('node:fs').readdirSync('/tmp'); } catch { return null; } })();
-    out.libnss3Found = walk('/tmp');
-    out.execExists = fs.existsSync(out.execPath);
-  } catch (e) {
-    out.probeError = e.message;
-  }
-  // Essai de lancement pour l'erreur exacte
-  try {
-    const demo = { adresse: 'Diagnostic', nom: 'Diagnostic', avis_valeur: {} };
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
-    const pdf = await renderAvisPdf(demo, baseUrl);
-    out.launch = { ok: true, bytes: pdf.length };
-  } catch (e) {
-    out.launch = { ok: false, error: (e.message || '').split('\n').slice(0, 3).join(' | ') };
-  }
-  return json(out, out.launch?.ok ? 200 : 500);
-}
-
 export async function POST(request) {
   try {
     const body = await request.json().catch(() => ({}));
