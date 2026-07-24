@@ -102,6 +102,9 @@ export async function GET(request) {
     const demo = { adresse: 'Diagnostic', nom: 'Diagnostic', avis_valeur: {} };
     const t0 = Date.now();
     const pdf = await renderAvisPdf(demo, baseUrl);
+    if (new URL(request.url).searchParams.get('raw') === '1') {
+      return new Response(pdf, { status: 200, headers: { 'Content-Type': 'application/pdf' } });
+    }
     return json({ ok: true, marker: 'pdfshift-1', bytes: pdf.length, ms: Date.now() - t0, keySet: !!process.env.PDFSHIFT_API_KEY });
   } catch (e) {
     return json({ ok: false, marker: 'pdfshift-1', keySet: !!process.env.PDFSHIFT_API_KEY, error: (e.message || '').slice(0, 300) }, 500);
