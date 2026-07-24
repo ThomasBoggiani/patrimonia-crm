@@ -3761,18 +3761,31 @@ const PROCHAINE_ETAPE_PAR_PHASE = {
   2: { action: 'Sécuriser le dossier', detail: 'Réunir les pièces juridiques (identité, titre, copropriété…).' },
 };
 
-function ProchaineEtapeBanner({ mandat, mandatContacts = [] }) {
+// Clé d'action selon la phase — sert à déclencher la bonne action au clic.
+function etapeActionKey(phaseId, dossierComplet) {
+  if (dossierComplet) return 'piloter';
+  return phaseId === 0 ? 'estimer' : phaseId === 1 ? 'commercialiser' : 'securiser';
+}
+const ETAPE_CTA = {
+  estimer: 'Estimer le bien',
+  commercialiser: 'Lancer la commercialisation',
+  securiser: 'Compléter le juridique',
+  piloter: 'Voir les acquéreurs',
+};
+
+function ProchaineEtapeBanner({ mandat, mandatContacts = [], onAction }) {
   const { phaseEnCours, dossierComplet } = computeDossierPhases(mandat, mandatContacts);
   const owner = mandat.owner || '—';
   const manques = (phaseEnCours.its || []).filter(i => !i.ok).map(i => i.label);
   const conf = PROCHAINE_ETAPE_PAR_PHASE[phaseEnCours.id] || PROCHAINE_ETAPE_PAR_PHASE[1];
+  const key = etapeActionKey(phaseEnCours.id, dossierComplet);
   const action = dossierComplet ? 'Piloter la commercialisation' : conf.action;
   const detail = dossierComplet
     ? 'Dossier complet : relancer les acquéreurs, organiser les visites, suivre les offres.'
     : (manques.length ? `Il manque : ${manques.join(', ')}.` : conf.detail);
 
   return (
-    <div className="rounded-xl border border-sage-dark/30 bg-sage-50/50 p-4 flex items-start gap-3">
+    <div className="rounded-xl border border-sage-dark/30 bg-sage-50/50 p-4 flex items-start gap-3 flex-wrap">
       <span className="text-xl leading-none mt-0.5">🧭</span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
@@ -3784,9 +3797,18 @@ function ProchaineEtapeBanner({ mandat, mandatContacts = [] }) {
         <div className="text-sm font-semibold text-stone-900 mt-0.5">{action}</div>
         <div className="text-xs text-stone-600 mt-0.5">{detail}</div>
       </div>
-      <div className="flex flex-col items-end flex-shrink-0">
-        <span className="text-[10px] uppercase tracking-wide text-stone-400">Responsable</span>
-        <span className="mt-0.5 w-7 h-7 rounded-full bg-ink-deep text-white text-xs font-semibold grid place-items-center" title={`Responsable : ${owner}`}>{owner}</span>
+      <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex flex-col items-center">
+          <span className="text-[10px] uppercase tracking-wide text-stone-400">Resp.</span>
+          <span className="mt-0.5 w-7 h-7 rounded-full bg-ink-deep text-white text-xs font-semibold grid place-items-center" title={`Responsable : ${owner}`}>{owner}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => onAction?.(key)}
+          className="px-3.5 py-2 rounded-lg text-sm font-semibold bg-sage-dark text-white hover:bg-sage-darker transition-colors inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-sage-dark focus:ring-offset-1"
+        >
+          {ETAPE_CTA[key]} <span aria-hidden="true">→</span>
+        </button>
       </div>
     </div>
   );
@@ -3851,6 +3873,15 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
   const [mandatContacts, setMandatContacts] = useState([]);
   // Sprint 4 — bouton pour masquer/afficher les honoraires (commission + net vendeur)
   const [showHonoraires, setShowHonoraires] = useState(true);
+
+  // Bandeau « Prochaine étape » cliquable : chaque étape lance la bonne action.
+  const handleEtapeAction = (key) => {
+    const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (key === 'estimer') { setShowAvisValeur(true); return; }
+    if (key === 'commercialiser') { scrollTo('diffusion'); return; }
+    if (key === 'securiser') { scrollTo('documents'); return; }
+    if (key === 'piloter') { onOpenMatching?.(mandat.id); return; }
+  };
 
   // Charge les contacts liés au mandat (pivot mandat_contacts)
   async function reloadMandatContacts() {
@@ -4046,7 +4077,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
       <div className="space-y-4">
         <div className="col-span-3 space-y-4">
           {/* ═══ PROCHAINE ÉTAPE + RESPONSABLE (règle d'or) ═══ */}
-          <ProchaineEtapeBanner mandat={mandat} mandatContacts={mandatContacts} />
+          <ProchaineEtapeBanner mandat={mandat} mandatContacts={mandatContacts} onAction={handleEtapeAction} />
           {/* ═══ SCORE QUALITÉ DU DOSSIER (Sprint 4) ═══ */}
           <DossierScore mandat={mandat} mandatContacts={mandatContacts} />
           {/* ═══ ANALYSE FINANCIÈRE — REMONTÉE EN PREMIÈRE POSITION ═══ */}
