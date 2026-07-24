@@ -1072,6 +1072,26 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
       if (created) mandatId = created.id;
     }
 
+    // Phase 1.2 — Enrichissement auto à la création : dès qu'un NOUVEAU mandat a
+    // une adresse, on lance en arrière-plan la génération des visuels géo (façade
+    // Street View, cadastre, satellite, transports) via refresh-assets. Ainsi la
+    // fiche les affiche sans que l'utilisateur ait à ouvrir l'onglet « Vues ».
+    // Fire-and-forget : ne bloque pas l'enregistrement (la requête continue côté
+    // serveur même si on navigue, l'app étant une SPA).
+    if (isNouveauMandat && mandatId && String(snakeData.adresse || '').trim()) {
+      (async () => {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            fetch(`/api/mandats/${mandatId}/refresh-assets`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${session.access_token}` },
+            }).catch(() => { /* best-effort, le fallback à l'ouverture reste actif */ });
+          }
+        } catch { /* best-effort */ }
+      })();
+    }
+
     // Pilier 2 — Nouveau mandat : tâches de démarrage automatiques (actions de
     // commercialisation). Attribuées à celui qui agit ; réattribuables ensuite.
     if (isNouveauMandat && mandatId) {
