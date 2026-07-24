@@ -2065,6 +2065,50 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   // pas le barème automatique. Vrai par défaut en édition (on respecte l'existant).
   const [tauxManuel, setTauxManuel] = useState(!!mandat);
 
+  // Phase 1.1 — Porte d'entrée « adresse » : géocode l'adresse (BAN, API publique
+  // gratuite), remplit ville + code postal, et alerte si un mandat existe déjà à
+  // cette adresse (anti-doublon). Aucune clé requise, appel direct navigateur.
+  const [geoBusy, setGeoBusy] = useState(false);
+  const [addrNote, setAddrNote] = useState(null);   // { type:'ok'|'error', msg }
+  const [addrWarn, setAddrWarn] = useState(null);   // { id, nom } mandat déjà existant
+
+  const normalizeAddr = (s) => String(s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  async function analyserAdresse() {
+    const q = [data.adresse, data.code_postal, data.ville].filter(Boolean).join(' ').trim();
+    if (!q) { setAddrNote({ type: 'error', msg: 'Renseigne d\'abord l\'adresse.' }); return; }
+    setGeoBusy(true); setAddrNote(null); setAddrWarn(null);
+    try {
+      const res = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(q)}&limit=1`);
+      const j = await res.json();
+      const f = j.features?.[0];
+      if (!f) { setAddrNote({ type: 'error', msg: 'Adresse introuvable. Vérifie l\'orthographe.' }); return; }
+      const p = f.properties || {};
+      setData(d => ({
+        ...d,
+        adresse: d.adresse || p.name || p.label || '',
+        ville: d.ville || p.city || '',
+        code_postal: d.code_postal || p.postcode || '',
+      }));
+      setFilledFields(prev => new Set([...prev, 'ville', 'code_postal']));
+      // Anti-doublon : un mandat porte-t-il déjà cette adresse ?
+      const target = normalizeAddr(p.name || p.label);
+      const existing = (mandats || []).find(m => {
+        if (!m || m.id === mandat?.id || !m.adresse) return false;
+        const a = normalizeAddr(m.adresse);
+        return a && target && (a.includes(target) || target.includes(a));
+      });
+      if (existing) setAddrWarn({ id: existing.id, nom: existing.nom || existing.adresse });
+      setAddrNote({ type: 'ok', msg: `Adresse validée : ${p.label}` });
+    } catch (e) {
+      setAddrNote({ type: 'error', msg: 'Erreur de géocodage. Réessaie dans un instant.' });
+    } finally {
+      setGeoBusy(false);
+    }
+  }
+
   const update = (k, v) => setData({ ...data, [k]: v });
 
   // À partir du prix NET VENDEUR (ferme), recalcule commission € / prix FAI / prix
@@ -2819,7 +2863,28 @@ async function handleFolderImport(event, opts = {}) {
             <h3 className={sectionTitleClass}>🏠 Identité du bien</h3>
             <div className="space-y-3">
               <Field label="Nom du bien"><input type="text" value={data.nom} onChange={e => update('nom', e.target.value)} className={fieldClass('nom')} /></Field>
-              <Field label="Adresse"><input type="text" value={data.adresse} onChange={e => update('adresse', e.target.value)} className={fieldClass('adresse')} /></Field>
+              <Field label="Adresse"><input type="text" value={data.adresse} onChange={e => update('adresse', e.target.value)} className={fieldClass('adresse')} placeholder="12 rue de Chevreloup, Noisy-le-Roi" /></Field>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={analyserAdresse}
+                  disabled={geoBusy || !data.adresse}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {geoBusy ? '⏳ Analyse…' : '📍 Analyser l\'adresse'}
+                </button>
+                <span className="text-xs text-stone-400">Remplit ville + code postal depuis l'adresse</span>
+              </div>
+              {addrNote && (
+                <div className={`text-xs px-2.5 py-1.5 rounded-lg ${addrNote.type === 'ok' ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'}`}>
+                  {addrNote.msg}
+                </div>
+              )}
+              {addrWarn && (
+                <div className="text-xs px-2.5 py-1.5 rounded-lg bg-amber-50 text-amber-800">
+                  ⚠️ Un mandat existe déjà à cette adresse : <strong>{addrWarn.nom}</strong>. Vérifie avant de créer un doublon.
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Ville"><input type="text" value={data.ville || ''} onChange={e => update('ville', e.target.value)} className={fieldClass('ville')} /></Field>
                 <Field label="Code postal"><input type="text" value={data.code_postal || ''} onChange={e => update('code_postal', e.target.value)} className={fieldClass('code_postal')} /></Field>
