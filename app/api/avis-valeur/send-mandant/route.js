@@ -67,22 +67,32 @@ async function resolveMandant(mandat) {
 
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
-// Corps par défaut (texte simple, éditable par l'agent avant envoi), adapté à
-// la phase (pré-avis / définitif).
+// Corps par défaut — modèles FOURNIS par l'agence, utilisés sans modification
+// (seuls l'adresse du bien et le prénom du destinataire sont personnalisés).
+// Choix automatique selon la phase : Mail A = pré-avis, Mail B = avis définitif.
 function defaultEmail({ isPreAvis, adresse, prenom, signature }) {
-  const lieu = adresse ? ` de votre bien situé ${adresse}` : '';
+  const lieu = adresse || '[Adresse du bien]';
+  const bonjour = prenom ? `Bonjour ${prenom},` : 'Bonjour,';
   const subject = `${isPreAvis ? 'Pré-avis' : 'Avis'} de valeur${adresse ? ' — ' + adresse : ''}`;
   const paras = isPreAvis ? [
-    prenom ? `Bonjour ${prenom},` : 'Bonjour,',
-    `Je vous prie de trouver ci-joint un pré-avis de valeur${lieu}.`,
-    `Il s'agit d'une première estimation établie à partir de l'adresse et des données de marché. Nous l'affinerons — à la hausse comme à la baisse — après une visite et à réception des documents utiles, afin d'aboutir à un avis de valeur définitif.`,
-    `Je reste à votre entière disposition pour convenir d'un rendez-vous.`,
+    // ── Mail A — Pré-avis de valeur ──
+    bonjour,
+    `Je vous remercie pour votre demande d'estimation concernant votre bien situé ${lieu}.`,
+    `Vous trouverez ci-joint un pré-avis de valeur, réalisé à partir des informations dont je dispose actuellement.`,
+    `Cette première analyse s'appuie notamment sur :\n• l'étude du marché local ;\n• les ventes comparables issues des données DVF ;\n• les biens actuellement proposés à la vente sur le secteur ;\n• les caractéristiques connues du quartier et de son environnement.`,
+    `À ce stade, certains éléments essentiels n'ont pas pu être vérifiés, notamment les prestations réelles du bien, son état général, son agencement, sa luminosité, ses volumes ou encore les éventuels travaux réalisés ou à prévoir.`,
+    `En conséquence, la valeur au m² ainsi que la fourchette d'estimation doivent être considérées comme une première approche, destinée à vous fournir un repère cohérent et argumenté. Elles pourront être affinées après une visite du bien ou à la réception de documents complémentaires (plans, diagnostics, DPE, charges, taxe foncière, procès-verbaux d'assemblée générale, etc.).`,
+    `Je reste naturellement à votre disposition pour échanger sur cette première analyse et, si vous le souhaitez, établir un avis de valeur définitif reposant sur une étude complète de votre bien.`,
+    `Au plaisir d'échanger avec vous.`,
     `Bien à vous,\n${signature}`,
   ] : [
-    prenom ? `Cher(e) ${prenom},` : 'Madame, Monsieur,',
-    `Je vous prie de trouver ci-joint l'avis de valeur${lieu}.`,
-    `Nous vous remercions de la confiance que vous nous témoignez et serions ravis de vous accompagner dans la commercialisation de votre bien, avec l'exigence et la discrétion qui caractérisent notre maison.`,
-    `Je me tiens à votre disposition pour en échanger.`,
+    // ── Mail B — Avis de valeur définitif ──
+    bonjour,
+    `Vous trouverez ci-joint l'avis de valeur de votre bien situé ${lieu}.`,
+    `Cette estimation a été réalisée selon notre méthodologie d'expertise, en croisant notamment :\n• l'analyse du marché local ;\n• les ventes comparables issues des données DVF ;\n• les biens actuellement en commercialisation ;\n• les caractéristiques propres à votre bien ;\n• les documents techniques et juridiques mis à notre disposition ;\n• ainsi que les observations réalisées lors de la visite lorsque celle-ci a eu lieu.`,
+    `L'objectif de cet avis est de déterminer la valeur de marché la plus pertinente à la date de son établissement, en tenant compte des qualités intrinsèques du bien, de son environnement et des conditions actuelles du marché immobilier.`,
+    `Je reste naturellement à votre disposition pour vous présenter cette analyse en détail, répondre à vos questions et vous accompagner dans la définition de la stratégie de commercialisation la plus adaptée à votre projet.`,
+    `Au plaisir d'échanger avec vous.`,
     `Bien à vous,\n${signature}`,
   ];
   return { subject, text: paras.join('\n\n') };
@@ -128,12 +138,12 @@ export async function POST(request) {
     const cli = await resolveMandant(mandat);
     const to = mandantOverride || cli?.email || '';
 
-    // Signature = conseiller courant
-    let signature = user.email;
+    // Signature = PRÉNOM du conseiller courant (les modèles signent « Thomas »).
+    let signature = 'Thomas';
     try {
-      const { data: profile } = await supabaseAdmin.from('profiles').select('prenom, nom, fonction').eq('id', user.id).maybeSingle();
-      if (profile) signature = [[profile.prenom, profile.nom].filter(Boolean).join(' '), profile.fonction].filter(Boolean).join(' — ') || signature;
-    } catch { /* garde l'email */ }
+      const { data: profile } = await supabaseAdmin.from('profiles').select('prenom, nom').eq('id', user.id).maybeSingle();
+      if (profile) signature = profile.prenom || [profile.prenom, profile.nom].filter(Boolean).join(' ') || signature;
+    } catch { /* garde le défaut */ }
 
     // Phase (pré-avis / définitif) + libellés
     const d = buildAvisData(mandat);
