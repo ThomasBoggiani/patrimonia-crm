@@ -505,7 +505,7 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
         body: JSON.stringify({ token: session?.access_token || '', mandatId: mandat.id, preview: true }),
       });
       const j = await res.json().catch(() => ({ ok: false }));
-      if (j.ok) setSendForm({ to: j.to || '', subject: j.subject || '', bodyText: j.bodyText || '' });
+      if (j.ok) setSendForm({ to: j.to || '', subject: j.subject || '', bodyText: j.bodyText || '', mandantNom: j.mandantNom || '', mandantSansEmail: !!j.mandantSansEmail });
       else alert(j.error || 'Préparation impossible.');
     } catch (e) {
       alert('Erreur : ' + e.message);
@@ -1558,7 +1558,10 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
                   <input type="email" value={sendForm.to} onChange={e => setSendForm(f => ({ ...f, to: e.target.value }))}
                     placeholder="mandant@exemple.fr"
                     className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-emerald-600" />
-                  {!sendForm.to && <p className="text-[11px] text-amber-600 mt-1">Aucun e-mail trouvé sur la fiche — saisis-le ici.</p>}
+                  {!sendForm.to && (sendForm.mandantNom
+                    ? <p className="text-[11px] text-amber-600 mt-1">Mandant : <b>{sendForm.mandantNom}</b> — aucun e-mail sur sa fiche. Saisis-le ici (et pense à l'ajouter sur son contact pour la prochaine fois).</p>
+                    : <p className="text-[11px] text-amber-600 mt-1">Aucun mandant relié à ce bien — saisis l'e-mail du destinataire ici.</p>)}
+                  {sendForm.to && sendForm.mandantNom && <p className="text-[11px] text-stone-400 mt-1">Mandant : {sendForm.mandantNom}</p>}
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wide mb-1">Objet</label>

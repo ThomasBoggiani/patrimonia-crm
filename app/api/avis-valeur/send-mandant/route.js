@@ -34,21 +34,31 @@ async function verifyToken(token) {
 // `contacts` (rôle mandant/proprietaire), (3) mandat.mandant_client_id → clients.
 // On essaie les trois, dans cet ordre.
 async function resolveMandant(mandat) {
-  const norm = (row) => (row && row.email) ? { id: row.id || null, email: row.email, prenom: row.prenom || '', nom: row.nom || '' } : null;
+  // On retient le meilleur candidat : un mandant AVEC e-mail gagne et arrête la
+  // recherche ; sinon on garde au moins son NOM (pour dire « mandant trouvé mais
+  // sans e-mail » plutôt que « aucun mandant »).
+  let best = null;
+  const consider = (row) => {
+    if (!row) return false;
+    const info = { email: (row.email || '').trim(), prenom: row.prenom || '', nom: row.nom || '' };
+    if (!info.email && !info.prenom && !info.nom) return false;
+    if (info.email) { best = info; return true; }   // e-mail trouvé → on s'arrête
+    if (!best) best = info;                          // sinon on mémorise le nom
+    return false;
+  };
 
   // 1. mandant_info (JSON direct sur le mandat)
-  const mi = mandat.mandant_info;
-  if (mi && mi.email) return { id: null, email: mi.email, prenom: mi.prenom || '', nom: mi.nom || '' };
+  if (consider(mandat.mandant_info)) return best;
 
-  // 2. mandat_contacts (rôle mandant/proprietaire) → table contacts
+  // 2. mandat_contacts → table contacts (rôle mandant/proprietaire d'abord)
   try {
     const { data: contacts } = await supabaseAdmin
       .from('mandat_contacts')
-      .select('role, contact:contacts(id, prenom, nom, email)')
+      .select('role, contact:contacts(prenom, nom, email)')
       .eq('mandat_id', mandat.id);
-    const rows = (contacts || []).filter(c => c.contact?.email);
-    const mc = rows.find(c => ['mandant', 'proprietaire'].includes(c.role)) || rows[0];
-    if (mc?.contact) return norm(mc.contact);
+    const rows = (contacts || []).filter(c => c.contact);
+    const ordered = [...rows.filter(c => ['mandant', 'proprietaire'].includes(c.role)), ...rows];
+    for (const c of ordered) if (consider(c.contact)) return best;
   } catch { /* ignore, on tente la suite */ }
 
   // 3. mandant_client_id → clients, puis contacts (selon la table pointée)
@@ -56,13 +66,12 @@ async function resolveMandant(mandat) {
   if (cid) {
     for (const table of ['clients', 'contacts']) {
       try {
-        const { data } = await supabaseAdmin.from(table).select('id, email, prenom, nom').eq('id', cid).maybeSingle();
-        const r = norm(data);
-        if (r) return r;
+        const { data } = await supabaseAdmin.from(table).select('email, prenom, nom').eq('id', cid).maybeSingle();
+        if (consider(data)) return best;
       } catch { /* table absente ou id incompatible */ }
     }
   }
-  return null;
+  return best;
 }
 
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
@@ -140,7 +149,8 @@ export async function POST(request) {
     // MODE PRÉPARATION : renvoie le brouillon éditable, SANS générer le PDF ni
     // envoyer. La fenêtre d'envoi l'utilise pour laisser l'agent relire/modifier.
     if (body.preview) {
-      return json({ ok: true, preview: true, to, subject, bodyText, isPreAvis, mandantTrouve: !!cli?.email });
+      const mandantNom = cli ? [cli.prenom, cli.nom].filter(Boolean).join(' ').trim() : '';
+      return json({ ok: true, preview: true, to, subject, bodyText, isPreAvis, mandantNom, mandantSansEmail: !!(cli && !cli.email) });
     }
 
     if (!to) return json({ ok: false, error: "Aucune adresse e-mail pour le mandant. Saisis-la dans le champ « À » de la fenêtre d'envoi." }, 422);
