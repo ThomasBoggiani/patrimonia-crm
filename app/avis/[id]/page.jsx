@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { buildAvisHtml } from '@/lib/avis/buildAvis';
+import { buildAvisHtml, buildAvisData } from '@/lib/avis/buildAvis';
 
 const DEMO_MANDAT = {
   nom: '66 rue de Turenne', adresse: '66 rue de Turenne', ville: 'Paris 3ᵉ', marche: 'b2c',
@@ -77,6 +77,13 @@ export default function AvisPage() {
           m = data;
         }
         setHtml(buildAvisHtml(m));
+        // Titre = nom de fichier proposé par défaut à l'enregistrement PDF
+        // (ex. « Avis de valeur — 12 rue de Chevreloup »).
+        try {
+          const d = buildAvisData(m);
+          const lieu = m.adresse || m.nom || '';
+          document.title = `${d.docLabel}${lieu ? ' — ' + lieu : ''}`;
+        } catch { /* titre par défaut si le calcul échoue */ }
         setState('ready');
       } catch (e) {
         setError(e.message || 'Erreur de chargement.');
