@@ -139,25 +139,46 @@ Renvoie UNIQUEMENT un JSON valide (pas de backticks markdown), exactement ce for
 - Réponds UNIQUEMENT le JSON, pas de préambule`;
 }
 
+// Extrait un objet JSON d'un texte, de façon tolérante :
+// 1) retire d'éventuelles fences markdown ; 2) tente un parse direct ;
+// 3) sinon isole du premier « { » au dernier « } ».
+function extractJson(text) {
+  if (!text) return null;
+  let t = String(text).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  try { return JSON.parse(t); } catch { /* on tente l'extraction */ }
+  const first = t.indexOf('{');
+  const last = t.lastIndexOf('}');
+  if (first !== -1 && last > first) {
+    try { return JSON.parse(t.slice(first, last + 1)); } catch { /* échec */ }
+  }
+  return null;
+}
+
+const EMPTY_ANALYSIS = { updates: {}, tasks: [], matching_clients: [], target_profiles: [], strategies: [], highlights: [], brief: {} };
+
 async function callClaude(systemPrompt, userContent) {
   const response = await anthropic.messages.create({
     model: 'claude-haiku-4-5',
-    max_tokens: 4000,
+    max_tokens: 8000, // rapport en 5 volets : 4000 était trop court → JSON tronqué
     system: systemPrompt,
-    messages: [{ role: 'user', content: userContent }],
+    messages: [
+      { role: 'user', content: userContent },
+      // Prefill : on force la réponse à commencer par « { » (pas de préambule,
+      // pas de fence markdown) → JSON beaucoup plus fiable à parser.
+      { role: 'assistant', content: '{' },
+    ],
   });
-  const text = response.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
-  try {
-    const cleaned = text.replace(/^```json\s*/i, '').replace(/\s*```$/, '').trim();
-    return { parsed: JSON.parse(cleaned), usage: response.usage };
-  } catch (e) {
-    console.error('[ai-analyze] JSON parse error:', e.message, '\nRaw:', text.slice(0, 500));
-    return {
-      parsed: { updates: {}, tasks: [], matching_clients: [], target_profiles: [], strategies: [], highlights: [], brief: {} },
-      usage: response.usage,
-      parseError: true,
-    };
+  const truncated = response.stop_reason === 'max_tokens';
+  const cont = response.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
+  // Le « { » du prefill n'est pas renvoyé : on le remet devant.
+  const text = cont.startsWith('{') ? cont : '{' + cont;
+
+  const parsed = extractJson(text);
+  if (parsed && typeof parsed === 'object') {
+    return { parsed: { ...EMPTY_ANALYSIS, ...parsed }, usage: response.usage, truncated };
   }
+  console.error('[ai-analyze] JSON parse error. stop_reason=', response.stop_reason, '\nRaw:', text.slice(0, 800));
+  return { parsed: { ...EMPTY_ANALYSIS }, usage: response.usage, parseError: true, truncated };
 }
 
 function formatBriefForDescription(brief, strategies, targetProfiles, datestamp) {
@@ -353,12 +374,14 @@ export async function POST(request) {
 
     // ─── 6. Appel IA ───
     const systemPrompt = buildSystemPrompt(cleanMandat, clientsBrief);
-    const { parsed, usage, parseError } = await callClaude(systemPrompt, userContent);
+    const { parsed, usage, parseError, truncated } = await callClaude(systemPrompt, userContent);
 
     if (parseError) {
       return new Response(JSON.stringify({
         ok: false,
-        error: 'L\'IA n\'a pas renvoyé de JSON valide. Réessaye dans quelques secondes.',
+        error: truncated
+          ? 'Analyse trop longue pour être terminée (beaucoup de documents). Réessaie, ou lance l\'analyse avec moins de documents attachés.'
+          : 'L\'IA n\'a pas renvoyé de résultat exploitable. Réessaie dans quelques secondes.',
       }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
 
