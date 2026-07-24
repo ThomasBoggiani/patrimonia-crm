@@ -152,6 +152,42 @@ async function ventesCommuneAnnee(dep, citycode, annee, idx) {
   return out;
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// CACHE DVF sur le mandat (stockage fichier, PAS de colonne SQL).
+// On mémorise la donnée BRUTE (géocodage + ventes de la commune) dans le
+// bucket "mandat-assets" sous {mandatId}/dvf.json. Le calcul (tri/filtre/
+// stats) reste identique : on ne fait qu'ÉVITER de re-télécharger le gros
+// fichier open-data à chaque génération. Réutilisé tant que : même jeu
+// d'années demandé + cache récent (< 30 jours).
+// ═══════════════════════════════════════════════════════════════════
+const DVF_BUCKET = 'mandat-assets';
+const DVF_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 jours
+const dvfCachePath = (mandatId) => `${mandatId}/dvf.json`;
+
+function sameYears(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  const sa = [...a].sort(), sb = [...b].sort();
+  return sa.every((y, i) => y === sb[i]);
+}
+
+async function readDvfCache(mandatId) {
+  try {
+    const { data, error } = await supabaseAdmin.storage.from(DVF_BUCKET).download(dvfCachePath(mandatId));
+    if (error || !data) return null;
+    return JSON.parse(await data.text());
+  } catch { return null; }
+}
+
+async function writeDvfCache(mandatId, payload) {
+  try {
+    await supabaseAdmin.storage.from(DVF_BUCKET).upload(
+      dvfCachePath(mandatId),
+      Buffer.from(JSON.stringify(payload)),
+      { contentType: 'application/json', upsert: true }
+    );
+  } catch (e) { console.warn('[avis-valeur/comparables] writeDvfCache:', e?.message); }
+}
+
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -179,9 +215,6 @@ export async function POST(request) {
     }
     if (!adresse) return Response.json({ ok: false, error: 'Adresse manquante sur le mandat.' }, { status: 400 });
 
-    const geo = await geocode(adresse);
-    if (!geo) return Response.json({ ok: false, error: `Adresse introuvable : « ${adresse} »` }, { status: 404 });
-
     // Rayon effectif selon le périmètre (BtoC = serré, BtoB = large par défaut)
     const perimetreEff = perimetre === 'auto' ? (estB2C ? 'voisins' : '2000') : perimetre;
     const onlyImmeuble = perimetreEff === 'immeuble';
@@ -202,9 +235,32 @@ export async function POST(request) {
     const anneesList = [];
     for (let y = anneeMax; y > anneeMax - (annees + 2); y--) anneesList.push(y);
 
-    const dep = geo.citycode.slice(0, 2) === '97' ? geo.citycode.slice(0, 3) : geo.citycode.slice(0, 2);
-    const batches = await Promise.all(anneesList.map((y, i) => ventesCommuneAnnee(dep, geo.citycode, y, i)));
-    let ventes = batches.flat();
+    // ── Source DVF : CACHE MANDAT d'abord (évite de re-télécharger le gros fichier
+    // open-data à chaque génération). Le tri/filtre/stats plus bas est identique :
+    // on ne met en cache que la donnée brute (géocodage + ventes de la commune).
+    // On garde le cache tant que le même jeu d'années est demandé et qu'il est récent.
+    const useCache = !!mandatId && !body.adresse;
+    let geo = null;
+    let ventes = null;
+    let sourceDvf = 'live';
+    const cache = useCache ? await readDvfCache(mandatId) : null;
+    if (cache && Array.isArray(cache.ventes) && cache.geo && cache.geo.citycode
+        && cache.adresse === adresse                       // adresse identique (invalidé si le mandat change d'adresse)
+        && sameYears(cache.anneesInterrogees, anneesList)
+        && cache.cachedAt && (Date.now() - new Date(cache.cachedAt).getTime() < DVF_TTL_MS)) {
+      geo = cache.geo;
+      ventes = cache.ventes;
+      sourceDvf = 'cache';
+    } else {
+      geo = await geocode(adresse);
+      if (!geo) return Response.json({ ok: false, error: `Adresse introuvable : « ${adresse} »` }, { status: 404 });
+      const dep = geo.citycode.slice(0, 2) === '97' ? geo.citycode.slice(0, 3) : geo.citycode.slice(0, 2);
+      const batches = await Promise.all(anneesList.map((y, i) => ventesCommuneAnnee(dep, geo.citycode, y, i)));
+      ventes = batches.flat();
+      if (useCache) {
+        await writeDvfCache(mandatId, { adresse, geo, ventes, anneesInterrogees: anneesList, cachedAt: new Date().toISOString() });
+      }
+    }
 
     // Tag « même immeuble » / « même rue ». Le signal fiable est la DISTANCE
     // (coords DVF au niveau de la parcelle) ; le n°/voie normalisés confirment.
@@ -241,7 +297,7 @@ export async function POST(request) {
     return Response.json({
       ok: true,
       geo: { lat: geo.lat, lon: geo.lon, label: geo.label, numero: geo.numero, voie: geo.voie },
-      params: { perimetre: perimetreEff, rayon, annees, type: typeVoulu || 'tous', surfaceMin, surfaceMax, anneesInterrogees: anneesList },
+      params: { perimetre: perimetreEff, rayon, annees, type: typeVoulu || 'tous', surfaceMin, surfaceMax, anneesInterrogees: anneesList, source: sourceDvf },
       mandat: { surface: mandatSurface, typeDeduit: mandatType, estB2C },
       ventes,
       secteurParAnnee,

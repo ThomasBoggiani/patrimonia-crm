@@ -29,20 +29,40 @@ async function verifyToken(token) {
   return user;
 }
 
-// Résout l'adresse e-mail du mandant : client lié au mandat, sinon contact « mandant ».
+// Résout l'e-mail du mandant. Le propriétaire peut être stocké de 3 façons dans
+// le CRM : (1) champ JSON mandat.mandant_info, (2) pivot mandat_contacts → table
+// `contacts` (rôle mandant/proprietaire), (3) mandat.mandant_client_id → clients.
+// On essaie les trois, dans cet ordre.
 async function resolveMandant(mandat) {
-  const pick = async (cid) => {
-    if (!cid) return null;
-    const { data } = await supabaseAdmin.from('clients').select('email, prenom, nom').eq('id', cid).maybeSingle();
-    return data && data.email ? data : null;
-  };
-  let cli = await pick(mandat.mandant_client_id);
-  if (!cli) {
-    const { data: contacts } = await supabaseAdmin.from('mandat_contacts').select('client_id, role').eq('mandat_id', mandat.id);
-    const mc = (contacts || []).find(c => ['mandant', 'proprietaire'].includes(c.role));
-    if (mc) cli = await pick(mc.client_id);
+  const norm = (row) => (row && row.email) ? { id: row.id || null, email: row.email, prenom: row.prenom || '', nom: row.nom || '' } : null;
+
+  // 1. mandant_info (JSON direct sur le mandat)
+  const mi = mandat.mandant_info;
+  if (mi && mi.email) return { id: null, email: mi.email, prenom: mi.prenom || '', nom: mi.nom || '' };
+
+  // 2. mandat_contacts (rôle mandant/proprietaire) → table contacts
+  try {
+    const { data: contacts } = await supabaseAdmin
+      .from('mandat_contacts')
+      .select('role, contact:contacts(id, prenom, nom, email)')
+      .eq('mandat_id', mandat.id);
+    const rows = (contacts || []).filter(c => c.contact?.email);
+    const mc = rows.find(c => ['mandant', 'proprietaire'].includes(c.role)) || rows[0];
+    if (mc?.contact) return norm(mc.contact);
+  } catch { /* ignore, on tente la suite */ }
+
+  // 3. mandant_client_id → clients, puis contacts (selon la table pointée)
+  const cid = mandat.mandant_client_id;
+  if (cid) {
+    for (const table of ['clients', 'contacts']) {
+      try {
+        const { data } = await supabaseAdmin.from(table).select('id, email, prenom, nom').eq('id', cid).maybeSingle();
+        const r = norm(data);
+        if (r) return r;
+      } catch { /* table absente ou id incompatible */ }
+    }
   }
-  return cli; // { email, prenom, nom } | null
+  return null;
 }
 
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
@@ -140,7 +160,6 @@ export async function POST(request) {
     try {
       await supabaseAdmin.from('interactions').insert({
         mandat_id: mandatId,
-        client_id: cli?.id || null,
         type: 'email_sortant',
         resume: `${d.docLabel} envoyé au mandant : ${subject}`,
         created_by: user.id,
