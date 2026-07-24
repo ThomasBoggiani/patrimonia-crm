@@ -1033,6 +1033,7 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
     delete snakeData.updated_at;
     let mandatId = mandat.id;
     const isNouveauMandat = !mandat.id;
+    let createdRow = null; // ligne DB du mandat créé (pour atterrir sur sa fiche)
 
     // Certaines colonnes (check-list du dossier, nouvelles surfaces…) peuvent ne
     // pas encore exister en base. Plutôt que de faire échouer TOUT l'enregistrement,
@@ -1069,7 +1070,7 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
       snakeData.created_by = user?.id;
       let { row: created, error } = await enregistrerResilient(snakeData, 'insert');
       if (error) { alert('Erreur création : ' + error.message); return; }
-      if (created) mandatId = created.id;
+      if (created) { mandatId = created.id; createdRow = created; }
     }
 
     // Phase 1.2 — Enrichissement auto à la création : dès qu'un NOUVEAU mandat a
@@ -1138,6 +1139,19 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
     reload();
     // Trigger matching auto batch (fire-and-forget)
     if (mandatId) triggerMatchingBatch({ mandatId });
+
+    // Après CRÉATION d'un nouveau mandat : on atterrit directement sur sa fiche
+    // (parcours « deal → fiche → estimer »), au lieu de revenir à la liste.
+    if (isNouveauMandat && mandatId) {
+      const fiche = createdRow ? toCamel(createdRow) : { id: mandatId };
+      setSelectedMandat(fiche);
+      if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', 'mandats');
+        url.searchParams.set('open', mandatId);
+        window.history.pushState({ tab: 'mandats', open: mandatId }, '', url.toString());
+      }
+    }
   };
 
   const handleDelete = async (id) => {
