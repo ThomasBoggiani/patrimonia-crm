@@ -39,6 +39,26 @@ async function getUserInitials(userId) {
   }
 }
 
+async function getUserPrenom(userId) {
+  if (!userId) return '';
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('profiles').select('prenom').eq('id', userId).single();
+    if (error || !data) return '';
+    return (data.prenom || '').trim();
+  } catch (e) {
+    console.error('[assistant/execute] getUserPrenom error:', e);
+    return '';
+  }
+}
+
+// Clôture standard des emails : « À vous, <prénom> » sur une seule ligne,
+// placée AVANT la signature officielle du CRM.
+function signoffHtml(prenom) {
+  const nom = (prenom || '').trim();
+  return nom ? `À vous, ${nom}` : 'À vous,';
+}
+
 async function getUserSignature(userId) {
   if (!userId) return null;
   try {
@@ -439,9 +459,10 @@ async function executeSendEmail(data, userId, userInitials, token) {
     // Convertit le body texte en HTML basique
     const bodyHtml = data.body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
 
-    // Récupère et ajoute la signature
-    const signature = await getUserSignature(userId);
-    const finalHtml = signature ? `${bodyHtml}<br><br>${signature}` : bodyHtml;
+    // Clôture « À vous, / <prénom> » PUIS signature officielle du CRM
+    const [signature, prenom] = await Promise.all([getUserSignature(userId), getUserPrenom(userId)]);
+    let finalHtml = `${bodyHtml}<br><br>${signoffHtml(prenom)}`;
+    if (signature) finalHtml += `<br><br>${signature}`;
 
     const res = await fetch(`${baseUrl}/api/microsoft/emails`, {
       method: 'POST',
@@ -496,12 +517,14 @@ async function executeSendPlaquette(data, userId, userInitials, token) {
 
     const { data: senderProfile } = await supabaseAdmin
       .from('profiles')
-      .select('email_signature')
+      .select('email_signature, prenom')
       .eq('id', userId)
       .single();
     const signature = senderProfile?.email_signature || null;
 
-    const htmlBody = signature ? `${bodyHtml}<br>${signature}` : bodyHtml;
+    // Clôture « À vous, / <prénom> » PUIS signature officielle du CRM
+    let htmlBody = `${bodyHtml}<br><br>${signoffHtml(senderProfile?.prenom)}`;
+    if (signature) htmlBody += `<br><br>${signature}`;
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://patrimonia-crm.vercel.app';
     const res = await fetch(`${baseUrl}/api/email-drafts/send-batch`, {
