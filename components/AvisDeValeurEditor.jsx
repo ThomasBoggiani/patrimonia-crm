@@ -210,6 +210,8 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
   const [prefilling, setPrefilling] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
   const [sendingMandant, setSendingMandant] = useState(false);
+  const [preparingSend, setPreparingSend] = useState(false);
+  const [sendForm, setSendForm] = useState({ to: '', subject: '', bodyText: '' });
 
   // SOURCE UNIQUE : les infos déjà sur la fiche mandat (taxe, charges, année,
   // descriptif, lots) sont affichées en LECTURE SEULE dans l'avis (composant
@@ -488,21 +490,46 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
     setSaving(false);
   }
 
-  // Envoi de l'avis (beau PDF) au mandant par e-mail. Enregistre d'abord l'avis
-  // pour que le PDF reflète la dernière saisie, puis appelle la route serveur.
-  async function sendToMandant() {
-    setSendingMandant(true);
+  // Ouvre la fenêtre d'envoi : enregistre l'avis, puis récupère le brouillon
+  // (destinataire + objet + texte) pour que l'agent le relise/modifie avant envoi.
+  async function openSendModal() {
+    setPreparingSend(true);
+    setShowSendModal(true);
+    setSendForm({ to: '', subject: '', bodyText: '' });
     try {
       await supabase.from('mandats').update({ avis_valeur: data }).eq('id', mandat.id);
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/api/avis-valeur/send-mandant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: session?.access_token || '', mandatId: mandat.id }),
+        body: JSON.stringify({ token: session?.access_token || '', mandatId: mandat.id, preview: true }),
+      });
+      const j = await res.json().catch(() => ({ ok: false }));
+      if (j.ok) setSendForm({ to: j.to || '', subject: j.subject || '', bodyText: j.bodyText || '' });
+      else alert(j.error || 'Préparation impossible.');
+    } catch (e) {
+      alert('Erreur : ' + e.message);
+    }
+    setPreparingSend(false);
+  }
+
+  // Envoi effectif, avec le contenu (éventuellement modifié) de la fenêtre.
+  async function sendToMandant() {
+    if (!sendForm.to.trim()) { alert("Renseigne l'adresse e-mail du destinataire."); return; }
+    setSendingMandant(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/avis-valeur/send-mandant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: session?.access_token || '', mandatId: mandat.id,
+          to: sendForm.to.trim(), subject: sendForm.subject, bodyText: sendForm.bodyText,
+        }),
       });
       const j = await res.json().catch(() => ({ ok: false, error: 'Réponse invalide du serveur.' }));
       if (!j.ok) { alert(j.error || "Envoi impossible."); }
-      else { alert(`${visiteRempli ? 'Avis' : 'Pré-avis'} de valeur envoyé au mandant : ${j.to}`); setShowSendModal(false); }
+      else { alert(`${visiteRempli ? 'Avis' : 'Pré-avis'} de valeur envoyé : ${j.to}`); setShowSendModal(false); }
     } catch (e) {
       alert('Erreur : ' + e.message);
     }
@@ -1498,9 +1525,9 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
               {generating ? 'Ouverture…' : 'Aperçu / PDF'}
             </button>
-            <button onClick={() => setShowSendModal(true)} disabled={saving || generating || sendingMandant}
+            <button onClick={openSendModal} disabled={saving || generating || sendingMandant || preparingSend}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-700 text-white rounded-lg text-sm hover:bg-emerald-800 disabled:opacity-50"
-              title="Envoie l'avis (PDF) au mandant par e-mail, avec un texte adapté"
+              title="Prépare l'e-mail au mandant (relecture avant envoi), PDF joint"
             >
               <Send className="w-4 h-4" />
               Envoyer au mandant
@@ -1509,33 +1536,51 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
         </div>
       </div>
 
-      {/* Confirmation d'envoi au mandant */}
+      {/* Fenêtre d'envoi au mandant — brouillon relu/modifiable avant envoi */}
       {showSendModal && (
-        <div className="fixed inset-0 bg-stone-900/60 flex items-center justify-center z-[60] p-4" onClick={(e) => { e.stopPropagation(); if (!sendingMandant) setShowSendModal(false); }}>
-          <div className="bg-white rounded-xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-2 mb-3">
+        <div className="fixed inset-0 bg-stone-900/60 flex items-center justify-center z-[60] p-4" onClick={(e) => { e.stopPropagation(); if (!sendingMandant && !preparingSend) setShowSendModal(false); }}>
+          <div className="bg-white rounded-xl w-full max-w-lg p-5 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-1">
               <Send className="w-5 h-5 text-emerald-700" />
               <h3 className="font-semibold text-stone-900">Envoyer au mandant</h3>
+              <span className="ml-auto text-[11px] px-2 py-0.5 rounded-full bg-sage-100 text-sage-darker">{visiteRempli ? 'Avis définitif' : 'Pré-avis'}</span>
             </div>
-            <p className="text-sm text-stone-600 mb-2">
-              L'avis va être envoyé <b>par e-mail au mandant</b> (adresse enregistrée sur la fiche), avec le PDF joint.
-            </p>
-            <div className="text-sm rounded-lg border border-stone-200 bg-cream-50 p-3 mb-3">
-              <div>Niveau : <b>{visiteRempli ? 'Avis définitif' : 'Pré-avis de valeur'}</b></div>
-              <div className="text-xs text-stone-500 mt-1">
-                {visiteRempli
-                  ? "Texte de remerciement + proposition d'accompagnement pour la commercialisation."
-                  : "Texte précisant qu'il s'agit d'une première estimation, à affiner après visite/documents."}
+            <p className="text-xs text-stone-500 mb-3">Relis et modifie l'e-mail avant l'envoi. Le PDF de l'avis (beau format) sera joint automatiquement.</p>
+
+            {preparingSend ? (
+              <div className="flex items-center gap-2 text-sm text-stone-500 py-10 justify-center">
+                <Loader2 className="w-4 h-4 animate-spin" /> Préparation du brouillon…
               </div>
-            </div>
-            <p className="text-[11px] text-stone-400 mb-4">Le PDF est généré au beau format « charte ». La génération peut prendre quelques secondes.</p>
-            <div className="flex justify-end gap-2">
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wide mb-1">À (e-mail du mandant)</label>
+                  <input type="email" value={sendForm.to} onChange={e => setSendForm(f => ({ ...f, to: e.target.value }))}
+                    placeholder="mandant@exemple.fr"
+                    className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-emerald-600" />
+                  {!sendForm.to && <p className="text-[11px] text-amber-600 mt-1">Aucun e-mail trouvé sur la fiche — saisis-le ici.</p>}
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wide mb-1">Objet</label>
+                  <input type="text" value={sendForm.subject} onChange={e => setSendForm(f => ({ ...f, subject: e.target.value }))}
+                    className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-emerald-600" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wide mb-1">Message</label>
+                  <textarea value={sendForm.bodyText} onChange={e => setSendForm(f => ({ ...f, bodyText: e.target.value }))}
+                    rows={10}
+                    className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-emerald-600 resize-y leading-relaxed" />
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 mt-4">
               <button onClick={() => setShowSendModal(false)} disabled={sendingMandant}
                 className="px-3 py-2 text-sm text-stone-700 hover:bg-cream-100 rounded-lg disabled:opacity-50">Annuler</button>
-              <button onClick={sendToMandant} disabled={sendingMandant}
+              <button onClick={sendToMandant} disabled={sendingMandant || preparingSend}
                 className="flex items-center gap-2 px-4 py-2 bg-emerald-700 text-white rounded-lg text-sm hover:bg-emerald-800 disabled:opacity-50">
                 {sendingMandant ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                {sendingMandant ? 'Envoi…' : 'Confirmer l\'envoi'}
+                {sendingMandant ? 'Envoi…' : 'Envoyer l\'e-mail'}
               </button>
             </div>
           </div>

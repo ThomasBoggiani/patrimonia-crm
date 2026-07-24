@@ -67,25 +67,31 @@ async function resolveMandant(mandat) {
 
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
-// Corps par défaut, adapté à la phase (pré-avis / définitif).
+// Corps par défaut (texte simple, éditable par l'agent avant envoi), adapté à
+// la phase (pré-avis / définitif).
 function defaultEmail({ isPreAvis, adresse, prenom, signature }) {
-  const lieu = adresse ? ` de votre bien situé ${esc(adresse)}` : '';
-  const subject = `${isPreAvis ? 'Pré-avis' : 'Avis'} de valeur${adresse ? ' — ' + esc(adresse) : ''}`;
-  const p = (t) => `<p style="margin:0 0 14px">${t}</p>`;
-  let html;
-  if (isPreAvis) {
-    html = p(prenom ? `Bonjour ${esc(prenom)},` : 'Bonjour,')
-      + p(`Je vous prie de trouver ci-joint un <b>pré-avis de valeur</b>${lieu}.`)
-      + p(`Il s'agit d'une première estimation établie à partir de l'adresse et des données de marché. Nous l'affinerons — à la hausse comme à la baisse — après une visite et à réception des documents utiles, afin d'aboutir à un avis de valeur définitif.`)
-      + p(`Je reste à votre entière disposition pour convenir d'un rendez-vous.`);
-  } else {
-    html = p(prenom ? `Cher(e) ${esc(prenom)},` : 'Madame, Monsieur,')
-      + p(`Je vous prie de trouver ci-joint l'<b>avis de valeur</b>${lieu}.`)
-      + p(`Nous vous remercions de la confiance que vous nous témoignez et serions ravis de vous accompagner dans la commercialisation de votre bien, avec l'exigence et la discrétion qui caractérisent notre maison.`)
-      + p(`Je me tiens à votre disposition pour en échanger.`);
-  }
-  html += p(`Bien à vous,<br>${esc(signature)}`);
-  return { subject, html };
+  const lieu = adresse ? ` de votre bien situé ${adresse}` : '';
+  const subject = `${isPreAvis ? 'Pré-avis' : 'Avis'} de valeur${adresse ? ' — ' + adresse : ''}`;
+  const paras = isPreAvis ? [
+    prenom ? `Bonjour ${prenom},` : 'Bonjour,',
+    `Je vous prie de trouver ci-joint un pré-avis de valeur${lieu}.`,
+    `Il s'agit d'une première estimation établie à partir de l'adresse et des données de marché. Nous l'affinerons — à la hausse comme à la baisse — après une visite et à réception des documents utiles, afin d'aboutir à un avis de valeur définitif.`,
+    `Je reste à votre entière disposition pour convenir d'un rendez-vous.`,
+    `Bien à vous,\n${signature}`,
+  ] : [
+    prenom ? `Cher(e) ${prenom},` : 'Madame, Monsieur,',
+    `Je vous prie de trouver ci-joint l'avis de valeur${lieu}.`,
+    `Nous vous remercions de la confiance que vous nous témoignez et serions ravis de vous accompagner dans la commercialisation de votre bien, avec l'exigence et la discrétion qui caractérisent notre maison.`,
+    `Je me tiens à votre disposition pour en échanger.`,
+    `Bien à vous,\n${signature}`,
+  ];
+  return { subject, text: paras.join('\n\n') };
+}
+
+// Texte éditable → HTML pour l'envoi (paragraphes + retours à la ligne).
+function textToHtml(text) {
+  return String(text || '').trim().split(/\n{2,}/)
+    .map(p => `<p style="margin:0 0 14px">${esc(p).replace(/\n/g, '<br>')}</p>`).join('');
 }
 
 export async function POST(request) {
@@ -100,11 +106,10 @@ export async function POST(request) {
     const { data: mandat, error: mErr } = await supabaseAdmin.from('mandats').select('*').eq('id', mandatId).maybeSingle();
     if (mErr || !mandat) return json({ ok: false, error: 'Mandat introuvable' }, 404);
 
-    // Destinataire
+    // Destinataire (résolu, surchargeable par l'agent dans la fenêtre d'envoi)
     const mandantOverride = (body.to || '').trim();
     const cli = await resolveMandant(mandat);
-    const to = mandantOverride || cli?.email;
-    if (!to) return json({ ok: false, error: "Aucune adresse e-mail trouvée pour le mandant. Renseigne le client mandant (avec son e-mail) sur la fiche." }, 422);
+    const to = mandantOverride || cli?.email || '';
 
     // Signature = conseiller courant
     let signature = user.email;
@@ -120,7 +125,16 @@ export async function POST(request) {
 
     const def = defaultEmail({ isPreAvis, adresse, prenom: cli?.prenom || '', signature });
     const subject = (body.subject || '').trim() || def.subject;
-    const htmlBody = (body.htmlBody || '').trim() || def.html;
+    const bodyText = (body.bodyText != null && String(body.bodyText).trim()) ? String(body.bodyText) : def.text;
+
+    // MODE PRÉPARATION : renvoie le brouillon éditable, SANS générer le PDF ni
+    // envoyer. La fenêtre d'envoi l'utilise pour laisser l'agent relire/modifier.
+    if (body.preview) {
+      return json({ ok: true, preview: true, to, subject, bodyText, isPreAvis, mandantTrouve: !!cli?.email });
+    }
+
+    if (!to) return json({ ok: false, error: "Aucune adresse e-mail pour le mandant. Saisis-la dans le champ « À » de la fenêtre d'envoi." }, 422);
+    const htmlBody = textToHtml(bodyText);
 
     // PDF (beau design) via Chromium
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
