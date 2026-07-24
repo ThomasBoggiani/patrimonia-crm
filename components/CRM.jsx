@@ -2926,6 +2926,32 @@ async function handleFolderImport(event, opts = {}) {
                   );
                 })()}
               </div>
+              {/* Prix issus de l'avis de valeur — le prix de PRÉSENTATION (max) est le
+                  choix par défaut pour l'affichage ; + validation par le mandant. */}
+              {(() => {
+                const preco = data.avisValeur?.preconisation || data.avis_valeur?.preconisation;
+                const pMin = +(preco?.prix_plancher) || 0;
+                const pMarche = +(preco?.prix_marche) || 0;
+                const pMax = +(preco?.prix_coup_de_coeur) || 0;
+                if (!pMin && !pMarche && !pMax) return null;
+                const f = (n) => (+n || 0).toLocaleString('fr-FR');
+                const valide = !!data.prixValideMandant;
+                return (
+                  <div className={`rounded-md border p-3 space-y-2 ${valide ? 'border-sage-dark/40 bg-sage-50/60' : 'border-sage-light bg-sage-50/40'}`}>
+                    <div className="text-xs font-semibold text-sage-darker">Prix issus de l'avis de valeur <span className="font-normal text-stone-500">— net vendeur</span></div>
+                    <div className="flex flex-wrap gap-2">
+                      {pMin > 0 && <button type="button" onClick={() => setPrixNet(pMin)} className="px-2.5 py-1 text-[11px] rounded-md bg-white border border-stone-200 text-stone-700 hover:border-sage-dark">Plancher · {f(pMin)} €</button>}
+                      {pMarche > 0 && <button type="button" onClick={() => setPrixNet(pMarche)} className="px-2.5 py-1 text-[11px] rounded-md bg-white border border-stone-200 text-stone-700 hover:border-sage-dark">Marché · {f(pMarche)} €</button>}
+                      {pMax > 0 && <button type="button" onClick={() => setPrixNet(pMax)} className="px-2.5 py-1 text-[11px] rounded-md bg-sage-dark text-white border border-sage-dark hover:bg-sage-darker font-medium">★ Présentation (par défaut) · {f(pMax)} €</button>}
+                    </div>
+                    <p className="text-[10px] text-stone-400">Le prix choisi (net vendeur) recalcule automatiquement le prix FAI ci-dessous. Par défaut, on affiche le prix de présentation, le plus haut.</p>
+                    <label className="flex items-center gap-2 text-xs text-stone-700 pt-1 cursor-pointer">
+                      <input type="checkbox" checked={valide} onChange={e => update('prixValideMandant', e.target.checked)} />
+                      <span className={valide ? 'font-semibold text-sage-darker' : ''}>Prix validé par le mandant{valide ? ' ✓' : ''}</span>
+                    </label>
+                  </div>
+                );
+              })()}
               <div className="grid grid-cols-3 gap-3">
                 <Field label="Prix frais d'agence inclus (&euro;)"><input type="number" value={data.prix} onChange={e => { const fai = +e.target.value; setData(d => { const taux = (+d.honorairesTaux) > 0 ? +d.honorairesTaux : commissionTauxDefaut(fai); const net = Math.round(fai / (1 + taux / 100)); return { ...d, prix: fai, prixNetVendeur: net, honorairesTaux: taux, honorairesMontant: fai - net, prixM2: (+d.surface) ? Math.round(fai / (+d.surface)) : d.prixM2 }; }); }} className={fieldClass('prix')} placeholder="Calculé auto depuis le net" /></Field>
                 <Field label="Prix/m&sup2; (&euro;)"><input type="number" value={data.prixM2} onChange={e => update('prixM2', +e.target.value)} className={fieldClass('prixM2')} /></Field>
