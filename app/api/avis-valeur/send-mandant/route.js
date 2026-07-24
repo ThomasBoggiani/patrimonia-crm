@@ -94,6 +94,21 @@ function textToHtml(text) {
     .map(p => `<p style="margin:0 0 14px">${esc(p).replace(/\n/g, '<br>')}</p>`).join('');
 }
 
+// Diagnostic (public, sans envoi de mail) : teste le moteur PDF et confirme la
+// version déployée. À retirer une fois le PDF serveur fiabilisé.
+export async function GET(request) {
+  const marker = 'diag-3-chromium-min';
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+    const demo = { adresse: 'Diagnostic', nom: 'Diagnostic', avis_valeur: {} };
+    const t0 = Date.now();
+    const pdf = await renderAvisPdf(demo, baseUrl);
+    return json({ ok: true, marker, bytes: pdf.length, ms: Date.now() - t0 });
+  } catch (e) {
+    return json({ ok: false, marker, error: e.message, stack: (e.stack || '').split('\n').slice(0, 4).join(' | ') }, 500);
+  }
+}
+
 export async function POST(request) {
   try {
     const body = await request.json().catch(() => ({}));
