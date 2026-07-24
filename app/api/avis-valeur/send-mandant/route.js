@@ -94,6 +94,20 @@ function textToHtml(text) {
     .map(p => `<p style="margin:0 0 14px">${esc(p).replace(/\n/g, '<br>')}</p>`).join('');
 }
 
+// Diagnostic temporaire (public, sans envoi de mail) : teste le service PDF sur
+// un avis de démo. À retirer une fois validé.
+export async function GET(request) {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+    const demo = { adresse: 'Diagnostic', nom: 'Diagnostic', avis_valeur: {} };
+    const t0 = Date.now();
+    const pdf = await renderAvisPdf(demo, baseUrl);
+    return json({ ok: true, marker: 'pdfshift-1', bytes: pdf.length, ms: Date.now() - t0, keySet: !!process.env.PDFSHIFT_API_KEY });
+  } catch (e) {
+    return json({ ok: false, marker: 'pdfshift-1', keySet: !!process.env.PDFSHIFT_API_KEY, error: (e.message || '').slice(0, 300) }, 500);
+  }
+}
+
 export async function POST(request) {
   try {
     const body = await request.json().catch(() => ({}));
