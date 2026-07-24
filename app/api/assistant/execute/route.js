@@ -52,11 +52,11 @@ async function getUserPrenom(userId) {
   }
 }
 
-// Clôture standard des emails : « À vous, <prénom> » sur une seule ligne,
-// placée AVANT la signature officielle du CRM.
+// Clôture standard des emails : « Bien à vous, » puis le prénom du commercial
+// À LA LIGNE. Placée AVANT la signature officielle du CRM.
 function signoffHtml(prenom) {
   const nom = (prenom || '').trim();
-  return nom ? `À vous, ${nom}` : 'À vous,';
+  return nom ? `Bien à vous,<br>${nom}` : 'Bien à vous,';
 }
 
 async function getUserSignature(userId) {
@@ -459,7 +459,7 @@ async function executeSendEmail(data, userId, userInitials, token) {
     // Convertit le body texte en HTML basique
     const bodyHtml = data.body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
 
-    // Clôture « À vous, / <prénom> » PUIS signature officielle du CRM
+    // Clôture « Bien à vous, / <prénom> » PUIS signature officielle du CRM
     const [signature, prenom] = await Promise.all([getUserSignature(userId), getUserPrenom(userId)]);
     let finalHtml = `${bodyHtml}<br><br>${signoffHtml(prenom)}`;
     if (signature) finalHtml += `<br><br>${signature}`;
@@ -522,7 +522,7 @@ async function executeSendPlaquette(data, userId, userInitials, token) {
       .single();
     const signature = senderProfile?.email_signature || null;
 
-    // Clôture « À vous, / <prénom> » PUIS signature officielle du CRM
+    // Clôture « Bien à vous, / <prénom> » PUIS signature officielle du CRM
     let htmlBody = `${bodyHtml}<br><br>${signoffHtml(senderProfile?.prenom)}`;
     if (signature) htmlBody += `<br><br>${signature}`;
 

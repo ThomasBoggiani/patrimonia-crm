@@ -282,7 +282,7 @@ const QUICK_ACTIONS = {
   email_mandant: {
     label: 'Email mandant',
     scopes: ['mandat'],
-    user: `Rédige un email professionnel et chaleureux au mandant (le vendeur) pour faire un point d'étape sur la commercialisation. Commence par "Chère Madame, Cher Monsieur,". Sois rassurant, fais le point sans inventer de chiffres, propose un échange téléphonique, puis termine par la clôture « À vous, » suivie de ton prénom (cf. règle EMAILS), SANS autre signature. 150-200 mots. Réponds directement par l'email.`,
+    user: `Rédige un email professionnel et chaleureux au mandant (le vendeur) pour faire un point d'étape sur la commercialisation. Commence par "Chère Madame, Cher Monsieur,". Sois rassurant, fais le point sans inventer de chiffres, propose un échange téléphonique, puis termine par la clôture « Bien à vous, » suivie de ton prénom à la ligne (cf. règle EMAILS), SANS autre signature. 150-200 mots. Réponds directement par l'email.`,
   },
   argumentaire: {
     label: 'Argumentaire',
@@ -306,7 +306,7 @@ Adapte le ton au marché du bien (habitation B2C = art de vivre ; investissement
   email_relance: {
     label: 'Email de relance',
     scopes: ['client'],
-    user: `Rédige un email de relance professionnel et chaleureux pour ce client, en t'appuyant sur son profil et les mandats compatibles ci-dessus. Mets en avant 1 ou 2 biens pertinents sans tout détailler. Termine par une proposition d'échange, puis la clôture « À vous, » suivie de ton prénom (cf. règle EMAILS), SANS autre signature. Réponds directement par l'email.`,
+    user: `Rédige un email de relance professionnel et chaleureux pour ce client, en t'appuyant sur son profil et les mandats compatibles ci-dessus. Mets en avant 1 ou 2 biens pertinents sans tout détailler. Termine par une proposition d'échange, puis la clôture « Bien à vous, » suivie de ton prénom à la ligne (cf. règle EMAILS), SANS autre signature. Réponds directement par l'email.`,
   },
   synthese_client: {
     label: 'Synthèse client',
@@ -373,15 +373,15 @@ const tools = [
       id: { type: 'string' }, prenom: { type: 'string' }, nom: { type: 'string' }, societe: { type: 'string' },
       email: { type: 'string' }, tel: { type: 'string' }, typologie: { type: 'string' }, marche: { type: 'string' },
       maturite: { type: 'string' }, statut: { type: 'string' }, budget_min: { type: 'number' }, budget_max: { type: 'number' } }, required: ['id'] } },
-  { name: 'propose_send_email', description: 'PROPOSE l\'envoi d\'un email simple. Ne fait RIEN, l\'utilisateur valide. IMPORTANT : le "body" ne doit contenir NI formule de clôture NI signature. Le système ajoute automatiquement, à l\'envoi, la clôture « À vous, <prénom du commercial> » puis la signature officielle du CRM. Termine donc ton body sur la dernière phrase utile, sans « Cordialement », sans nom, sans signature.',
+  { name: 'propose_send_email', description: 'PROPOSE l\'envoi d\'un email simple. Ne fait RIEN, l\'utilisateur valide. IMPORTANT : le "body" ne doit contenir NI formule de clôture NI signature. Le système ajoute automatiquement, à l\'envoi, la clôture « Bien à vous, » + le prénom du commercial à la ligne, puis la signature officielle du CRM. Termine donc ton body sur la dernière phrase utile, sans « Cordialement », sans nom, sans signature.',
     input_schema: { type: 'object', properties: {
-      to: { type: 'string' }, subject: { type: 'string' }, body: { type: 'string', description: 'Corps de l\'email SANS clôture ni signature (« À vous, <prénom> » + signature officielle ajoutés automatiquement).' }, client_id: { type: 'string' } }, required: ['to', 'subject', 'body'] } },
+      to: { type: 'string' }, subject: { type: 'string' }, body: { type: 'string', description: 'Corps de l\'email SANS clôture ni signature (« Bien à vous, » + prénom + signature officielle ajoutés automatiquement).' }, client_id: { type: 'string' } }, required: ['to', 'subject', 'body'] } },
   { name: 'propose_add_photos', description: 'PROPOSE d\'ajouter des PHOTOS à la galerie du BIEN (mandat courant). Deux cas : (1) l\'utilisateur a joint des PHOTOS (fichiers image) ; (2) l\'utilisateur a joint une FICHE PDF (ex. annonce d\'un confrère) contenant des photos → le système extrait automatiquement les photos incrustées dans le PDF. Utilise cet outil dès que l\'utilisateur veut récupérer des photos, y compris depuis un PDF. Ne fait RIEN, l\'utilisateur valide. N\'invente aucune URL : le système attache automatiquement les photos réellement présentes. Fournis simplement l\'ID du mandat courant.',
     input_schema: { type: 'object', properties: {
       mandat_id: { type: 'string', description: 'ID du mandat courant (présent dans le contexte).' } }, required: ['mandat_id'] } },
-  { name: 'propose_send_plaquette', description: 'PROPOSE l\'envoi d\'une plaquette PDF d\'un mandat à un client. Ne fait RIEN, l\'utilisateur valide. IMPORTANT : tu DOIS rédiger un custom_message COMPLET et auto-suffisant (jamais vide), car ce message constituera le corps de l\'email. La clôture « À vous, <prénom du commercial> » ET la signature officielle de l\'agence sont ajoutées AUTOMATIQUEMENT après — ne les écris donc PAS toi-même. Le message doit, dans le ton de voix du commercial : (1) saluer correctement le destinataire (utilise « Bonjour » + le nom ; n\'invente PAS la civilité Madame/Monsieur si tu n\'es pas sûr du genre) ; (2) présenter brièvement le bien et indiquer que la plaquette est jointe ; (3) inclure vers la fin une courte phrase invitant les professionnels de l\'immobilier et investisseurs à remplir le questionnaire (présent dans la signature) pour recevoir des opportunités off-market ciblées ; (4) NE PAS écrire de formule de clôture (« Cordialement », « Bien à vous »…) ni de signature ni de nom : le système ajoute « À vous, <prénom> » puis la signature officielle.',
+  { name: 'propose_send_plaquette', description: 'PROPOSE l\'envoi d\'une plaquette PDF d\'un mandat à un client. Ne fait RIEN, l\'utilisateur valide. IMPORTANT : tu DOIS rédiger un custom_message COMPLET et auto-suffisant (jamais vide), car ce message constituera le corps de l\'email. La clôture « Bien à vous, » + le prénom du commercial (à la ligne) ET la signature officielle de l\'agence sont ajoutées AUTOMATIQUEMENT après — ne les écris donc PAS toi-même. Le message doit, dans le ton de voix du commercial : (1) saluer correctement le destinataire (utilise « Bonjour » + le nom ; n\'invente PAS la civilité Madame/Monsieur si tu n\'es pas sûr du genre) ; (2) présenter brièvement le bien et indiquer que la plaquette est jointe ; (3) inclure vers la fin une courte phrase invitant les professionnels de l\'immobilier et investisseurs à remplir le questionnaire (présent dans la signature) pour recevoir des opportunités off-market ciblées ; (4) NE PAS écrire de formule de clôture (« Cordialement »…) ni de signature ni de nom : le système ajoute « Bien à vous, » + le prénom à la ligne, puis la signature officielle.',
     input_schema: { type: 'object', properties: {
-      mandat_id: { type: 'string' }, client_id: { type: 'string' }, custom_message: { type: 'string', description: 'Corps de l\'email (salutation + présentation + plaquette jointe + invitation questionnaire). SANS clôture ni signature : « À vous, <prénom> » + signature officielle ajoutés automatiquement. Jamais vide.' } }, required: ['mandat_id', 'client_id', 'custom_message'] } },
+      mandat_id: { type: 'string' }, client_id: { type: 'string' }, custom_message: { type: 'string', description: 'Corps de l\'email (salutation + présentation + plaquette jointe + invitation questionnaire). SANS clôture ni signature : « Bien à vous, » + prénom + signature officielle ajoutés automatiquement. Jamais vide.' } }, required: ['mandat_id', 'client_id', 'custom_message'] } },
 ];
 
 // ═══════════════════════════════════════════════════════════════════
@@ -706,9 +706,9 @@ ACTIONS (création / modification / envoi)
 - CAS FICHE PDF D'UN CONFRÈRE (contient à la fois des infos ET des photos) : dans le MÊME message, appelle DEUX outils : propose_update_mandat (avec les infos extraites : surface, prix, DPE, description…) ET propose_add_photos (pour récupérer les photos incrustées dans le PDF). Deux cartes de validation s'afficheront, l'utilisateur valide chacune indépendamment. Fais-le sur ce tour-ci, car le PDF n'est disponible que sur le message où il est joint.
 
 EMAILS (clôture et signature — RÈGLE ABSOLUE)
-- La clôture d'un email est TOUJOURS « À vous, ${tones?.prenom || '[prénom du commercial]'} » — jamais « Cordialement », « Bien à vous » ou autre.
-- Si l'email est ENVOYÉ via un outil (propose_send_email / propose_send_plaquette) : n'écris NI clôture NI signature dans le corps. Le système ajoute automatiquement « À vous, ${tones?.prenom || '[prénom]'} » puis la signature officielle du CRM.
-- Si tu rédiges un email directement dans le chat (brouillon à copier) : termine par « À vous, ${tones?.prenom || '[prénom]'} » et n'ajoute aucune autre signature.
+- La clôture d'un email est TOUJOURS « Bien à vous, » puis le prénom du commercial (${tones?.prenom || '[prénom du commercial]'}) À LA LIGNE — jamais « Cordialement » ou autre.
+- Si l'email est ENVOYÉ via un outil (propose_send_email / propose_send_plaquette) : n'écris NI clôture NI signature dans le corps. Le système ajoute automatiquement « Bien à vous, » + « ${tones?.prenom || '[prénom]'} » à la ligne, puis la signature officielle du CRM.
+- Si tu rédiges un email directement dans le chat (brouillon à copier) : termine par « Bien à vous, » puis « ${tones?.prenom || '[prénom]'} » à la ligne, et n'ajoute aucune autre signature.
 
 RÉFÉRENTIELS MÉTIER
 - Statut mandat : Sourcing, Analyse, Mandat signé, Commercialisation, Offre, Promesse, Acte, Vendu par autres, Perdu.
