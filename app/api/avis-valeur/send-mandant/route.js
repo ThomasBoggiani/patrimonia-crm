@@ -200,7 +200,23 @@ export async function POST(request) {
       });
     } catch (e) { console.warn('[send-mandant] interaction non journalisée:', e.message); }
 
-    return json({ ok: true, to, isPreAvis, subject });
+    // Auto-avancement du pipeline : l'avis (ou pré-avis) envoyé au mandant marque
+    // la fin de l'analyse. On fait sortir le deal du « Sourcing » vers « Analyse ».
+    // Uniquement vers l'avant, et seulement depuis le sourcing (on ne touche jamais
+    // aux statuts déjà plus avancés : Mandat signé, Commercialisation, Offre…).
+    let statutAvance = null;
+    try {
+      const ORDRE = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisation', 'Offre', 'Promesse', 'Acte'];
+      const cur = ORDRE.indexOf(mandat.statut);
+      if (cur !== -1 && cur < ORDRE.indexOf('Analyse')) {
+        await supabaseAdmin.from('mandats')
+          .update({ statut: 'Analyse', updated_at: new Date().toISOString() })
+          .eq('id', mandatId);
+        statutAvance = 'Analyse';
+      }
+    } catch (e) { console.warn('[send-mandant] auto-statut non appliqué:', e.message); }
+
+    return json({ ok: true, to, isPreAvis, subject, statutAvance });
   } catch (err) {
     console.error('[/api/avis-valeur/send-mandant] Erreur:', err);
     return json({ ok: false, error: 'Erreur serveur', detail: err.message }, 500);

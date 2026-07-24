@@ -1033,6 +1033,7 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
     delete snakeData.updated_at;
     let mandatId = mandat.id;
     const isNouveauMandat = !mandat.id;
+    let createdRow = null; // ligne DB du mandat créé (pour atterrir sur sa fiche)
 
     // Certaines colonnes (check-list du dossier, nouvelles surfaces…) peuvent ne
     // pas encore exister en base. Plutôt que de faire échouer TOUT l'enregistrement,
@@ -1069,7 +1070,27 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
       snakeData.created_by = user?.id;
       let { row: created, error } = await enregistrerResilient(snakeData, 'insert');
       if (error) { alert('Erreur création : ' + error.message); return; }
-      if (created) mandatId = created.id;
+      if (created) { mandatId = created.id; createdRow = created; }
+    }
+
+    // Phase 1.2 — Enrichissement auto à la création : dès qu'un NOUVEAU mandat a
+    // une adresse, on lance en arrière-plan la génération des visuels géo (façade
+    // Street View, cadastre, satellite, transports) via refresh-assets. Ainsi la
+    // fiche les affiche sans que l'utilisateur ait à ouvrir l'onglet « Vues ».
+    // Fire-and-forget : ne bloque pas l'enregistrement (la requête continue côté
+    // serveur même si on navigue, l'app étant une SPA).
+    if (isNouveauMandat && mandatId && String(snakeData.adresse || '').trim()) {
+      (async () => {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            fetch(`/api/mandats/${mandatId}/refresh-assets`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${session.access_token}` },
+            }).catch(() => { /* best-effort, le fallback à l'ouverture reste actif */ });
+          }
+        } catch { /* best-effort */ }
+      })();
     }
 
     // Pilier 2 — Nouveau mandat : tâches de démarrage automatiques (actions de
@@ -1118,6 +1139,19 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
     reload();
     // Trigger matching auto batch (fire-and-forget)
     if (mandatId) triggerMatchingBatch({ mandatId });
+
+    // Après CRÉATION d'un nouveau mandat : on atterrit directement sur sa fiche
+    // (parcours « deal → fiche → estimer »), au lieu de revenir à la liste.
+    if (isNouveauMandat && mandatId) {
+      const fiche = createdRow ? toCamel(createdRow) : { id: mandatId };
+      setSelectedMandat(fiche);
+      if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', 'mandats');
+        url.searchParams.set('open', mandatId);
+        window.history.pushState({ tab: 'mandats', open: mandatId }, '', url.toString());
+      }
+    }
   };
 
   const handleDelete = async (id) => {
@@ -2065,6 +2099,50 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   // pas le barème automatique. Vrai par défaut en édition (on respecte l'existant).
   const [tauxManuel, setTauxManuel] = useState(!!mandat);
 
+  // Phase 1.1 — Porte d'entrée « adresse » : géocode l'adresse (BAN, API publique
+  // gratuite), remplit ville + code postal, et alerte si un mandat existe déjà à
+  // cette adresse (anti-doublon). Aucune clé requise, appel direct navigateur.
+  const [geoBusy, setGeoBusy] = useState(false);
+  const [addrNote, setAddrNote] = useState(null);   // { type:'ok'|'error', msg }
+  const [addrWarn, setAddrWarn] = useState(null);   // { id, nom } mandat déjà existant
+
+  const normalizeAddr = (s) => String(s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  async function analyserAdresse() {
+    const q = [data.adresse, data.code_postal, data.ville].filter(Boolean).join(' ').trim();
+    if (!q) { setAddrNote({ type: 'error', msg: 'Renseigne d\'abord l\'adresse.' }); return; }
+    setGeoBusy(true); setAddrNote(null); setAddrWarn(null);
+    try {
+      const res = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(q)}&limit=1`);
+      const j = await res.json();
+      const f = j.features?.[0];
+      if (!f) { setAddrNote({ type: 'error', msg: 'Adresse introuvable. Vérifie l\'orthographe.' }); return; }
+      const p = f.properties || {};
+      setData(d => ({
+        ...d,
+        adresse: d.adresse || p.name || p.label || '',
+        ville: d.ville || p.city || '',
+        code_postal: d.code_postal || p.postcode || '',
+      }));
+      setFilledFields(prev => new Set([...prev, 'ville', 'code_postal']));
+      // Anti-doublon : un mandat porte-t-il déjà cette adresse ?
+      const target = normalizeAddr(p.name || p.label);
+      const existing = (mandats || []).find(m => {
+        if (!m || m.id === mandat?.id || !m.adresse) return false;
+        const a = normalizeAddr(m.adresse);
+        return a && target && (a.includes(target) || target.includes(a));
+      });
+      if (existing) setAddrWarn({ id: existing.id, nom: existing.nom || existing.adresse });
+      setAddrNote({ type: 'ok', msg: `Adresse validée : ${p.label}` });
+    } catch (e) {
+      setAddrNote({ type: 'error', msg: 'Erreur de géocodage. Réessaie dans un instant.' });
+    } finally {
+      setGeoBusy(false);
+    }
+  }
+
   const update = (k, v) => setData({ ...data, [k]: v });
 
   // À partir du prix NET VENDEUR (ferme), recalcule commission € / prix FAI / prix
@@ -2819,7 +2897,28 @@ async function handleFolderImport(event, opts = {}) {
             <h3 className={sectionTitleClass}>🏠 Identité du bien</h3>
             <div className="space-y-3">
               <Field label="Nom du bien"><input type="text" value={data.nom} onChange={e => update('nom', e.target.value)} className={fieldClass('nom')} /></Field>
-              <Field label="Adresse"><input type="text" value={data.adresse} onChange={e => update('adresse', e.target.value)} className={fieldClass('adresse')} /></Field>
+              <Field label="Adresse"><input type="text" value={data.adresse} onChange={e => update('adresse', e.target.value)} className={fieldClass('adresse')} placeholder="12 rue de Chevreloup, Noisy-le-Roi" /></Field>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={analyserAdresse}
+                  disabled={geoBusy || !data.adresse}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {geoBusy ? '⏳ Analyse…' : '📍 Analyser l\'adresse'}
+                </button>
+                <span className="text-xs text-stone-400">Remplit ville + code postal depuis l'adresse</span>
+              </div>
+              {addrNote && (
+                <div className={`text-xs px-2.5 py-1.5 rounded-lg ${addrNote.type === 'ok' ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'}`}>
+                  {addrNote.msg}
+                </div>
+              )}
+              {addrWarn && (
+                <div className="text-xs px-2.5 py-1.5 rounded-lg bg-amber-50 text-amber-800">
+                  ⚠️ Un mandat existe déjà à cette adresse : <strong>{addrWarn.nom}</strong>. Vérifie avant de créer un doublon.
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Ville"><input type="text" value={data.ville || ''} onChange={e => update('ville', e.target.value)} className={fieldClass('ville')} /></Field>
                 <Field label="Code postal"><input type="text" value={data.code_postal || ''} onChange={e => update('code_postal', e.target.value)} className={fieldClass('code_postal')} /></Field>
@@ -3616,7 +3715,10 @@ function MandatContactsSection({ mandatContacts, onAdd, onRemove }) {
   );
 }
 // Sprint 4 — Score « qualité du dossier » : ce qui est prêt / manquant pour les documents (plaquette, avis de valeur).
-function DossierScore({ mandat, mandatContacts = [] }) {
+// Calcul partagé de l'avancement du dossier par phase (0 estimer · 1 commercialiser
+// · 2 juridique). Utilisé à la fois par DossierScore (détail) et par le bandeau
+// « Prochaine étape ». Source unique de vérité pour l'état du dossier.
+function computeDossierPhases(mandat, mandatContacts = []) {
   const estB2B = (mandat.marche || mandat.marche) !== 'b2c';
   const photos = getPhotos(mandat);
   const medias = Array.isArray(mandat.medias) ? mandat.medias : [];
@@ -3662,6 +3764,72 @@ function DossierScore({ mandat, mandatContacts = [] }) {
     return { ...ph, its, d, total: its.length, pct: its.length ? Math.round((d / its.length) * 100) : 100 };
   });
   const phaseEnCours = parPhase.find(p => p.pct < 100) || parPhase[parPhase.length - 1];
+  return { items, done, pct, parPhase, phaseEnCours, dossierComplet: pct >= 100 };
+}
+
+// Bandeau « Prochaine étape + responsable » — règle d'or : on ne laisse jamais
+// l'utilisateur sans savoir quoi faire, ni qui en est responsable.
+const PROCHAINE_ETAPE_PAR_PHASE = {
+  0: { action: 'Estimer le bien', detail: "Compléter le minimum, puis sortir l'avis de valeur." },
+  1: { action: 'Lancer la commercialisation', detail: "Compléter le dossier pour diffuser et faire visiter." },
+  2: { action: 'Sécuriser le dossier', detail: 'Réunir les pièces juridiques (identité, titre, copropriété…).' },
+};
+
+// Clé d'action selon la phase — sert à déclencher la bonne action au clic.
+function etapeActionKey(phaseId, dossierComplet) {
+  if (dossierComplet) return 'piloter';
+  return phaseId === 0 ? 'estimer' : phaseId === 1 ? 'commercialiser' : 'securiser';
+}
+const ETAPE_CTA = {
+  estimer: 'Estimer le bien',
+  commercialiser: 'Lancer la commercialisation',
+  securiser: 'Compléter le juridique',
+  piloter: 'Voir les acquéreurs',
+};
+
+function ProchaineEtapeBanner({ mandat, mandatContacts = [], onAction }) {
+  const { phaseEnCours, dossierComplet } = computeDossierPhases(mandat, mandatContacts);
+  const owner = mandat.owner || '—';
+  const manques = (phaseEnCours.its || []).filter(i => !i.ok).map(i => i.label);
+  const conf = PROCHAINE_ETAPE_PAR_PHASE[phaseEnCours.id] || PROCHAINE_ETAPE_PAR_PHASE[1];
+  const key = etapeActionKey(phaseEnCours.id, dossierComplet);
+  const action = dossierComplet ? 'Piloter la commercialisation' : conf.action;
+  const detail = dossierComplet
+    ? 'Dossier complet : relancer les acquéreurs, organiser les visites, suivre les offres.'
+    : (manques.length ? `Il manque : ${manques.join(', ')}.` : conf.detail);
+
+  return (
+    <div className="rounded-xl border border-sage-dark/30 bg-sage-50/50 p-4 flex items-start gap-3 flex-wrap">
+      <span className="text-xl leading-none mt-0.5">🧭</span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-sage-darker">Prochaine étape</span>
+          <span className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-stone-200 text-stone-600">
+            {phaseEnCours.emoji} {phaseEnCours.label}
+          </span>
+        </div>
+        <div className="text-sm font-semibold text-stone-900 mt-0.5">{action}</div>
+        <div className="text-xs text-stone-600 mt-0.5">{detail}</div>
+      </div>
+      <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex flex-col items-center">
+          <span className="text-[10px] uppercase tracking-wide text-stone-400">Resp.</span>
+          <span className="mt-0.5 w-7 h-7 rounded-full bg-ink-deep text-white text-xs font-semibold grid place-items-center" title={`Responsable : ${owner}`}>{owner}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => onAction?.(key)}
+          className="px-3.5 py-2 rounded-lg text-sm font-semibold bg-sage-dark text-white hover:bg-sage-darker transition-colors inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-sage-dark focus:ring-offset-1"
+        >
+          {ETAPE_CTA[key]} <span aria-hidden="true">→</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DossierScore({ mandat, mandatContacts = [] }) {
+  const { pct, parPhase, phaseEnCours } = computeDossierPhases(mandat, mandatContacts);
 
   return (
     <div id="score" className={`rounded-xl p-5 border scroll-mt-32 ${pct >= 80 ? 'bg-emerald-50/50 border-emerald-200' : 'bg-cream-50/60 border-cream-dark'}`}>
@@ -3719,6 +3887,15 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
   const [mandatContacts, setMandatContacts] = useState([]);
   // Sprint 4 — bouton pour masquer/afficher les honoraires (commission + net vendeur)
   const [showHonoraires, setShowHonoraires] = useState(true);
+
+  // Bandeau « Prochaine étape » cliquable : chaque étape lance la bonne action.
+  const handleEtapeAction = (key) => {
+    const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (key === 'estimer') { setShowAvisValeur(true); return; }
+    if (key === 'commercialiser') { scrollTo('diffusion'); return; }
+    if (key === 'securiser') { scrollTo('documents'); return; }
+    if (key === 'piloter') { onOpenMatching?.(mandat.id); return; }
+  };
 
   // Charge les contacts liés au mandat (pivot mandat_contacts)
   async function reloadMandatContacts() {
@@ -3913,6 +4090,8 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
 
       <div className="space-y-4">
         <div className="col-span-3 space-y-4">
+          {/* ═══ PROCHAINE ÉTAPE + RESPONSABLE (règle d'or) ═══ */}
+          <ProchaineEtapeBanner mandat={mandat} mandatContacts={mandatContacts} onAction={handleEtapeAction} />
           {/* ═══ SCORE QUALITÉ DU DOSSIER (Sprint 4) ═══ */}
           <DossierScore mandat={mandat} mandatContacts={mandatContacts} />
           {/* ═══ ANALYSE FINANCIÈRE — REMONTÉE EN PREMIÈRE POSITION ═══ */}
