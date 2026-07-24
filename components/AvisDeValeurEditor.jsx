@@ -10,7 +10,7 @@ import {
   X, Save, ChevronDown, ChevronRight, Plus, Trash2, Loader2,
   TrendingUp, Sparkles, AlertTriangle, Cloud,
   Building2, BarChart3, Target, Lightbulb, Tag, MessageCircle,
-  MapPin, Key, Repeat, Calculator, FileDown, Image as ImageIcon
+  MapPin, Key, Repeat, Calculator, FileDown, Image as ImageIcon, Send
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import DvfComparables from './DvfComparables';
@@ -208,6 +208,8 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [prefilling, setPrefilling] = useState(false);
+  const [showSendModal, setShowSendModal] = useState(false);
+  const [sendingMandant, setSendingMandant] = useState(false);
 
   // SOURCE UNIQUE : les infos déjà sur la fiche mandat (taxe, charges, année,
   // descriptif, lots) sont affichées en LECTURE SEULE dans l'avis (composant
@@ -484,6 +486,27 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
       alert('Erreur : ' + e.message);
     }
     setSaving(false);
+  }
+
+  // Envoi de l'avis (beau PDF) au mandant par e-mail. Enregistre d'abord l'avis
+  // pour que le PDF reflète la dernière saisie, puis appelle la route serveur.
+  async function sendToMandant() {
+    setSendingMandant(true);
+    try {
+      await supabase.from('mandats').update({ avis_valeur: data }).eq('id', mandat.id);
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/avis-valeur/send-mandant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: session?.access_token || '', mandatId: mandat.id }),
+      });
+      const j = await res.json().catch(() => ({ ok: false, error: 'Réponse invalide du serveur.' }));
+      if (!j.ok) { alert(j.error || "Envoi impossible."); }
+      else { alert(`${visiteRempli ? 'Avis' : 'Pré-avis'} de valeur envoyé au mandant : ${j.to}`); setShowSendModal(false); }
+    } catch (e) {
+      alert('Erreur : ' + e.message);
+    }
+    setSendingMandant(false);
   }
   async function handleGenerate() {
     setGenerating(true);
@@ -1475,9 +1498,49 @@ export default function AvisDeValeurEditor({ mandat, onClose, onSaved }) {
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
               {generating ? 'Ouverture…' : 'Aperçu / PDF'}
             </button>
+            <button onClick={() => setShowSendModal(true)} disabled={saving || generating || sendingMandant}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-700 text-white rounded-lg text-sm hover:bg-emerald-800 disabled:opacity-50"
+              title="Envoie l'avis (PDF) au mandant par e-mail, avec un texte adapté"
+            >
+              <Send className="w-4 h-4" />
+              Envoyer au mandant
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Confirmation d'envoi au mandant */}
+      {showSendModal && (
+        <div className="fixed inset-0 bg-stone-900/60 flex items-center justify-center z-[60] p-4" onClick={(e) => { e.stopPropagation(); if (!sendingMandant) setShowSendModal(false); }}>
+          <div className="bg-white rounded-xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-3">
+              <Send className="w-5 h-5 text-emerald-700" />
+              <h3 className="font-semibold text-stone-900">Envoyer au mandant</h3>
+            </div>
+            <p className="text-sm text-stone-600 mb-2">
+              L'avis va être envoyé <b>par e-mail au mandant</b> (adresse enregistrée sur la fiche), avec le PDF joint.
+            </p>
+            <div className="text-sm rounded-lg border border-stone-200 bg-cream-50 p-3 mb-3">
+              <div>Niveau : <b>{visiteRempli ? 'Avis définitif' : 'Pré-avis de valeur'}</b></div>
+              <div className="text-xs text-stone-500 mt-1">
+                {visiteRempli
+                  ? "Texte de remerciement + proposition d'accompagnement pour la commercialisation."
+                  : "Texte précisant qu'il s'agit d'une première estimation, à affiner après visite/documents."}
+              </div>
+            </div>
+            <p className="text-[11px] text-stone-400 mb-4">Le PDF est généré au beau format « charte ». La génération peut prendre quelques secondes.</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowSendModal(false)} disabled={sendingMandant}
+                className="px-3 py-2 text-sm text-stone-700 hover:bg-cream-100 rounded-lg disabled:opacity-50">Annuler</button>
+              <button onClick={sendToMandant} disabled={sendingMandant}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-700 text-white rounded-lg text-sm hover:bg-emerald-800 disabled:opacity-50">
+                {sendingMandant ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                {sendingMandant ? 'Envoi…' : 'Confirmer l\'envoi'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
