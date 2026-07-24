@@ -3701,7 +3701,10 @@ function MandatContactsSection({ mandatContacts, onAdd, onRemove }) {
   );
 }
 // Sprint 4 — Score « qualité du dossier » : ce qui est prêt / manquant pour les documents (plaquette, avis de valeur).
-function DossierScore({ mandat, mandatContacts = [] }) {
+// Calcul partagé de l'avancement du dossier par phase (0 estimer · 1 commercialiser
+// · 2 juridique). Utilisé à la fois par DossierScore (détail) et par le bandeau
+// « Prochaine étape ». Source unique de vérité pour l'état du dossier.
+function computeDossierPhases(mandat, mandatContacts = []) {
   const estB2B = (mandat.marche || mandat.marche) !== 'b2c';
   const photos = getPhotos(mandat);
   const medias = Array.isArray(mandat.medias) ? mandat.medias : [];
@@ -3747,6 +3750,50 @@ function DossierScore({ mandat, mandatContacts = [] }) {
     return { ...ph, its, d, total: its.length, pct: its.length ? Math.round((d / its.length) * 100) : 100 };
   });
   const phaseEnCours = parPhase.find(p => p.pct < 100) || parPhase[parPhase.length - 1];
+  return { items, done, pct, parPhase, phaseEnCours, dossierComplet: pct >= 100 };
+}
+
+// Bandeau « Prochaine étape + responsable » — règle d'or : on ne laisse jamais
+// l'utilisateur sans savoir quoi faire, ni qui en est responsable.
+const PROCHAINE_ETAPE_PAR_PHASE = {
+  0: { action: 'Estimer le bien', detail: "Compléter le minimum, puis sortir l'avis de valeur." },
+  1: { action: 'Lancer la commercialisation', detail: "Compléter le dossier pour diffuser et faire visiter." },
+  2: { action: 'Sécuriser le dossier', detail: 'Réunir les pièces juridiques (identité, titre, copropriété…).' },
+};
+
+function ProchaineEtapeBanner({ mandat, mandatContacts = [] }) {
+  const { phaseEnCours, dossierComplet } = computeDossierPhases(mandat, mandatContacts);
+  const owner = mandat.owner || '—';
+  const manques = (phaseEnCours.its || []).filter(i => !i.ok).map(i => i.label);
+  const conf = PROCHAINE_ETAPE_PAR_PHASE[phaseEnCours.id] || PROCHAINE_ETAPE_PAR_PHASE[1];
+  const action = dossierComplet ? 'Piloter la commercialisation' : conf.action;
+  const detail = dossierComplet
+    ? 'Dossier complet : relancer les acquéreurs, organiser les visites, suivre les offres.'
+    : (manques.length ? `Il manque : ${manques.join(', ')}.` : conf.detail);
+
+  return (
+    <div className="rounded-xl border border-sage-dark/30 bg-sage-50/50 p-4 flex items-start gap-3">
+      <span className="text-xl leading-none mt-0.5">🧭</span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-sage-darker">Prochaine étape</span>
+          <span className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-stone-200 text-stone-600">
+            {phaseEnCours.emoji} {phaseEnCours.label}
+          </span>
+        </div>
+        <div className="text-sm font-semibold text-stone-900 mt-0.5">{action}</div>
+        <div className="text-xs text-stone-600 mt-0.5">{detail}</div>
+      </div>
+      <div className="flex flex-col items-end flex-shrink-0">
+        <span className="text-[10px] uppercase tracking-wide text-stone-400">Responsable</span>
+        <span className="mt-0.5 w-7 h-7 rounded-full bg-ink-deep text-white text-xs font-semibold grid place-items-center" title={`Responsable : ${owner}`}>{owner}</span>
+      </div>
+    </div>
+  );
+}
+
+function DossierScore({ mandat, mandatContacts = [] }) {
+  const { pct, parPhase, phaseEnCours } = computeDossierPhases(mandat, mandatContacts);
 
   return (
     <div id="score" className={`rounded-xl p-5 border scroll-mt-32 ${pct >= 80 ? 'bg-emerald-50/50 border-emerald-200' : 'bg-cream-50/60 border-cream-dark'}`}>
@@ -3998,6 +4045,8 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
 
       <div className="space-y-4">
         <div className="col-span-3 space-y-4">
+          {/* ═══ PROCHAINE ÉTAPE + RESPONSABLE (règle d'or) ═══ */}
+          <ProchaineEtapeBanner mandat={mandat} mandatContacts={mandatContacts} />
           {/* ═══ SCORE QUALITÉ DU DOSSIER (Sprint 4) ═══ */}
           <DossierScore mandat={mandat} mandatContacts={mandatContacts} />
           {/* ═══ ANALYSE FINANCIÈRE — REMONTÉE EN PREMIÈRE POSITION ═══ */}
