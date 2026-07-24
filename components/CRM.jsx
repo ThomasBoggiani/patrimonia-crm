@@ -3878,6 +3878,16 @@ function DossierScore({ mandat, mandatContacts = [] }) {
   );
 }
 
+// Onglets de la fiche mandat (Phase 2) — une seule vue à la fois.
+const MANDAT_TABS = [
+  { key: 'apercu', label: 'Aperçu', icon: '📌' },
+  { key: 'bien', label: 'Le bien', icon: '🏠' },
+  { key: 'commercialisation', label: 'Commercialisation', icon: '📣' },
+  { key: 'contacts', label: 'Contacts', icon: '👤' },
+  { key: 'medias', label: 'Visuels & médias', icon: '🗺️' },
+  { key: 'documents', label: 'Documents', icon: '📂' },
+];
+
 function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, annonces, allProfiles = [], onOpenMatching, onOpenEmailDrafts }) {
   const [openModal, setOpenModal] = useState(null); // 'photos' | 'visite' | 'mandant' | null
   const [aiAnalyzeOpen, setAiAnalyzeOpen] = useState(false);
@@ -3888,12 +3898,14 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
   // Sprint 4 — bouton pour masquer/afficher les honoraires (commission + net vendeur)
   const [showHonoraires, setShowHonoraires] = useState(true);
 
-  // Bandeau « Prochaine étape » cliquable : chaque étape lance la bonne action.
+  // Onglets de la fiche (Phase 2). Une seule vue affichée à la fois.
+  const [activeTab, setActiveTab] = useState('apercu');
+
+  // Bandeau « Prochaine étape » cliquable : chaque étape ouvre le bon onglet/action.
   const handleEtapeAction = (key) => {
-    const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (key === 'estimer') { setShowAvisValeur(true); return; }
-    if (key === 'commercialiser') { scrollTo('diffusion'); return; }
-    if (key === 'securiser') { scrollTo('documents'); return; }
+    if (key === 'commercialiser') { setActiveTab('commercialisation'); return; }
+    if (key === 'securiser') { setActiveTab('documents'); return; }
     if (key === 'piloter') { onOpenMatching?.(mandat.id); return; }
   };
 
@@ -4049,23 +4061,22 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
         </div>
       </div>
 
-      {/* ═══ STICKY BAR 1 : NAVIGATION DES DONNÉES ═══ */}
+      {/* ═══ ONGLETS DE NAVIGATION (Phase 2) ═══ */}
       <div className="sticky top-0 z-30 bg-cream-50/95 backdrop-blur-sm border-b border-cream-dark -mx-8 px-8 py-2.5">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[10px] uppercase tracking-wider text-sage-dark font-semibold pr-2 border-r border-cream-dark mr-1">📌 Données</span>
-          
-          <button onClick={() => document.getElementById('technique')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🔧 Technique</button>
-          <button onClick={() => document.getElementById('stats')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📊 Stats</button>
-          <button onClick={() => document.getElementById('locatif')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🏢 Locatif</button>
-          <button onClick={() => document.getElementById('mandant')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">👤 Mandant</button>
-          <button onClick={() => document.getElementById('diffusion')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📡 Diffusion</button>
-          <button onClick={() => document.getElementById('assets')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">🗺️ Vues</button>
-          <button onClick={() => setOpenModal('visite')} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors flex items-center gap-1">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {MANDAT_TABS.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${activeTab === t.key ? 'bg-sage-dark text-white' : 'text-stone-600 hover:bg-cream-100 hover:text-ink'}`}
+            >
+              {t.icon} {t.label}
+            </button>
+          ))}
+          <button onClick={() => setOpenModal('visite')} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors flex items-center gap-1 ml-auto">
             👁️ Visite
             {(mandat.visiteInfo || mandat.visite_info) && Object.values(mandat.visiteInfo || mandat.visite_info).some(v => v) && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>}
           </button>
-          <button onClick={() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📷 Médias</button>
-          <button onClick={() => document.getElementById('documents')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:bg-cream-100 hover:text-ink transition-colors">📂 Documents</button>
         </div>
       </div>
 
@@ -4093,9 +4104,9 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           {/* ═══ PROCHAINE ÉTAPE + RESPONSABLE (règle d'or) ═══ */}
           <ProchaineEtapeBanner mandat={mandat} mandatContacts={mandatContacts} onAction={handleEtapeAction} />
           {/* ═══ SCORE QUALITÉ DU DOSSIER (Sprint 4) ═══ */}
-          <DossierScore mandat={mandat} mandatContacts={mandatContacts} />
+          <div hidden={activeTab !== 'apercu'}><DossierScore mandat={mandat} mandatContacts={mandatContacts} /></div>
           {/* ═══ ANALYSE FINANCIÈRE — REMONTÉE EN PREMIÈRE POSITION ═══ */}
-          <div id="finance" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
+          <div id="finance" hidden={activeTab !== 'apercu'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Analyse financière</h2>
             <div className="grid grid-cols-4 gap-4">
               <div className="col-span-1">
@@ -4165,7 +4176,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           </div>
 
           {/* ═══ TÂCHES LIÉES AU MANDAT ═══ */}
-          <div id="tasks" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
+          <div id="tasks" hidden={activeTab !== 'apercu'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
               <CheckSquare className="w-5 h-5 text-sage-dark" />Tâches liées au mandat
               {mandatTodos.length > 0 && (
@@ -4186,7 +4197,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           </div>
 
           {/* ═══ BLOC IDENTITÉ DU BIEN ═══ */}
-            <div id="identite" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
+            <div id="identite" hidden={activeTab !== 'bien'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
               <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
                 <Home className="w-5 h-5 text-sage-dark" />Identité du bien
               </h2>
@@ -4206,13 +4217,13 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
               </div>
             </div>
           {/* ═══ BLOC DIFFUSION ═══ */}
-          <DiffusionInline mandat={mandat} reload={reload} />
+          <div hidden={activeTab !== 'commercialisation'}><DiffusionInline mandat={mandat} reload={reload} /></div>
           {/* ═══ BLOC STATS D'ACTIVITÉ ═══ */}
-          <MandatStatsInline mandat={mandat} deals={deals} clients={clients} />
+          <div hidden={activeTab !== 'commercialisation'}><MandatStatsInline mandat={mandat} deals={deals} clients={clients} /></div>
           {/* ═══ BLOC ASSETS EXTERNES ═══ */}
-          <AssetsMandatInline mandat={mandat} reload={reload} />
+          <div hidden={activeTab !== 'medias'}><AssetsMandatInline mandat={mandat} reload={reload} /></div>
           {/* ═══ BLOC TECHNIQUE ═══ */}
-            <div id="technique" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
+            <div id="technique" hidden={activeTab !== 'bien'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
               <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
                 🔧 Caractéristiques techniques
               </h2>
@@ -4230,15 +4241,17 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
             </div>
 
             {/* ═══ CONTACTS DU MANDAT ═══ */}
-            <MandatContactsSection
-              mandatContacts={mandatContacts}
-              onAdd={addMandatContact}
-              onRemove={removeMandatContact}
-            />
+            <div hidden={activeTab !== 'contacts'}>
+              <MandatContactsSection
+                mandatContacts={mandatContacts}
+                onAdd={addMandatContact}
+                onRemove={removeMandatContact}
+              />
+            </div>
 
             {/* ═══ DESCRIPTION ═══ */}
             {mandat.description && (
-            <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
+            <div hidden={activeTab !== 'bien'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
               <h2 className="font-display text-xl font-semibold text-stone-900 mb-3">Description</h2>
               <p className="text-stone-700 text-sm leading-relaxed whitespace-pre-line">{mandat.description}</p>
             </div>
@@ -4247,21 +4260,21 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
       </div>
 
       {/* ═══ BLOC PHOTOS & MÉDIAS ═══ */}
-            <div id="photos" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
+            <div id="photos" hidden={activeTab !== 'medias'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
               <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
                 <ImageIcon className="w-5 h-5 text-sage-dark" />Photos & Médias
               </h2>
               <MediasInline mandat={mandat} onUpdate={reload} />
             </div>    
       {/* ═══ BLOC DOCUMENTS ═══ */}
-            <div id="documents" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
+            <div id="documents" hidden={activeTab !== 'documents'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
               <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
                 <FolderOpen className="w-5 h-5 text-sage-dark" />Documents
               </h2>
               <DocumentsInline mandat={mandat} onUpdate={reload} />
             </div>
       {/* ═══ STATISTIQUES DU DOSSIER ═══ */}
-          <div id="stats" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
+          <div id="stats" hidden={activeTab !== 'commercialisation'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-sage-dark" />Statistiques du dossier
             </h2>
@@ -4291,7 +4304,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
 
           {/* ═══ ALERTES (si existantes) ═══ */}
           {alerts.length > 0 && (
-            <div className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
+            <div hidden={activeTab !== 'apercu'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
               <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-sage-dark" />Points d'attention
               </h2>
@@ -4310,7 +4323,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           )}
 
           {/* ═══ ÉTAT LOCATIF ═══ */}
-          <div id="locatif" className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
+          <div id="locatif" hidden={activeTab !== 'bien'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
               <Building2 className="w-5 h-5 text-sage-dark" />État locatif
             </h2>
