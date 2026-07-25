@@ -4164,15 +4164,8 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
                 );
               })()} highlight />
             </div>
-            <div className="grid grid-cols-5 gap-4 mt-4 pt-4 border-t border-cream">
-              <DetailItem label="Surface" value={mandat.surface ? `${mandat.surface} m²` : '—'} />
-              {mandat.surfaceExterieure ? <DetailItem label="Surface extérieure" value={`${mandat.surfaceExterieure} m²${mandat.typeExterieur ? ' · ' + mandat.typeExterieur : ''}`} /> : null}
-              {mandat.surfacePlancher ? <DetailItem label="Surface de plancher" value={`${mandat.surfacePlancher} m²`} /> : null}
-              <DetailItem label="Type" value={mandat.sousType ? `${mandat.type} · ${mandat.sousType}` : mandat.type} />
-              <DetailItem label="DPE" value={mandat.dpeConsommation ? <span className="text-2xl font-bold" style={{color: getDPEColor(mandat.dpeConsommation)}}>{getDPEClass(mandat.dpeConsommation)}</span> : '—'} />
-              <DetailItem label="Taxe foncière" value={mandat.taxeFonciere ? `${parseFloat(mandat.taxeFonciere).toLocaleString('fr')} €` : '—'} />
-              <DetailItem label="Charges annuelles" value={mandat.chargesAnnuelles ? `${parseFloat(mandat.chargesAnnuelles).toLocaleString('fr')} €` : '—'} />
-            </div>
+            {/* Surface / DPE / taxe / charges : rangés dans l'onglet « Le bien »
+                (Caractéristiques techniques) — plus de doublon ici. */}
           </div>
 
           {/* ═══ TÂCHES LIÉES AU MANDAT ═══ */}
@@ -4228,7 +4221,9 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
                 🔧 Caractéristiques techniques
               </h2>
               <div className="grid grid-cols-3 gap-4">
-                <DetailItem label="Surface totale" value={mandat.surface ? `${mandat.surface} m²` : '—'} />
+                <DetailItem label="Surface habitable" value={mandat.surface ? `${mandat.surface} m²` : '—'} />
+                {mandat.surfaceExterieure ? <DetailItem label="Surface extérieure" value={`${mandat.surfaceExterieure} m²${mandat.typeExterieur ? ' · ' + mandat.typeExterieur : ''}`} /> : null}
+                {mandat.surfacePlancher ? <DetailItem label="Surface de plancher" value={`${mandat.surfacePlancher} m²`} /> : null}
                 <DetailItem label="Nombre de lots" value={mandat.nbLots || '—'} />
                 <DetailItem label="Année construction" value={mandat.anneeConstruction || '—'} />
                 <DetailItem label="DPE consommation" value={mandat.dpeConsommation ? `${mandat.dpeConsommation} kWh/m²` : '—'} />
@@ -4275,31 +4270,18 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
             </div>
       {/* ═══ STATISTIQUES DU DOSSIER ═══ */}
           <div id="stats" hidden={activeTab !== 'commercialisation'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
-            <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-sage-dark" />Statistiques du dossier
-            </h2>
-            <div className="grid grid-cols-4 gap-3">
-              <button onClick={() => onOpenMatching?.(mandat.id)} className="text-left transition-all hover:scale-[1.02] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-sage-dark rounded-xl">
-                <KpiBox label="Rapprochements" value={nbRapprochements} icon={Handshake} />
-              </button>
-              <button onClick={() => onOpenMatching?.(mandat.id)} className="text-left transition-all hover:scale-[1.02] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-sage-dark rounded-xl">
-                <KpiBox label="Clients potentiels" value={nbMatching} icon={Users} sublabel="(matching)" />
-              </button>
-              <button onClick={() => onOpenMatching?.(mandat.id)} className="text-left transition-all hover:scale-[1.02] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-sage-dark rounded-xl">
-                <KpiBox label="Offres" value={nbOffres} icon={CheckCircle2} />
-              </button>
-              <button onClick={() => onOpenMatching?.(mandat.id)} className="text-left transition-all hover:scale-[1.02] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-sage-dark rounded-xl">
-                <KpiBox label="Visites" value={nbVisites} icon={Eye} />
+            {/* Résumé compact + liste. Les 8 métriques détaillées vivent dans le
+                bloc « Statistiques d'activité » juste au-dessus (plus de doublon). */}
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <h2 className="font-display text-xl font-semibold text-stone-900 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-sage-dark" />Clients compatibles
+              </h2>
+              <button onClick={() => onOpenMatching?.(mandat.id)} className="text-xs text-stone-500 hover:text-sage-darker inline-flex items-center gap-1.5" title="Ouvrir le matching">
+                <span className="tabular-nums">{nbMatching}</span> clients · <span className="tabular-nums">{nbRapprochements}</span> rappr. · <span className="tabular-nums">{nbOffres}</span> offres · <span className="tabular-nums">{nbVisites}</span> visites
+                <span className="text-sage-dark">→</span>
               </button>
             </div>
-
-            {/* Liste des clients compatibles (matching au fil de l'eau) */}
-            <div className="mt-4 pt-4 border-t border-cream-dark">
-              <h3 className="text-sm font-semibold text-stone-700 mb-2 flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-sage-dark" /> Clients compatibles
-              </h3>
-              <MandatMatches mandat={mandat} clients={clients} onOpenClient={(id) => { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('crm:openClient', { detail: { clientId: id } })); }} />
-            </div>
+            <MandatMatches mandat={mandat} clients={clients} onOpenClient={(id) => { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('crm:openClient', { detail: { clientId: id } })); }} />
           </div>
 
           {/* ═══ ALERTES (si existantes) ═══ */}
