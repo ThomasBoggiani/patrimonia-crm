@@ -216,6 +216,27 @@ export async function POST(request) {
       }
     } catch (e) { console.warn('[send-mandant] auto-statut non appliqué:', e.message); }
 
+    // Prochaine étape auto (règle d'or) : quand le deal vient de passer en Analyse
+    // (avis envoyé), on crée la tâche de suivi, assignée à l'agent qui a envoyé.
+    // Uniquement au 1er passage (statutAvance) → pas de doublon si on renvoie.
+    if (statutAvance === 'Analyse') {
+      try {
+        const echeance = new Date();
+        echeance.setDate(echeance.getDate() + 3);
+        await supabaseAdmin.from('todos').insert({
+          titre: `Relancer le mandant pour la signature du mandat — ${(adresse || mandat.nom || '').trim()}`.trim(),
+          priorite: 'Haute',
+          statut: 'À faire',
+          echeance: echeance.toISOString().split('T')[0],
+          assignee: signature || null,
+          assigned_to_user_id: user.id,
+          created_by: user.id,
+          lien_type: 'mandat',
+          lien_id: mandatId,
+        });
+      } catch (e) { console.warn('[send-mandant] tâche de suivi non créée:', e.message); }
+    }
+
     return json({ ok: true, to, isPreAvis, subject, statutAvance });
   } catch (err) {
     console.error('[/api/avis-valeur/send-mandant] Erreur:', err);
