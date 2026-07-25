@@ -3886,6 +3886,7 @@ const MANDAT_TABS = [
   { key: 'contacts', label: 'Contacts', icon: '👤' },
   { key: 'medias', label: 'Visuels & médias', icon: '🗺️' },
   { key: 'documents', label: 'Documents', icon: '📂' },
+  { key: 'generer', label: 'Générer', icon: '📤' },
 ];
 
 function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, annonces, allProfiles = [], onOpenMatching, onOpenEmailDrafts }) {
@@ -4080,8 +4081,13 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
         </div>
       </div>
 
-      {/* ═══ STICKY BAR 2 : DOCUMENTS À GÉNÉRER ═══ */}
-      <div className="sticky top-[42px] z-20 bg-cream-50/95 backdrop-blur-sm border-b border-cream-dark -mx-8 px-8 py-2.5 mb-4">
+      {/* ═══ PROCHAINE ÉTAPE + RESPONSABLE (règle d'or) — toujours visible, sous les onglets ═══ */}
+      <div className="mb-4">
+        <ProchaineEtapeBanner mandat={mandat} mandatContacts={mandatContacts} onAction={handleEtapeAction} />
+      </div>
+
+      {/* ═══ ONGLET GÉNÉRER : documents à produire ═══ */}
+      <div hidden={activeTab !== 'generer'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] uppercase tracking-wider text-sage-dark font-semibold pr-2 border-r border-cream-dark mr-1">📤 Générer</span>
           {/* Ordre = étapes du mandat : 1) Avis de valeur (prioritaire) 2) Plaquette 3) Rapport mandant */}
@@ -4101,8 +4107,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
 
       <div className="space-y-4">
         <div className="col-span-3 space-y-4">
-          {/* ═══ PROCHAINE ÉTAPE + RESPONSABLE (règle d'or) ═══ */}
-          <ProchaineEtapeBanner mandat={mandat} mandatContacts={mandatContacts} onAction={handleEtapeAction} />
           {/* ═══ SCORE QUALITÉ DU DOSSIER (Sprint 4) ═══ */}
           <div hidden={activeTab !== 'apercu'}><DossierScore mandat={mandat} mandatContacts={mandatContacts} /></div>
           {/* ═══ ANALYSE FINANCIÈRE — REMONTÉE EN PREMIÈRE POSITION ═══ */}
