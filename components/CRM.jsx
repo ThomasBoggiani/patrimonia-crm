@@ -3824,20 +3824,27 @@ function ProchaineEtapeBanner({ mandat, mandatContacts = [], onAction }) {
 
 function DossierScore({ mandat, mandatContacts = [] }) {
   const { pct, parPhase, phaseEnCours } = computeDossierPhases(mandat, mandatContacts);
+  const [open, setOpen] = useState(false);
 
   return (
-    <div id="score" className={`rounded-xl p-5 border scroll-mt-32 ${pct >= 80 ? 'bg-emerald-50/50 border-emerald-200' : 'bg-cream-50/60 border-cream-dark'}`}>
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">📊</span>
-          <span className="font-display text-base font-semibold text-stone-900">Qualité du dossier</span>
+    <div id="score" className={`rounded-xl border scroll-mt-32 ${pct >= 80 ? 'bg-emerald-50/50 border-emerald-200' : 'bg-cream-50/60 border-cream-dark'}`}>
+      <button type="button" onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-left">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-sm">📊</span>
+          <span className="font-display text-sm font-semibold text-stone-900">Qualité du dossier</span>
+          <span className="text-xs text-stone-500 truncate">· {phaseEnCours.emoji} {phaseEnCours.label}</span>
         </div>
-        <span className="text-xs px-2.5 py-1 rounded-full bg-white border border-stone-200 text-stone-600">
-          {phaseEnCours.emoji} Étape en cours&nbsp;: <span className="font-semibold text-stone-800">{phaseEnCours.label}</span>
-        </span>
-      </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="w-20 h-1.5 bg-stone-100 rounded-full overflow-hidden border border-stone-200">
+            <div className={`h-full ${pct >= 80 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-stone-400'}`} style={{ width: `${pct}%` }} />
+          </div>
+          <span className="text-xs font-semibold text-stone-700 tabular-nums">{pct}%</span>
+          <span className={`text-stone-400 text-[10px] transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
+        </div>
+      </button>
 
-      <div className="space-y-3">
+      {open && (
+      <div className="space-y-3 px-4 pb-4">
         {parPhase.map(ph => {
           const complet = ph.pct === 100;
           return (
@@ -3868,6 +3875,7 @@ function DossierScore({ mandat, mandatContacts = [] }) {
           );
         })}
       </div>
+      )}
     </div>
   );
 }
