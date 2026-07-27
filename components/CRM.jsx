@@ -3767,52 +3767,48 @@ function computeDossierPhases(mandat, mandatContacts = []) {
   return { items, done, pct, parPhase, phaseEnCours, dossierComplet: pct >= 100 };
 }
 
-// Bandeau « Étapes du mandat » — la ligne COMPLÈTE des étapes, chacune cliquable,
-// l'étape en cours mise en avant, le responsable au bout. Règle d'or : on voit
-// toujours où on en est, ce qu'il reste à faire, et qui.
+// Bandeau « Pipeline » — les MÊMES étapes que la vue Kanban, en ligne.
+// Chaque étape est cliquable : cliquer déplace le mandat à cette étape (comme
+// glisser une carte dans le Kanban). L'étape en cours est mise en avant, les
+// précédentes cochées, le responsable au bout.
 const PIPELINE_ORDER = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisation', 'Offre', 'Promesse', 'Acte'];
-const MANDAT_STEPS = [
-  { key: 'creer',          label: 'Créer',          faitDes: 'Sourcing',          action: 'creer' },
-  { key: 'estimer',        label: 'Estimer',        faitDes: 'Analyse',           action: 'estimer' },
-  { key: 'signer',         label: 'Mandat signé',   faitDes: 'Mandat signé',      action: 'documents' },
-  { key: 'commercialiser', label: 'Commercialiser', faitDes: 'Commercialisation', action: 'commercialisation' },
-  { key: 'vendre',         label: 'Offres & vente', faitDes: 'Offre',             action: 'piloter' },
-];
 
-function ProchaineEtapeBanner({ mandat, mandatContacts = [], onAction }) {
+function ProchaineEtapeBanner({ mandat, onSetStatut }) {
   const owner = mandat.owner || '—';
   const statut = mandat.statut || 'Sourcing';
   const terminal = statut === 'Perdu' || statut === 'Vendu par autres';
   const curIdx = PIPELINE_ORDER.indexOf(statut); // -1 si terminal
-  const steps = MANDAT_STEPS.map(s => ({ ...s, fait: curIdx >= PIPELINE_ORDER.indexOf(s.faitDes) }));
-  const currentKey = terminal ? null : (steps.find(s => !s.fait)?.key || null);
 
   return (
     <div className="rounded-xl border border-sage-dark/30 bg-sage-50/50 px-4 py-3 flex items-center gap-3 flex-wrap">
-      <span className="text-[11px] font-semibold uppercase tracking-wide text-sage-darker flex-shrink-0">Étapes</span>
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-sage-darker flex-shrink-0">Pipeline</span>
       <div className="flex items-center gap-1 flex-wrap flex-1 min-w-0">
-        {steps.map((s, i) => {
-          const isCurrent = s.key === currentKey;
-          const cls = s.fait
+        {PIPELINE_ORDER.map((st, i) => {
+          const fait = !terminal && curIdx > i;
+          const isCurrent = !terminal && i === curIdx;
+          const cls = fait
             ? 'bg-white border-emerald-300 text-emerald-700'
             : isCurrent
               ? 'bg-sage-dark border-sage-dark text-white shadow-sm'
               : 'bg-white border-stone-200 text-stone-400';
           return (
-            <div key={s.key} className="flex items-center gap-1">
-              {i > 0 && <span className="text-stone-300" aria-hidden="true">—</span>}
+            <div key={st} className="flex items-center gap-1">
+              {i > 0 && <span className="text-stone-300" aria-hidden="true">›</span>}
               <button
                 type="button"
-                onClick={() => onAction?.(s.action)}
-                title={isCurrent ? 'Étape en cours — cliquer pour agir' : s.fait ? 'Fait' : 'À venir — cliquer pour agir'}
+                onClick={() => onSetStatut?.(st)}
+                title={isCurrent ? 'Étape en cours' : fait ? 'Fait — cliquer pour y revenir' : 'Cliquer pour avancer le mandat à cette étape'}
                 className={`px-2.5 py-1 rounded-full border text-xs font-medium inline-flex items-center gap-1 transition-shadow hover:shadow focus:outline-none focus:ring-2 focus:ring-sage-dark focus:ring-offset-1 ${cls}`}
               >
                 <span className="text-[10px] opacity-70 tabular-nums">{i + 1}</span>
-                {s.fait ? '✓ ' : ''}{s.label}
+                {fait ? '✓ ' : ''}{st}
               </button>
             </div>
           );
         })}
+        {terminal && (
+          <span className="ml-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-stone-200 text-stone-700">{statut}</span>
+        )}
       </div>
       <div className="flex flex-col items-center flex-shrink-0">
         <span className="text-[10px] uppercase tracking-wide text-stone-400">Resp.</span>
@@ -3904,13 +3900,17 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
   // Onglets de la fiche (Phase 2). Une seule vue affichée à la fois.
   const [activeTab, setActiveTab] = useState('apercu');
 
-  // Stepper cliquable : chaque étape ouvre le bon onglet / la bonne action.
-  const handleEtapeAction = (key) => {
-    if (key === 'creer') { onEdit?.(); return; }
-    if (key === 'estimer') { setShowAvisValeur(true); return; }
-    if (key === 'documents') { setActiveTab('documents'); return; }
-    if (key === 'commercialisation') { setActiveTab('commercialisation'); return; }
-    if (key === 'piloter') { onOpenMatching?.(mandat.id); return; }
+  // Stepper = mêmes étapes que le Kanban. Cliquer une étape déplace le mandat
+  // à ce statut (comme glisser une carte). Mise à jour immédiate + rechargement.
+  const setStatut = async (newStatut) => {
+    if (!newStatut || newStatut === mandat.statut) return;
+    try {
+      const { error } = await supabase.from('mandats')
+        .update({ statut: newStatut, updated_at: new Date().toISOString() })
+        .eq('id', mandat.id);
+      if (error) { console.warn('[MandatDetail] statut:', error.message); return; }
+      reload?.();
+    } catch (e) { console.warn('[MandatDetail] statut:', e.message); }
   };
 
   // Charge les contacts liés au mandat (pivot mandat_contacts)
@@ -4086,7 +4086,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
 
       {/* ═══ PROCHAINE ÉTAPE + RESPONSABLE (règle d'or) — toujours visible, sous les onglets ═══ */}
       <div className="mb-4">
-        <ProchaineEtapeBanner mandat={mandat} mandatContacts={mandatContacts} onAction={handleEtapeAction} />
+        <ProchaineEtapeBanner mandat={mandat} onSetStatut={setStatut} />
       </div>
 
       {/* ═══ ONGLET GÉNÉRER : documents à produire ═══ */}
