@@ -327,18 +327,33 @@ export async function GET(request, { params }) {
           geocode: null,
         };
       } else if (mandat.adresse) {
-        // Cache miss : on génère à la volée
-        console.log('[PDF] Cache MISS, fetching live for mandat', mandatId);
+        // Cache miss : au lieu de re-télécharger à la volée puis jeter (coût API
+        // répété), on PERSISTE les visuels sur le mandat via refresh-assets
+        // (source unique), puis on relit le cache. Les prochaines générations
+        // n'appelleront plus les API externes.
+        console.log('[PDF] Cache MISS → refresh-assets (warm cache) pour', mandatId);
         try {
-          locationImages = await getLocationImages(mandat.adresse);
-          console.log('[PDF] Location images:', {
-            address: mandat.adresse,
-            satellite: !!locationImages.satellite,
-            cadastre: !!locationImages.cadastre,
-            geocoded: !!locationImages.geocode
-          });
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+          await fetch(`${baseUrl}/api/mandats/${mandatId}/refresh-assets`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+          }).catch(() => {});
+          const { data: m2 } = await supabaseAdmin.from('mandats')
+            .select('satellite_image_url, cadastre_image_url, parcelle_data, transports_data')
+            .eq('id', mandatId).maybeSingle();
+          if (m2 && (m2.satellite_image_url || m2.cadastre_image_url || m2.parcelle_data)) {
+            const [satellite, cadastre] = await Promise.all([
+              m2.satellite_image_url ? fetch(m2.satellite_image_url).then(r => r.ok ? r.arrayBuffer() : null).then(b => b ? `data:image/jpeg;base64,${Buffer.from(b).toString('base64')}` : null).catch(() => null) : null,
+              m2.cadastre_image_url ? fetch(m2.cadastre_image_url).then(r => r.ok ? r.arrayBuffer() : null).then(b => b ? `data:image/png;base64,${Buffer.from(b).toString('base64')}` : null).catch(() => null) : null,
+            ]);
+            locationImages = { satellite, cadastre, parcelle: m2.parcelle_data, transports: m2.transports_data, geocode: null };
+          } else {
+            // Filet de sécurité : si le cache n'a rien donné, rendu live ponctuel.
+            locationImages = await getLocationImages(mandat.adresse);
+          }
         } catch (e) {
-          console.warn('[PDF] getLocationImages KO:', e.message);
+          console.warn('[PDF] warm-cache KO, fallback live:', e.message);
+          try { locationImages = await getLocationImages(mandat.adresse); } catch { /* rendu sans visuels */ }
         }
       }
 
