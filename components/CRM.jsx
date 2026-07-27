@@ -3767,62 +3767,56 @@ function computeDossierPhases(mandat, mandatContacts = []) {
   return { items, done, pct, parPhase, phaseEnCours, dossierComplet: pct >= 100 };
 }
 
-// Bandeau « Prochaine étape + responsable » — règle d'or : on ne laisse jamais
-// l'utilisateur sans savoir quoi faire, ni qui en est responsable.
-const PROCHAINE_ETAPE_PAR_PHASE = {
-  0: { action: 'Estimer le bien', detail: "Compléter le minimum, puis sortir l'avis de valeur." },
-  1: { action: 'Lancer la commercialisation', detail: "Compléter le dossier pour diffuser et faire visiter." },
-  2: { action: 'Sécuriser le dossier', detail: 'Réunir les pièces juridiques (identité, titre, copropriété…).' },
-};
-
-// Clé d'action selon la phase — sert à déclencher la bonne action au clic.
-function etapeActionKey(phaseId, dossierComplet) {
-  if (dossierComplet) return 'piloter';
-  return phaseId === 0 ? 'estimer' : phaseId === 1 ? 'commercialiser' : 'securiser';
-}
-const ETAPE_CTA = {
-  estimer: 'Estimer le bien',
-  commercialiser: 'Lancer la commercialisation',
-  securiser: 'Compléter le juridique',
-  piloter: 'Voir les acquéreurs',
-};
+// Bandeau « Étapes du mandat » — la ligne COMPLÈTE des étapes, chacune cliquable,
+// l'étape en cours mise en avant, le responsable au bout. Règle d'or : on voit
+// toujours où on en est, ce qu'il reste à faire, et qui.
+const PIPELINE_ORDER = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisation', 'Offre', 'Promesse', 'Acte'];
+const MANDAT_STEPS = [
+  { key: 'creer',          label: 'Créer',          faitDes: 'Sourcing',          action: 'creer' },
+  { key: 'estimer',        label: 'Estimer',        faitDes: 'Analyse',           action: 'estimer' },
+  { key: 'signer',         label: 'Mandat signé',   faitDes: 'Mandat signé',      action: 'documents' },
+  { key: 'commercialiser', label: 'Commercialiser', faitDes: 'Commercialisation', action: 'commercialisation' },
+  { key: 'vendre',         label: 'Offres & vente', faitDes: 'Offre',             action: 'piloter' },
+];
 
 function ProchaineEtapeBanner({ mandat, mandatContacts = [], onAction }) {
-  const { phaseEnCours, dossierComplet } = computeDossierPhases(mandat, mandatContacts);
   const owner = mandat.owner || '—';
-  const manques = (phaseEnCours.its || []).filter(i => !i.ok).map(i => i.label);
-  const conf = PROCHAINE_ETAPE_PAR_PHASE[phaseEnCours.id] || PROCHAINE_ETAPE_PAR_PHASE[1];
-  const key = etapeActionKey(phaseEnCours.id, dossierComplet);
-  const action = dossierComplet ? 'Piloter la commercialisation' : conf.action;
-  const detail = dossierComplet
-    ? 'Dossier complet : relancer les acquéreurs, organiser les visites, suivre les offres.'
-    : (manques.length ? `Il manque : ${manques.join(', ')}.` : conf.detail);
+  const statut = mandat.statut || 'Sourcing';
+  const terminal = statut === 'Perdu' || statut === 'Vendu par autres';
+  const curIdx = PIPELINE_ORDER.indexOf(statut); // -1 si terminal
+  const steps = MANDAT_STEPS.map(s => ({ ...s, fait: curIdx >= PIPELINE_ORDER.indexOf(s.faitDes) }));
+  const currentKey = terminal ? null : (steps.find(s => !s.fait)?.key || null);
 
   return (
-    <div className="rounded-xl border border-sage-dark/30 bg-sage-50/50 p-4 flex items-start gap-3 flex-wrap">
-      <span className="text-xl leading-none mt-0.5">🧭</span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-sage-darker">Prochaine étape</span>
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-stone-200 text-stone-600">
-            {phaseEnCours.emoji} {phaseEnCours.label}
-          </span>
-        </div>
-        <div className="text-sm font-semibold text-stone-900 mt-0.5">{action}</div>
-        <div className="text-xs text-stone-600 mt-0.5">{detail}</div>
+    <div className="rounded-xl border border-sage-dark/30 bg-sage-50/50 px-4 py-3 flex items-center gap-3 flex-wrap">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-sage-darker flex-shrink-0">Étapes</span>
+      <div className="flex items-center gap-1 flex-wrap flex-1 min-w-0">
+        {steps.map((s, i) => {
+          const isCurrent = s.key === currentKey;
+          const cls = s.fait
+            ? 'bg-white border-emerald-300 text-emerald-700'
+            : isCurrent
+              ? 'bg-sage-dark border-sage-dark text-white shadow-sm'
+              : 'bg-white border-stone-200 text-stone-400';
+          return (
+            <div key={s.key} className="flex items-center gap-1">
+              {i > 0 && <span className="text-stone-300" aria-hidden="true">—</span>}
+              <button
+                type="button"
+                onClick={() => onAction?.(s.action)}
+                title={isCurrent ? 'Étape en cours — cliquer pour agir' : s.fait ? 'Fait' : 'À venir — cliquer pour agir'}
+                className={`px-2.5 py-1 rounded-full border text-xs font-medium inline-flex items-center gap-1 transition-shadow hover:shadow focus:outline-none focus:ring-2 focus:ring-sage-dark focus:ring-offset-1 ${cls}`}
+              >
+                <span className="text-[10px] opacity-70 tabular-nums">{i + 1}</span>
+                {s.fait ? '✓ ' : ''}{s.label}
+              </button>
+            </div>
+          );
+        })}
       </div>
-      <div className="flex items-center gap-3 flex-shrink-0">
-        <div className="flex flex-col items-center">
-          <span className="text-[10px] uppercase tracking-wide text-stone-400">Resp.</span>
-          <span className="mt-0.5 w-7 h-7 rounded-full bg-ink-deep text-white text-xs font-semibold grid place-items-center" title={`Responsable : ${owner}`}>{owner}</span>
-        </div>
-        <button
-          type="button"
-          onClick={() => onAction?.(key)}
-          className="px-3.5 py-2 rounded-lg text-sm font-semibold bg-sage-dark text-white hover:bg-sage-darker transition-colors inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-sage-dark focus:ring-offset-1"
-        >
-          {ETAPE_CTA[key]} <span aria-hidden="true">→</span>
-        </button>
+      <div className="flex flex-col items-center flex-shrink-0">
+        <span className="text-[10px] uppercase tracking-wide text-stone-400">Resp.</span>
+        <span className="mt-0.5 w-7 h-7 rounded-full bg-ink-deep text-white text-xs font-semibold grid place-items-center" title={`Responsable : ${owner}`}>{owner}</span>
       </div>
     </div>
   );
@@ -3902,11 +3896,12 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
   // Onglets de la fiche (Phase 2). Une seule vue affichée à la fois.
   const [activeTab, setActiveTab] = useState('apercu');
 
-  // Bandeau « Prochaine étape » cliquable : chaque étape ouvre le bon onglet/action.
+  // Stepper cliquable : chaque étape ouvre le bon onglet / la bonne action.
   const handleEtapeAction = (key) => {
+    if (key === 'creer') { onEdit?.(); return; }
     if (key === 'estimer') { setShowAvisValeur(true); return; }
-    if (key === 'commercialiser') { setActiveTab('commercialisation'); return; }
-    if (key === 'securiser') { setActiveTab('documents'); return; }
+    if (key === 'documents') { setActiveTab('documents'); return; }
+    if (key === 'commercialisation') { setActiveTab('commercialisation'); return; }
     if (key === 'piloter') { onOpenMatching?.(mandat.id); return; }
   };
 
