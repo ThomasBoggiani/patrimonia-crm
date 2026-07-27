@@ -1073,6 +1073,17 @@ function MandatsTab({ mandats, reload, updateMandatLocal, clients, deals, intera
       if (created) { mandatId = created.id; createdRow = created; }
     }
 
+    // Automatisation pipeline : cocher « Fiche / mandat signé » (pièce 'fiche')
+    // fait passer le deal en « Mandat signé ». Forward-only : jamais de recul.
+    if (mandatId && Array.isArray(mandat.piecesPresentes) && mandat.piecesPresentes.includes('fiche')) {
+      const ORDRE = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisation', 'Offre', 'Promesse', 'Acte'];
+      const cur = ORDRE.indexOf(mandat.statut);
+      if (cur !== -1 && cur < ORDRE.indexOf('Mandat signé')) {
+        try { await supabase.from('mandats').update({ statut: 'Mandat signé' }).eq('id', mandatId); }
+        catch (e) { console.warn('[handleSave] auto-statut fiche:', e.message); }
+      }
+    }
+
     // Phase 1.2 — Enrichissement auto à la création : dès qu'un NOUVEAU mandat a
     // une adresse, on lance en arrière-plan la génération des visuels géo (façade
     // Street View, cadastre, satellite, transports) via refresh-assets. Ainsi la

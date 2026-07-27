@@ -285,6 +285,22 @@ export async function POST(request, { params }) {
     }
     const { category, extractedData, visionNote, unreadable, skipped, aiError } = analysis;
 
+    // Automatisation pipeline : un document « mandat » (le mandat signé) ajouté au
+    // dossier fait passer le deal en « Mandat signé ». Forward-only : on ne touche
+    // jamais un statut déjà plus avancé (Commercialisation, Offre…).
+    if (category === 'mandat') {
+      try {
+        const { data: m } = await supabaseAdmin.from('mandats').select('statut').eq('id', mandatId).maybeSingle();
+        const ORDRE = ['Sourcing', 'Analyse', 'Mandat signé', 'Commercialisation', 'Offre', 'Promesse', 'Acte'];
+        const cur = ORDRE.indexOf(m?.statut);
+        if (cur !== -1 && cur < ORDRE.indexOf('Mandat signé')) {
+          await supabaseAdmin.from('mandats')
+            .update({ statut: 'Mandat signé', updated_at: new Date().toISOString() })
+            .eq('id', mandatId);
+        }
+      } catch (e) { console.warn('[import-folder] auto-statut Mandat signé:', e.message); }
+    }
+
     // ═══ MODE PROPOSE : on ne touche PAS au mandat, on renvoie le détail ═══
     if (mode === 'propose') {
       let changes = [];
