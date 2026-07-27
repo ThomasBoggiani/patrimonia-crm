@@ -4030,17 +4030,24 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
         {(() => {
           const mandatPhotos = getPhotos(mandat);
           const cover = getCoverPhoto(mandat);
-          return mandatPhotos.length > 0 ? (
-            <button onClick={() => setLightboxOpen(true)} className="flex-shrink-0 w-64 h-44 rounded-lg overflow-hidden bg-cream-100 border border-cream-dark hover:opacity-90 relative group">
-              <img src={cover} alt={mandat.nom} className="w-full h-full object-cover" />
-              {mandatPhotos.length > 1 && (
-                <div className="absolute bottom-1.5 right-1.5 bg-stone-900/70 text-white text-[10px] px-1.5 py-0.5 rounded-full">+{mandatPhotos.length - 1}</div>
-              )}
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="text-white text-xs font-medium bg-black/50 px-2 py-1 rounded">Voir la galerie</span>
-              </div>
-            </button>
-          ) : (
+          const isSV = mandatPhotos.length === 0 && !!cover; // façade Street View par défaut
+          if (cover) {
+            return (
+              <button onClick={() => isSV ? setOpenModal('medias') : setLightboxOpen(true)} className="flex-shrink-0 w-64 h-44 rounded-lg overflow-hidden bg-cream-100 border border-cream-dark hover:opacity-90 relative group">
+                <img src={cover} alt={mandat.nom} className="w-full h-full object-cover" />
+                {mandatPhotos.length > 1 && (
+                  <div className="absolute bottom-1.5 right-1.5 bg-stone-900/70 text-white text-[10px] px-1.5 py-0.5 rounded-full">+{mandatPhotos.length - 1}</div>
+                )}
+                {isSV && (
+                  <div className="absolute bottom-1.5 left-1.5 bg-stone-900/70 text-white text-[10px] px-1.5 py-0.5 rounded-full">📍 Façade (Street View)</div>
+                )}
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span className="text-white text-xs font-medium bg-black/50 px-2 py-1 rounded">{isSV ? 'Ajouter des photos' : 'Voir la galerie'}</span>
+                </div>
+              </button>
+            );
+          }
+          return (
             <button onClick={() => setOpenModal('medias')} className="flex-shrink-0 w-48 h-32 rounded-lg bg-cream-100 border border-dashed border-cream-dark hover:bg-cream-200 flex flex-col items-center justify-center text-stone-400 text-xs gap-1">
               <ImageIcon className="w-6 h-6" />
               <span>Ajouter photos</span>
