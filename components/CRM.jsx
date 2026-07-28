@@ -2116,6 +2116,7 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   const [geoBusy, setGeoBusy] = useState(false);
   const [addrNote, setAddrNote] = useState(null);   // { type:'ok'|'error', msg }
   const [addrWarn, setAddrWarn] = useState(null);   // { id, nom } mandat déjà existant
+  const [marcheInfo, setMarcheInfo] = useState(null); // { m2, annee, count, estim, type } prix du secteur DVF
 
   const normalizeAddr = (s) => String(s || '')
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -2124,7 +2125,7 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
   async function analyserAdresse() {
     const q = [data.adresse, data.code_postal, data.ville].filter(Boolean).join(' ').trim();
     if (!q) { setAddrNote({ type: 'error', msg: 'Renseigne d\'abord l\'adresse.' }); return; }
-    setGeoBusy(true); setAddrNote(null); setAddrWarn(null);
+    setGeoBusy(true); setAddrNote(null); setAddrWarn(null); setMarcheInfo(null);
     try {
       const res = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(q)}&limit=1`);
       const j = await res.json();
@@ -2147,6 +2148,30 @@ function MandatForm({ mandat, onSave, onClose, clients = [], mandats = [] }) {
       });
       if (existing) setAddrWarn({ id: existing.id, nom: existing.nom || existing.adresse });
       setAddrNote({ type: 'ok', msg: `Adresse validée : ${p.label}` });
+
+      // Prix du secteur (DVF) — repère indicatif. N'écrase JAMAIS le prix saisi.
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const typeParam = data.marche === 'b2c' ? (/[Mm]aison/.test(data.type || '') ? 'Maison' : 'Appartement') : 'tous';
+        const cbBody = { token: session?.access_token || '', type: typeParam };
+        if (mandat?.id) cbBody.mandatId = mandat.id; else cbBody.adresse = q;
+        const cbRes = await fetch('/api/avis-valeur/comparables', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cbBody),
+        });
+        const cb = await cbRes.json();
+        const serie = Array.isArray(cb?.secteurParAnnee) ? cb.secteurParAnnee.filter(s => s.m2Median > 0) : [];
+        if (cb?.ok && serie.length) {
+          const recent = serie[serie.length - 1];
+          const surface = parseFloat(data.surface) || 0;
+          setMarcheInfo({
+            m2: recent.m2Median,
+            annee: recent.annee,
+            count: recent.count,
+            estim: surface > 0 ? Math.round(recent.m2Median * surface) : 0,
+            type: typeParam === 'tous' ? 'tous types' : typeParam,
+          });
+        }
+      } catch { /* prix du secteur non bloquant */ }
     } catch (e) {
       setAddrNote({ type: 'error', msg: 'Erreur de géocodage. Réessaie dans un instant.' });
     } finally {
@@ -2928,6 +2953,13 @@ async function handleFolderImport(event, opts = {}) {
               {addrWarn && (
                 <div className="text-xs px-2.5 py-1.5 rounded-lg bg-amber-50 text-amber-800">
                   ⚠️ Un mandat existe déjà à cette adresse : <strong>{addrWarn.nom}</strong>. Vérifie avant de créer un doublon.
+                </div>
+              )}
+              {marcheInfo && (
+                <div className="text-xs px-2.5 py-1.5 rounded-lg bg-sage-50 text-sage-darker border border-sage-light/60">
+                  💶 Prix du secteur ({marcheInfo.type}) : <strong>~{marcheInfo.m2.toLocaleString('fr')} €/m²</strong> <span className="text-stone-500">(médiane DVF {marcheInfo.annee}, {marcheInfo.count} ventes)</span>
+                  {marcheInfo.estim > 0 && <> · à titre indicatif pour {parseFloat(data.surface) || 0} m² : <strong>~{marcheInfo.estim.toLocaleString('fr')} €</strong></>}
+                  <div className="text-stone-400 mt-0.5">Repère marché — tu restes libre du prix.</div>
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
