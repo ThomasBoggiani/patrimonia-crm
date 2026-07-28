@@ -3895,7 +3895,6 @@ const MANDAT_TABS = [
   { key: 'contacts', label: 'Contacts', icon: '👤' },
   { key: 'medias', label: 'Visuels & médias', icon: '🗺️' },
   { key: 'documents', label: 'Documents', icon: '📂' },
-  { key: 'generer', label: 'Générer', icon: '📤' },
 ];
 
 function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, annonces, allProfiles = [], onOpenMatching, onOpenEmailDrafts }) {
@@ -3910,6 +3909,8 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
 
   // Onglets de la fiche (Phase 2). Une seule vue affichée à la fois.
   const [activeTab, setActiveTab] = useState('apercu');
+  // Menu déroulant « Générer » (au-dessus du pipeline).
+  const [generOpen, setGenerOpen] = useState(false);
 
   // Stepper = mêmes étapes que le Kanban. Cliquer une étape déplace le mandat
   // à ce statut (comme glisser une carte). Mise à jour immédiate + rechargement.
@@ -4102,28 +4103,39 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
         </div>
       </div>
 
-      {/* ═══ PROCHAINE ÉTAPE + RESPONSABLE (règle d'or) — toujours visible, sous les onglets ═══ */}
-      <div className="mb-4">
-        <ProchaineEtapeBanner mandat={mandat} onSetStatut={setStatut} />
+      {/* ═══ GÉNÉRER — menu déroulant, au-dessus du pipeline ═══ */}
+      <div className="relative mb-3">
+        <button
+          onClick={() => setGenerOpen(o => !o)}
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold bg-sage-dark text-white hover:bg-sage-darker transition-colors"
+        >
+          📤 Générer un document
+          <span className={`text-xs transition-transform ${generOpen ? 'rotate-180' : ''}`} aria-hidden="true">▾</span>
+        </button>
+        {generOpen && (
+          <>
+            <div className="fixed inset-0 z-20" onClick={() => setGenerOpen(false)} />
+            <div className="absolute left-0 top-full mt-1 z-30 w-80 max-w-[90vw] bg-white rounded-xl shadow-luxe border border-cream-dark p-2 flex flex-col gap-1">
+              <button onClick={() => { setShowAvisValeur(true); setGenerOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-stone-700 hover:bg-cream-100 flex items-center gap-2">
+                📊 Avis de valeur
+              </button>
+              <div className="px-1 py-1.5 flex flex-wrap gap-1.5 border-t border-cream-dark/60">
+                <PdfExportButtons mandatId={mandat.id} mandatNom={mandat.nom} isOffMarket={mandat.isOffMarket} plaquetteCachedAt={mandat.plaquetteCachedAt} />
+              </div>
+              <button onClick={() => { setShowRapportMandant(true); setGenerOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-stone-700 hover:bg-cream-100 flex items-center gap-2 border-t border-cream-dark/60">
+                📈 Rapport mandant
+              </button>
+              <button onClick={() => { onOpenEmailDrafts?.(mandat.id); setGenerOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-stone-700 hover:bg-cream-100 flex items-center gap-2">
+                📧 Préparer mails clients
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* ═══ ONGLET GÉNÉRER : documents à produire ═══ */}
-      <div hidden={activeTab !== 'generer'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mb-4">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[10px] uppercase tracking-wider text-sage-dark font-semibold pr-2 border-r border-cream-dark mr-1">📤 Générer</span>
-          {/* Ordre = étapes du mandat : 1) Avis de valeur (prioritaire) 2) Plaquette 3) Rapport mandant */}
-          <button onClick={() => setShowAvisValeur(true)} className="px-3 py-1.5 rounded-full text-xs font-semibold bg-sage-dark text-white border border-sage-dark hover:bg-sage-darker transition-colors flex items-center gap-1.5" title="Avis de valeur — remplir puis générer le PDF">
-            <span className="opacity-70">1 ·</span> 📊 Avis de valeur
-          </button>
-          <span className="text-[10px] text-stone-400 font-medium">2 ·</span>
-          <PdfExportButtons mandatId={mandat.id} mandatNom={mandat.nom} isOffMarket={mandat.isOffMarket} plaquetteCachedAt={mandat.plaquetteCachedAt} />
-          <button onClick={() => setShowRapportMandant(true)} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Rapport d'activité — 3e étape">
-            <span className="opacity-50">3 ·</span> 📈 Rapport mandant
-          </button>
-          <button onClick={() => onOpenEmailDrafts?.(mandat.id)} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Préparer mails personnalisés aux acquéreurs">
-            📧 Préparer mails clients
-          </button>
-        </div>
+      {/* ═══ PIPELINE (règle d'or) — toujours visible ═══ */}
+      <div className="mb-4">
+        <ProchaineEtapeBanner mandat={mandat} onSetStatut={setStatut} />
       </div>
 
       <div className="space-y-4">
