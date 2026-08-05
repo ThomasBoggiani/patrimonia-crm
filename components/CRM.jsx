@@ -4324,21 +4324,21 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
       </div>
 
       {/* ═══ BLOC PHOTOS & MÉDIAS ═══ */}
-            <div id="photos" hidden={activeTab !== 'medias'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
+            <div id="photos" hidden={activeTab !== 'medias'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32 mt-4">
               <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
                 <ImageIcon className="w-5 h-5 text-sage-dark" />Photos & Médias
               </h2>
               <MediasInline mandat={mandat} onUpdate={reload} />
             </div>    
       {/* ═══ BLOC DOCUMENTS ═══ */}
-            <div id="documents" hidden={activeTab !== 'documents'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
+            <div id="documents" hidden={activeTab !== 'documents'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32 mt-4">
               <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
                 <FolderOpen className="w-5 h-5 text-sage-dark" />Documents
               </h2>
               <DocumentsInline mandat={mandat} onUpdate={reload} />
             </div>
       {/* ═══ STATISTIQUES DU DOSSIER ═══ */}
-          <div id="stats" hidden={activeTab !== 'commercialisation'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
+          <div id="stats" hidden={activeTab !== 'commercialisation'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32 mt-4">
             {/* Résumé compact + liste. Les 8 métriques détaillées vivent dans le
                 bloc « Statistiques d'activité » juste au-dessus (plus de doublon). */}
             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
@@ -4355,7 +4355,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
 
           {/* ═══ ALERTES (si existantes) ═══ */}
           {alerts.length > 0 && (
-            <div hidden={activeTab !== 'apercu'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark">
+            <div hidden={activeTab !== 'apercu'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark mt-4">
               <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-sage-dark" />Points d'attention
               </h2>
@@ -4374,7 +4374,7 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
           )}
 
           {/* ═══ ÉTAT LOCATIF ═══ */}
-          <div id="locatif" hidden={activeTab !== 'bien'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
+          <div id="locatif" hidden={activeTab !== 'bien'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32 mt-4">
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4 flex items-center gap-2">
               <Building2 className="w-5 h-5 text-sage-dark" />État locatif
             </h2>
