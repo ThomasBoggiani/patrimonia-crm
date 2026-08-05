@@ -4172,8 +4172,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
 
       <div className="space-y-4">
         <div className="col-span-3 space-y-4">
-          {/* ═══ SCORE QUALITÉ DU DOSSIER (Sprint 4) ═══ */}
-          <div hidden={activeTab !== 'apercu'}><DossierScore mandat={mandat} mandatContacts={mandatContacts} /></div>
           {/* ═══ ANALYSE FINANCIÈRE — REMONTÉE EN PREMIÈRE POSITION ═══ */}
           <div id="finance" hidden={activeTab !== 'apercu'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
             <h2 className="font-display text-xl font-semibold text-stone-900 mb-4">Analyse financière</h2>
@@ -4257,6 +4255,9 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
               />
             </div>
           </div>
+
+          {/* ═══ SCORE QUALITÉ DU DOSSIER — descendu en bas de l'Aperçu ═══ */}
+          <div hidden={activeTab !== 'apercu'}><DossierScore mandat={mandat} mandatContacts={mandatContacts} /></div>
 
           {/* ═══ BLOC IDENTITÉ DU BIEN ═══ */}
             <div id="identite" hidden={activeTab !== 'bien'} className="bg-white rounded-xl p-6 shadow-luxe border border-cream-dark scroll-mt-32">
