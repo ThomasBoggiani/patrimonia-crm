@@ -1813,10 +1813,12 @@ function MandatsKanban({ mandats, onSelectMandat, reload, updateMandatLocal, sec
     { id: 'Acte',              label: 'Acte',           border: '#639922' },
   ];
 
-  // Group mandats par statut (exclut Vendu par autres + Perdu)
+  // Group mandats par statut (exclut Vendu par autres + Perdu, et les dossiers
+  // marqués « hors commercialisation » qui n'ont pas de pipeline de vente).
   const grouped = {};
   for (const c of KANBAN_STATUTS) grouped[c.id] = [];
   for (const m of mandats) {
+    if (m.horsCommercialisation || m.hors_commercialisation) continue;
     if (KANBAN_STATUTS.find(c => c.id === m.statut)) {
       grouped[m.statut].push(m);
     }
@@ -2995,6 +2997,19 @@ async function handleFolderImport(event, opts = {}) {
                   </button>
                 </div>
               </Field>
+              {/* Objet du mandat — dossier hors commercialisation (avis seul / interne) */}
+              <label className="flex items-start gap-2 px-3 py-2 rounded-lg border border-stone-200 bg-stone-50/60 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!(data.horsCommercialisation ?? data.hors_commercialisation)}
+                  onChange={e => update('horsCommercialisation', e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span className="text-sm text-stone-700">
+                  <span className="font-medium">Dossier hors commercialisation</span>
+                  <span className="block text-xs text-stone-500">Avis de valeur seul (banque, succession, conseil) ou interne — sort du pipeline et du Kanban.</span>
+                </span>
+              </label>
               {data.marche === 'b2b' ? (
                 <CascadeSelect
                   tree={TYPES_ACTIF_B2B_TREE}
@@ -4156,9 +4171,16 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
         </button>
       </div>
 
-      {/* ═══ PIPELINE (règle d'or) — toujours visible ═══ */}
+      {/* ═══ PIPELINE (règle d'or) — sauf dossiers hors commercialisation ═══ */}
       <div className="mb-4">
-        <ProchaineEtapeBanner mandat={mandat} onSetStatut={setStatut} />
+        {(mandat.horsCommercialisation || mandat.hors_commercialisation) ? (
+          <div className="rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 flex items-center gap-3 text-sm text-stone-600">
+            <span className="text-lg leading-none">🏦</span>
+            <span><strong className="text-stone-800">Dossier hors commercialisation</strong> — avis de valeur / interne, sans pipeline de vente.</span>
+          </div>
+        ) : (
+          <ProchaineEtapeBanner mandat={mandat} onSetStatut={setStatut} />
+        )}
       </div>
 
       <div className="space-y-4">
