@@ -3941,8 +3941,6 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
 
   // Onglets de la fiche (Phase 2). Une seule vue affichée à la fois.
   const [activeTab, setActiveTab] = useState('apercu');
-  // Menu déroulant « Générer » (au-dessus du pipeline).
-  const [generOpen, setGenerOpen] = useState(false);
 
   // Stepper = mêmes étapes que le Kanban. Cliquer une étape déplace le mandat
   // à ce statut (comme glisser une carte). Mise à jour immédiate + rechargement.
@@ -4044,17 +4042,25 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
       {/* ═══ EN-TÊTE ═══ */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1 min-w-0">
-          <h1 className="font-display text-3xl font-semibold text-stone-900 mb-1">{mandat.nom}</h1>
-          <p className="text-stone-500 flex items-center gap-2 text-sm">
-            <MapPin className="w-4 h-4" />{mandat.adresse}
-          </p>
-          {/* Statut de commercialisation, sous le titre */}
-          <div className="flex items-center gap-2 flex-wrap mt-2">
+          <div className="flex items-center gap-3 flex-wrap mb-1">
+            <h1 className="font-display text-3xl font-semibold text-stone-900">{mandat.nom}</h1>
+            {/* Off-market / commercialisation — à côté du titre */}
             <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-xs font-medium ${commColor}`}>
               <div className={`w-1.5 h-1.5 rounded-full ${isPublished ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400'}`} title={isPublished ? 'Publié' : 'Non publié'} />
               <span>{mandat.commercialisation}</span>
             </div>
           </div>
+          {/* Adresse cliquable → Google Maps (adresse exacte + CP + ville) */}
+          <a
+            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([mandat.adresse, (mandat.codePostal || mandat.code_postal), mandat.ville].filter(Boolean).join(' '))}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-stone-500 hover:text-sage-darker hover:underline inline-flex items-center gap-2 text-sm w-fit"
+            title="Ouvrir dans Google Maps"
+          >
+            <MapPin className="w-4 h-4 flex-shrink-0" />
+            {[mandat.adresse, (mandat.codePostal || mandat.code_postal), mandat.ville].filter(Boolean).join(', ') || 'Adresse non renseignée'}
+          </a>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <VoiceNote entityType="mandat" entity={mandat} onSaved={reload} />
@@ -4135,34 +4141,19 @@ function MandatDetail({ mandat, onBack, onEdit, deals, clients, reload, todos, a
         </div>
       </div>
 
-      {/* ═══ GÉNÉRER — menu déroulant, au-dessus du pipeline ═══ */}
-      <div className="relative mb-3">
-        <button
-          onClick={() => setGenerOpen(o => !o)}
-          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold bg-sage-dark text-white hover:bg-sage-darker transition-colors"
-        >
-          📤 Générer un document
-          <span className={`text-xs transition-transform ${generOpen ? 'rotate-180' : ''}`} aria-hidden="true">▾</span>
+      {/* ═══ GÉNÉRER — boutons directs (barre à droite), au-dessus du pipeline ═══ */}
+      <div className="flex items-center gap-1.5 flex-wrap justify-end mb-3">
+        <span className="text-[10px] uppercase tracking-wider text-sage-dark font-semibold mr-auto">📤 Générer</span>
+        <button onClick={() => setShowAvisValeur(true)} className="px-3 py-1.5 rounded-full text-xs font-semibold bg-sage-dark text-white border border-sage-dark hover:bg-sage-darker transition-colors flex items-center gap-1.5" title="Avis de valeur">
+          📊 Avis de valeur
         </button>
-        {generOpen && (
-          <>
-            <div className="fixed inset-0 z-20" onClick={() => setGenerOpen(false)} />
-            <div className="absolute left-0 top-full mt-1 z-30 w-80 max-w-[90vw] bg-white rounded-xl shadow-luxe border border-cream-dark p-2 flex flex-col gap-1">
-              <button onClick={() => { setShowAvisValeur(true); setGenerOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-stone-700 hover:bg-cream-100 flex items-center gap-2">
-                📊 Avis de valeur
-              </button>
-              <div className="px-1 py-1.5 flex flex-wrap gap-1.5 border-t border-cream-dark/60">
-                <PdfExportButtons mandatId={mandat.id} mandatNom={mandat.nom} isOffMarket={mandat.isOffMarket} plaquetteCachedAt={mandat.plaquetteCachedAt} />
-              </div>
-              <button onClick={() => { setShowRapportMandant(true); setGenerOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-stone-700 hover:bg-cream-100 flex items-center gap-2 border-t border-cream-dark/60">
-                📈 Rapport mandant
-              </button>
-              <button onClick={() => { onOpenEmailDrafts?.(mandat.id); setGenerOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-stone-700 hover:bg-cream-100 flex items-center gap-2">
-                📧 Préparer mails clients
-              </button>
-            </div>
-          </>
-        )}
+        <PdfExportButtons mandatId={mandat.id} mandatNom={mandat.nom} isOffMarket={mandat.isOffMarket} plaquetteCachedAt={mandat.plaquetteCachedAt} />
+        <button onClick={() => setShowRapportMandant(true)} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Rapport d'activité mandant">
+          📈 Rapport mandant
+        </button>
+        <button onClick={() => onOpenEmailDrafts?.(mandat.id)} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-sage-darker border border-sage-light hover:bg-sage-dark hover:text-white transition-colors flex items-center gap-1.5" title="Préparer mails clients">
+          📧 Préparer mails clients
+        </button>
       </div>
 
       {/* ═══ PIPELINE (règle d'or) — toujours visible ═══ */}
