@@ -45,6 +45,46 @@ function platformLabel(platform) {
 }
 
 // ─────────────────────────────────────────────────────────
+// Étages — vocabulaire partagé (photos + plans), pour la plaquette « par étage ».
+// On stocke `etage` en nombre (-1 = sous-sol, 0 = RDC, 1..8 = niveaux) ou undefined.
+// ─────────────────────────────────────────────────────────
+const ETAGES = [
+  { value: '', label: 'Étage ?' },
+  { value: -1, label: 'Sous-sol' },
+  { value: 0, label: 'RDC' },
+  { value: 1, label: '1er' },
+  { value: 2, label: '2e' },
+  { value: 3, label: '3e' },
+  { value: 4, label: '4e' },
+  { value: 5, label: '5e' },
+  { value: 6, label: '6e' },
+  { value: 7, label: '7e' },
+  { value: 8, label: '8e' },
+];
+
+// <select> réutilisable pour choisir l'étage d'un média.
+function EtageSelect({ value, onChange, className = '' }) {
+  return (
+    <select
+      value={value === null || value === undefined ? '' : String(value)}
+      onChange={(e) => {
+        e.stopPropagation();
+        const v = e.target.value;
+        onChange(v === '' ? undefined : Number(v));
+      }}
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      title="Étage / niveau (pour la plaquette par étage)"
+      className={className}
+    >
+      {ETAGES.map((e) => (
+        <option key={String(e.value)} value={String(e.value)}>{e.label}</option>
+      ))}
+    </select>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
 // Composant principal INLINE — 4 sous-onglets
 // ─────────────────────────────────────────────────────────
 export default function MediasInline({ mandat, onUpdate }) {
@@ -231,6 +271,10 @@ function PhotosTab({ mandat, photos, onChange, saving }) {
     onChange(photos.map((p) => ({ ...p, plaquette: val })));
   }
 
+  function handleSetEtage(idx, etage) {
+    onChange(photos.map((p, i) => (i === idx ? { ...p, etage } : p)));
+  }
+
   const nbSelected = photos.filter((p) => p.plaquette).length;
 
   function handleDragStart(idx) { setDraggedIdx(idx); }
@@ -249,7 +293,7 @@ function PhotosTab({ mandat, photos, onChange, saving }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-xs text-stone-500">Glissez-déposez pour réordonner. La première est la photo de couverture par défaut.</p>
+        <p className="text-xs text-stone-500">Glissez-déposez pour réordonner. La première est la couverture par défaut. Le menu <strong>« Étage »</strong> (coin bas gauche) range chaque photo par niveau pour la plaquette par étage.</p>
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading || saving}
@@ -332,6 +376,11 @@ function PhotosTab({ mandat, photos, onChange, saving }) {
               <div className="absolute bottom-1.5 right-1.5 bg-stone-900/70 text-white text-[10px] px-1.5 py-0.5 rounded">
                 #{idx + 1}
               </div>
+              <EtageSelect
+                value={p.etage}
+                onChange={(etage) => handleSetEtage(idx, etage)}
+                className={`absolute bottom-1.5 left-1.5 text-[11px] font-medium border-0 rounded-md pl-1.5 pr-1 py-1 shadow-sm cursor-pointer focus:ring-2 focus:ring-sage-dark ${p.etage === null || p.etage === undefined ? 'bg-white/95 text-stone-600' : 'bg-sage-dark text-white'}`}
+              />
             </div>
           ))}
         </div>
@@ -387,6 +436,10 @@ function PlansTab({ mandat, plans, onChange, onPreview, saving }) {
     onChange(newPlans);
   }
 
+  function handleSetEtage(idx, etage) {
+    onChange(plans.map((p, i) => (i === idx ? { ...p, etage } : p)));
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -416,6 +469,11 @@ function PlansTab({ mandat, plans, onChange, onPreview, saving }) {
                   <div className="font-medium text-sm text-stone-900 truncate">{p.nom || `Plan ${idx + 1}`}</div>
                   <div className="text-xs text-stone-500">{isPdf ? 'PDF' : isImage ? 'Image' : 'Fichier'}</div>
                 </div>
+                <EtageSelect
+                  value={p.etage}
+                  onChange={(etage) => handleSetEtage(idx, etage)}
+                  className={`text-xs rounded-md border px-2 py-1.5 cursor-pointer focus:ring-2 focus:ring-sage-dark ${p.etage === null || p.etage === undefined ? 'border-stone-200 text-stone-600 bg-white' : 'border-sage-dark bg-sage-dark text-white'}`}
+                />
                 <a href={p.url} target="_blank" rel="noopener noreferrer" className="p-1.5 text-stone-600 hover:bg-stone-100 rounded" title="Ouvrir">
                   <ExternalLink className="w-4 h-4" />
                 </a>
