@@ -307,8 +307,19 @@ export async function GET(request, { params }) {
         }
       }
 
+      // Équipe complète (pour la page « Notre équipe » : dirigeant + conseillers).
+      const team = (profiles || []).map((p) => ({
+        name: `${p.prenom || ''} ${p.nom || ''}`.trim(),
+        role: p.fonction || 'Conseiller',
+        email: p.email || null,
+        phone: p.telephone || null,
+        photo: ensureAbsoluteUrl(p.avatar_url, request),
+        is_boss: p.is_boss === true,
+        initiales: `${(p.prenom || '').charAt(0)}${(p.nom || '').charAt(0)}`.toUpperCase(),
+      })).filter((t) => t.name);
+
       const origin = new URL(request.url).origin;
-      const pdfBuffer = await renderPlaquettePdf(mandatFull, origin, { conseiller: conseillerEnriched });
+      const pdfBuffer = await renderPlaquettePdf(mandatFull, origin, { conseiller: conseillerEnriched, team });
       const filename = `Plaquette_${slugify(mandat.nom)}.pdf`;
       return new Response(pdfBuffer, {
         status: 200,
