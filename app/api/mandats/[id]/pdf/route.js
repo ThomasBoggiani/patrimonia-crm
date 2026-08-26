@@ -308,7 +308,7 @@ export async function GET(request, { params }) {
       }
 
       const origin = new URL(request.url).origin;
-      const pdfBuffer = await renderPlaquettePdf(mandatFull, origin);
+      const pdfBuffer = await renderPlaquettePdf(mandatFull, origin, { conseiller: conseillerEnriched });
       const filename = `Plaquette_${slugify(mandat.nom)}.pdf`;
       return new Response(pdfBuffer, {
         status: 200,
