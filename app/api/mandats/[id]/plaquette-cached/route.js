@@ -6,6 +6,7 @@
 // Cela évite de regénérer la plaquette à chaque envoi.
 
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -31,8 +32,28 @@ async function verifyToken(token) {
 // Entre deux déploiements, le cache joue son rôle (pas de régénération à chaque envoi).
 const CACHE_VERSION = (process.env.VERCEL_GIT_COMMIT_SHA || 'dev').slice(0, 8);
 
-function getStoragePath(mandatId) {
-  return `${mandatId}_${CACHE_VERSION}.pdf`;
+function getStoragePath(mandatId, sig) {
+  return sig
+    ? `${mandatId}_${CACHE_VERSION}_${sig}.pdf`
+    : `${mandatId}_${CACHE_VERSION}.pdf`;
+}
+
+// Signature de CONTENU du mandat : tout ce qui change la plaquette (photos &
+// sélection, prix, descriptif, état locatif, adresse, visuels de localisation).
+// Ainsi, dès que Thomas modifie une de ces données, la clé de cache change et la
+// plaquette est régénérée automatiquement (sinon le cache ressert l'ancienne).
+async function contentSignature(mandatId) {
+  try {
+    const { data: m } = await supabaseAdmin
+      .from('mandats')
+      .select('updated_at, medias, description, prix, prix_net_vendeur, honoraires_montant, etat_locatif, adresse, ville, nom, surface, rendement_brut, satellite_image_url, cadastre_image_url, map_static_image_url, street_view_image_url, transports_data, parcelle_data, quartier_data, risques_data')
+      .eq('id', mandatId)
+      .maybeSingle();
+    if (!m) return null;
+    return crypto.createHash('md5').update(JSON.stringify(m)).digest('hex').slice(0, 12);
+  } catch {
+    return null;
+  }
 }
 
 export async function GET(request, { params }) {
@@ -58,7 +79,8 @@ export async function GET(request, { params }) {
       });
     }
 
-    const storagePath = getStoragePath(mandatId);
+    const sig = await contentSignature(mandatId);
+    const storagePath = getStoragePath(mandatId, sig);
     const forceFresh = ['1', 'true', 'yes'].includes((url.searchParams.get('fresh') || '').toLowerCase());
 
     // 1. Cherche dans le cache (sauf si ?fresh=1 → régénération forcée)
