@@ -6,10 +6,14 @@ import { renderToStream } from '@react-pdf/renderer';
 import React from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-import PlaquetteAcheteur from '@/lib/pdf/templates/PlaquetteAcheteur';
 import RapportVendeur from '@/lib/pdf/templates/RapportVendeur';
 import FicheInterne from '@/lib/pdf/templates/FicheInterne';
-import { getLocationImages } from '@/lib/maps';
+import { renderPlaquettePdf } from '@/lib/avis/renderPlaquettePdf';
+
+// La plaquette appelle PDFShift (rendu de plusieurs diapositives 16:9) + réchauffe
+// éventuellement les visuels de localisation : on laisse le temps nécessaire.
+export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -280,92 +284,40 @@ export async function GET(request, { params }) {
     let filename;
 
     if (template === 'plaquette') {
-      const teamMembers = {};
-      let ownerProfile = null;
-
-      for (const p of (profiles || [])) {
-        const initials = `${(p.prenom || '').charAt(0)}${(p.nom || '').charAt(0)}`.toUpperCase();
-        if (initials) {
-          teamMembers[initials] = {
-            name: `${p.prenom || ''} ${p.nom || ''}`.trim(),
-            role: p.fonction || 'Conseiller',
-            email: p.email,
-            phone: p.telephone || null,
-            photo: ensureAbsoluteUrl(p.avatar_url, request),
-            is_boss: p.is_boss === true,
-          };
-        }
-        if (mandat.profile_id && p.id === mandat.profile_id) {
-          ownerProfile = p;
-        }
-      }
-
-      let ownerInitials = '';
-      if (ownerProfile) {
-        ownerInitials = `${(ownerProfile.prenom || '').charAt(0)}${(ownerProfile.nom || '').charAt(0)}`.toUpperCase();
-      } else if (mandat.owner && mandat.owner.length <= 3) {
-        ownerInitials = mandat.owner.toUpperCase();
-      }
-      const mandatEnriched = { ...mandat, ownerInitials };
-
-      // Fetch les images de localisation (vue satellite + cadastre)
-      // Utiliser les assets stockés si disponibles (cache), sinon les régénérer
-      let locationImages = { satellite: null, cadastre: null, parcelle: null, transports: null, geocode: null };
-
-      if (mandat.satellite_image_url || mandat.cadastre_image_url || mandat.parcelle_data || mandat.transports_data) {
-        // Cache hit : on télécharge les URLs stockées en base64
-        console.log('[PDF] Using cached assets for mandat', mandatId);
-        const [satellite, cadastre] = await Promise.all([
-          mandat.satellite_image_url ? (await fetch(mandat.satellite_image_url).then(r => r.ok ? r.arrayBuffer() : null).then(b => b ? `data:image/jpeg;base64,${Buffer.from(b).toString('base64')}` : null).catch(() => null)) : null,
-          mandat.cadastre_image_url ? (await fetch(mandat.cadastre_image_url).then(r => r.ok ? r.arrayBuffer() : null).then(b => b ? `data:image/png;base64,${Buffer.from(b).toString('base64')}` : null).catch(() => null)) : null,
-        ]);
-        locationImages = {
-          satellite,
-          cadastre,
-          parcelle: mandat.parcelle_data,
-          transports: mandat.transports_data,
-          geocode: null,
-        };
-      } else if (mandat.adresse) {
-        // Cache miss : au lieu de re-télécharger à la volée puis jeter (coût API
-        // répété), on PERSISTE les visuels sur le mandat via refresh-assets
-        // (source unique), puis on relit le cache. Les prochaines générations
-        // n'appelleront plus les API externes.
-        console.log('[PDF] Cache MISS → refresh-assets (warm cache) pour', mandatId);
+      // ── NOUVEAU MOTEUR : plaquette « par étage » en HTML → PDFShift ──
+      // Même charte « sombre chic » que l'avis (lib/avis/buildPlaquette.js).
+      // On réchauffe d'abord les visuels de localisation (satellite / cadastre /
+      // transports) s'ils sont absents, pour que la carte et le plan cadastral
+      // apparaissent. PDFShift récupère ensuite les images par URL (pas de base64).
+      let mandatFull = mandat;
+      const hasAssets = mandat.satellite_image_url || mandat.cadastre_image_url
+        || mandat.map_static_image_url || mandat.parcelle_data || mandat.transports_data;
+      if (!hasAssets && mandat.adresse) {
+        console.log('[PDF] Plaquette : warm-cache assets pour', mandatId);
         try {
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
-          await fetch(`${baseUrl}/api/mandats/${mandatId}/refresh-assets`, {
+          const warmBase = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+          await fetch(`${warmBase}/api/mandats/${mandatId}/refresh-assets`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
           }).catch(() => {});
-          const { data: m2 } = await supabaseAdmin.from('mandats')
-            .select('satellite_image_url, cadastre_image_url, parcelle_data, transports_data')
-            .eq('id', mandatId).maybeSingle();
-          if (m2 && (m2.satellite_image_url || m2.cadastre_image_url || m2.parcelle_data)) {
-            const [satellite, cadastre] = await Promise.all([
-              m2.satellite_image_url ? fetch(m2.satellite_image_url).then(r => r.ok ? r.arrayBuffer() : null).then(b => b ? `data:image/jpeg;base64,${Buffer.from(b).toString('base64')}` : null).catch(() => null) : null,
-              m2.cadastre_image_url ? fetch(m2.cadastre_image_url).then(r => r.ok ? r.arrayBuffer() : null).then(b => b ? `data:image/png;base64,${Buffer.from(b).toString('base64')}` : null).catch(() => null) : null,
-            ]);
-            locationImages = { satellite, cadastre, parcelle: m2.parcelle_data, transports: m2.transports_data, geocode: null };
-          } else {
-            // Filet de sécurité : si le cache n'a rien donné, rendu live ponctuel.
-            locationImages = await getLocationImages(mandat.adresse);
-          }
+          const { data: m2 } = await supabaseAdmin.from('mandats').select('*').eq('id', mandatId).maybeSingle();
+          if (m2) mandatFull = m2;
         } catch (e) {
-          console.warn('[PDF] warm-cache KO, fallback live:', e.message);
-          try { locationImages = await getLocationImages(mandat.adresse); } catch { /* rendu sans visuels */ }
+          console.warn('[PDF] warm-cache plaquette KO (rendu sans visuels de localisation) :', e.message);
         }
       }
 
-      pdfElement = React.createElement(PlaquetteAcheteur, {
-        mandat: mandatEnriched,
-        conseiller: conseillerEnriched,
-        logoUrl,
-        teamMembers,
-        locationImages,
+      const origin = new URL(request.url).origin;
+      const pdfBuffer = await renderPlaquettePdf(mandatFull, origin, { conseiller: conseillerEnriched });
+      const filename = `Plaquette_${slugify(mandat.nom)}.pdf`;
+      return new Response(pdfBuffer, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `inline; filename="${filename}"`,
+          'Cache-Control': 'no-store',
+        },
       });
-
-      filename = `Plaquette_${slugify(mandat.nom)}.pdf`;
     } else if (template === 'rapport') {
       if (!startStr || !endStr) {
         return new Response(
